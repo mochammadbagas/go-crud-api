@@ -1,0 +1,42 @@
+# =========================================================================
+# GOLANG & PROJECT GITIGNORE
+# =========================================================================
+
+# 1. Environment & Secrets (SANGAT KRUSIAL: Jangan pernah commit file kredensial)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# 2. Air Hot Reloading Temp Directory
+tmp/
+
+# 3. Compiled Binaries & Build Output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+/build/
+crudapi
+
+# 4. Test & Coverage Artifacts
+*.out
+*.test
+coverage.txt
+coverage.html
+
+# 5. IDE & Code Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 6. Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini

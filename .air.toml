@@ -1,0 +1,46 @@
+# Konfigurasi Air untuk Hot Reloading (Live Reload)
+# Dokumen resmi: https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Kompilasi aplikasi mengarah ke cmd/server/main.go
+  cmd = "go build -o ./tmp/main.exe ./cmd/server"
+  # Menjalankan binary yang dihasilkan
+  bin = "tmp/main.exe"
+  # Argumen tambahan yang ingin dilewatkan ke binary (opsional)
+  args_bin = []
+  
+  # Delay sebelum melakukan build ulang setelah mendeteksi perubahan (milidetik)
+  delay = 500
+  
+  # Direktori yang diabaikan dari pemantauan
+  exclude_dir = ["assets", "tmp", "vendor"]
+  
+  # Ekstensi file yang dipantau
+  include_ext = ["go", "yaml", "toml", "env"]
+  
+  # Menghentikan runner jika kompilasi error
+  stop_on_error = true
+  
+  # Mengirim sinyal interrupt sebelum mematikan server lama (agar graceful shutdown berjalan)
+  send_interrupt = true
+  kill_delay = "500ms"
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[log]
+  time = true
+  main_only = false
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = true
+  keep_scroll = true

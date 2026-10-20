@@ -1,0 +1,79 @@
+### =========================================================================
+### GO CRUD API - HTTP REQUEST COLLECTION (REST CLIENT)
+### Gunakan extension "REST Client" di VS Code untuk klik "Send Request"
+### =========================================================================
+
+@baseUrl = http://localhost:8080
+
+# Simpan token JWT hasil login di variabel ini untuk request yang terproteksi:
+@authToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+### -------------------------------------------------------------------------
+### 1. AUTENTIKASI (PUBLIK & PRIVAT)
+### -------------------------------------------------------------------------
+
+### 1.1 Register User Baru (Publik)
+POST {{baseUrl}}/register
+Content-Type: application/json
+
+{
+  "email": "user@gmail.com",
+  "password": "password123"
+}
+
+### 1.2 Login User (Publik) - Salin token dari response ke variabel @authToken di atas
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "user@gmail.com",
+  "password": "password123"
+}
+
+### 1.3 Cek Profil User Saya (Terproteksi JWT)
+GET {{baseUrl}}/me
+Authorization: Bearer {{authToken}}
+
+
+### -------------------------------------------------------------------------
+### 2. PRODUK (READ ONLY - PUBLIK)
+### -------------------------------------------------------------------------
+
+### 2.1 Ambil Semua Produk (Publik)
+GET {{baseUrl}}/products
+
+### 2.2 Ambil Satu Produk Berdasarkan ID (Publik)
+GET {{baseUrl}}/products/1
+
+
+### -------------------------------------------------------------------------
+### 3. PRODUK (WRITE OPERATIONS - TERPROTEKSI JWT)
+### -------------------------------------------------------------------------
+
+### 3.1 Tambah Produk Baru (Wajib Token JWT)
+POST {{baseUrl}}/products
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "Headphone Bluetooth Wireless",
+  "price": 850000,
+  "stock": 15,
+  "category_id": 1
+}
+
+### 3.2 Update Data Produk (Wajib Token JWT)
+PUT {{baseUrl}}/products/1
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "Keyboard Mekanikal Pro RGB",
+  "price": 520000,
+  "stock": 20,
+  "category_id": 2
+}
+
+### 3.3 Hapus Produk (Soft Delete - Wajib Token JWT)
+DELETE {{baseUrl}}/products/1
+Authorization: Bearer {{authToken}}
