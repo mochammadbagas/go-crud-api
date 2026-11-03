@@ -3,7 +3,7 @@ package database
 import (
 	"log/slog"
 
-	"crudapi/internal/models"
+	"mochammadbagas/crudapi/internal/models"
 
 	"gorm.io/gorm"
 )

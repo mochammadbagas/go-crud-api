@@ -1,4 +1,4 @@
-module crudapi
+module mochammadbagas/crudapi
 
 go 1.25.0
 

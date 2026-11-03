@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"crudapi/internal/models"
-	"crudapi/internal/store"
+	"mochammadbagas/crudapi/internal/models"
+	"mochammadbagas/crudapi/internal/store"
 
 	"github.com/gin-gonic/gin"
 )

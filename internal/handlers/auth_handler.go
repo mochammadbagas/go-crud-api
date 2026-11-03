@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"crudapi/internal/middleware"
-	"crudapi/internal/models"
-	"crudapi/internal/store"
+	"mochammadbagas/crudapi/internal/middleware"
+	"mochammadbagas/crudapi/internal/models"
+	"mochammadbagas/crudapi/internal/store"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"

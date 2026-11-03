@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"crudapi/internal/store"
+	"mochammadbagas/crudapi/internal/store"
 
 	"github.com/gin-gonic/gin"
 )

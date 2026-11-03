@@ -3,7 +3,7 @@ package store
 import (
 	"errors"
 
-	"crudapi/internal/models"
+	"mochammadbagas/crudapi/internal/models"
 
 	"gorm.io/gorm"
 )

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"crudapi/internal/models"
-	"crudapi/internal/store"
+	"mochammadbagas/crudapi/internal/models"
+	"mochammadbagas/crudapi/internal/store"
 
 	"github.com/gin-gonic/gin"
 )

@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"crudapi/internal/config"
-	"crudapi/internal/models"
+	"mochammadbagas/crudapi/internal/config"
+	"mochammadbagas/crudapi/internal/models"
 
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"

@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"crudapi/internal/handlers"
-	"crudapi/internal/middleware"
+	"mochammadbagas/crudapi/internal/handlers"
+	"mochammadbagas/crudapi/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )

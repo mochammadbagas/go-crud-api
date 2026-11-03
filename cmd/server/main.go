@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"crudapi/internal/config"
-	"crudapi/internal/database"
-	"crudapi/internal/handlers"
-	"crudapi/internal/routes"
-	"crudapi/internal/store"
+	"mochammadbagas/crudapi/internal/config"
+	"mochammadbagas/crudapi/internal/database"
+	"mochammadbagas/crudapi/internal/handlers"
+	"mochammadbagas/crudapi/internal/routes"
+	"mochammadbagas/crudapi/internal/store"
 )
 
 // main adalah titik masuk (Entry Point) utama aplikasi backend.
