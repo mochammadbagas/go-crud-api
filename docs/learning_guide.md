@@ -1,282 +1,182 @@
 # Panduan Lengkap Memahami Proyek (Golang Learning Guide)
 
-Dokumen ini disusun khusus sebagai **panduan belajar komprehensif** untuk memahami arsitektur, pola desain (_design pattern_), alur eksekusi, serta idiom-idiom bahasa Go yang diimplementasikan di dalam proyek **Go CRUD API**.
+Dokumen ini disusun sebagai **panduan belajar komprehensif** untuk memahami arsitektur, pola desain (_design pattern_), alur eksekusi, serta idiom bahasa Go yang diimplementasikan pada proyek **mmdbconnect CMS (`go-crud-api`)**.
 
 ---
 
 ## 1. Peta Konsep Utama Golang pada Proyek Ini
 
-Jika Anda sedang belajar Golang, proyek ini mencakup konsep-konsep inti yang umum digunakan di industri backend enterprise modern:
-
-| Konsep Golang                 | Lokasi Penerapan                            | Penjelasan Singkat                                                               |
-| :---------------------------- | :------------------------------------------ | :------------------------------------------------------------------------------- |
-| **Struct & Custom Types**     | `internal/models/`                          | Merepresentasikan entitas data dan skema database.                               |
-| **Pointers vs Values**        | `models/product.go`, `store/mysql_store.go` | Pointer (`*Category`) digunakan untuk relasi data nullable dan efisiensi memori. |
-| **Interfaces (Kontrak)**      | `internal/store/store.go`                   | Menerapkan Repository Pattern: decoupling antara logika HTTP dan database.       |
-| **Concurrency & Mutex**       | `internal/store/store.go`                   | Menggunakan `sync.RWMutex` untuk mengamankan data in-memory dari race condition. |
-| **Goroutines & Channels**     | `cmd/server/main.go`                        | Menjalankan HTTP server di latar belakang dan menangkap sinyal shutdown OS.      |
-| **Error Handling & Sentinel** | `internal/store/store.go`, `handlers/`      | Menggunakan variabel error statis (`ErrNotFound`) dan `errors.Is`.               |
-| **Higher-Order Functions**    | `internal/middleware/`                      | Middleware di Gin berupa fungsi yang mengembalikan `gin.HandlerFunc`.            |
-| **Context & Timeouts**        | `cmd/server/main.go`                        | `context.WithTimeout` untuk membatasi durasi operasi graceful shutdown.          |
-| **Table-Driven Tests**        | `internal/models/*_test.go`                 | Standar resmi penulisan unit test di ekosistem Go.                               |
+| Konsep Golang                 | Lokasi Penerapan                                                                                  | Penjelasan Singkat                                                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Struct, Pointer & DTO**     | `internal/models/`                                                                                | Memisahkan entitas domain (`Post`, `User`, `Category`, `Session`) dari DTO input (`CreatePostInput`, `LoginInput`). Pointer dipakai untuk field nullable (`*string`, `*uint64`, `*time.Time`). |
+| **Interface & DIP**           | `internal/service/`, `internal/repository/`, `internal/middleware/`                               | Setiap layer atas bergantung pada **interface** (`PostRepository`, `PostServiceInterface`, `MarkdownRenderer`, `SessionValidator`) agar modular dan mudah di-mock.                             |
+| **Type-Safe SQL (`sqlc`)**    | `db/queries/`, `internal/repository/sqlc/`                                                        | Query SQL dikompilasi oleh `sqlc` menjadi fungsi Go yang strongly-typed tanpa overhead ORM.                                                                                                    |
+| **Embedded Assets (`embed`)** | `db/embed.go`                                                                                     | File migrasi SQL di-embed ke dalam binary Go dengan `//go:embed migrations/*.sql`.                                                                                                             |
+| **Goroutines & Channels**     | `cmd/server/main.go`                                                                              | Menjalankan HTTP server, background session cleanup (`time.Ticker`), serta menangkap sinyal shutdown OS (`os.Signal`).                                                                         |
+| **Error Handling & Sentinel** | `internal/repository/`, `internal/service/`                                                       | Sentinel errors (`ErrNotFound`, `ErrDuplicate`, `ErrPostSlugExists`, `ErrInvalidCredentials`) dipetakan lewat `errors.Is` dan `errors.As`.                                                     |
+| **Higher-Order Functions**    | `internal/middleware/auth.go`, `internal/routes/routes.go`                                        | Middleware standar `net/http` (`func(http.Handler) http.Handler`) di router **Chi**.                                                                                                           |
+| **Context & Timeouts**        | `cmd/server/main.go`, `internal/middleware/auth.go`                                               | `context.WithTimeout` untuk graceful shutdown, `context.WithCancel` untuk stop worker, dan `context.WithValue` untuk menyisipkan user & session aktif.                                         |
+| **Testing & Mocking**         | `internal/handlers/handlers_test.go`, `internal/service/*_test.go`, `internal/utils/slug_test.go` | Table-driven tests, in-memory repository mocks, dan `net/http/httptest` tanpa database nyata.                                                                                                  |
 
 ---
 
 ## 2. Struktur Proyek & Filosofi Desain
 
-Aplikasi ini menggunakan pola arsitektur **Clean Architecture sederhana (Layered Architecture)** dengan struktur direktori standar komunitas Go (_Standard Go Project Layout_):
+Aplikasi ini menerapkan **Layered Architecture** (`Handler → Service → Repository → Database`) berbasis _Standard Go Project Layout_:
 
 ```text
 go-crud-api/
 ├── cmd/
 │   └── server/
-│       └── main.go                 # [1] Composition Root & Bootstrap server
+│       └── main.go                     # [1] Composition Root & Bootstrap server
+├── db/
+│   ├── embed.go                        # [2] Embed file SQL migrasi ke runtime binary
+│   ├── migrations/                     # [3] Skema DDL golang-migrate (.up.sql / .down.sql)
+│   └── queries/                        # [4] Sumber query SQL untuk generator sqlc
 ├── docs/
-│   ├── technical_specification.md  # [2] Spesifikasi teknis, skema DB, kontrak API
-│   ├── learning_guide.md           # [3] Panduan pemahaman & materi belajar (file ini)
-│   └── postman_collection.json     # [4] Koleksi Postman v2.1 siap pakai (Auto JWT)
-├── internal/                       # [4] Kode privat yang tidak bisa diimpor modul luar
-│   ├── config/                     # [5] Konfigurasi environment (.env)
-│   ├── database/                   # [6] Database seeder & manajemen data awal
-│   ├── handlers/                   # [7] HTTP Delivery Layer (Controllers)
-│   ├── middleware/                 # [8] Interceptor request (Auth JWT & CORS)
-│   ├── models/                     # [9] Domain Entities & Aturan Validasi
-│   ├── routes/                     # [10] Setup Routing & Grouping Endpoint Gin
-│   └── store/                      # [11] Data Access Layer (Repository Pattern)
-├── .air.toml                       # [12] Konfigurasi live-reload Air
-├── .env                            # [13] Kredensial lingkungan lokal
-├── api.http                        # [14] Koleksi request HTTP untuk uji coba via REST Client
-├── go.mod                          # [15] Manifest dependensi Go
-└── go.sum                          # [16] Checksum integritas dependensi
+│   ├── ref/
+│   │   └── architecture_reference.md   # [5] Blueprint arsitektur backend untuk proyek baru
+│   ├── learning_guide.md               # [6] Panduan belajar proyek (file ini)
+│   ├── technical_specification.md      # [7] Spesifikasi teknis, skema DB, & kontrak endpoint
+│   └── postman_collection.json         # [8] Koleksi Postman v2.1 siap pakai
+├── internal/                           # [9] Kode privat modul (tidak bisa diimpor modul luar)
+│   ├── config/                         # Konfigurasi environment (.env / OS env)
+│   ├── database/                       # Connection pool, migrate runner, & initial seeder
+│   ├── handlers/                       # HTTP Delivery Layer (Admin & Public) + httptest
+│   ├── middleware/                     # HTTP-only Cookie Auth & CORS middleware
+│   ├── models/                         # Domain Entities, Input DTOs, & filter validators
+│   ├── repository/                     # Repository interfaces, wrapper sqlc, & dynamic SQL
+│   ├── routes/                         # Chi Router, aliases, static uploads, & rate limiter
+│   ├── service/                        # Business logic, Argon2id, Goldmark MarkdownRenderer
+│   └── utils/                          # Slug generator, pagination, & JSON response helpers
+├── .air.toml                           # Live-reload config (Air)
+├── .env.example                        # Template environment variables
+├── api.http                            # Koleksi request untuk VS Code REST Client
+├── go.mod / go.sum                     # Manifest dependensi Go
+└── sqlc.yaml                           # Konfigurasi generator sqlc
 ```
 
 ### Mengapa menggunakan folder `internal/`?
 
-Di Golang, folder bernama `internal` memiliki perlakuan khusus oleh compiler. Paket apa pun di dalam `internal/` **hanya bisa diimpor oleh modul ini sendiri**, dan tidak bisa diimpor oleh proyek eksternal lain. Ini menjaga kode inti kita tetap terenkapsulasi secara aman.
+Di Go, compiler menegakkan visibilitas folder `internal/`: package di dalamnya **hanya boleh diimpor oleh modul `github.com/mochammadbagas/go-crud-api`**, sehingga detail implementasi tidak bocor keluar.
 
 ---
 
 ## 3. Bedah Komponen Lapisan demi Lapisan
 
-Mari kita pelajari setiap lapisan dari yang terdalam (Domain) hingga yang terluar (Entrypoint).
-
 ### A. Lapisan Model (`internal/models/`)
 
-Lapisan ini berisi entitas data murni dan aturan bisnis dasar.
+1. **`post.go`**:
+   - Entitas `Post`, konstanta `TypeBlog`/`TypeArticle`/`TypeJournal` dan `StatusDraft`/`StatusPublished`.
+   - `ComputeSEOMetadata()`: menerapkan fallback SEO (`meta_title` → `title`, `meta_description` → `excerpt`).
+   - `CreatePostInput.Validate()` & `UpdatePostInput.Validate()`: validasi input payload.
+   - `ValidateType()` & `ValidateStatus()`: validator terpusat untuk query parameter di handler.
+2. **`user.go`**, **`category.go`**, **`session.go`**:
+   - Tag `json:"-"` pada `User.PasswordHash` memastikan hash Argon2id tidak pernah keluar ke JSON response, ditambah projection `UserProfile`.
+   - `Session.IsExpired()` mengecek masa berlaku sesi terhadap `time.Now().UTC()`.
 
-1. **`category.go`**:
-   - Mendefinisikan struct `Category` dengan field `ID`, `Name`, serta audit timestamp.
-   - Menggunakan tag `gorm:"unique"` agar nama kategori tidak boleh kembar.
-2. **`product.go`**:
-   - Mendefinisikan struct `Product` yang memiliki relasi ke `Category` (`CategoryID uint` dan `Category *Category`).
-   - **Pelajaran Penting**: Mengapa `Category` berupa pointer (`*Category`)?
-     - Jika kategori belum di-load atau bernilai null, nilainya bisa menjadi `nil`.
-     - Menghindari recursive copy pada memori.
-     - Tag `json:",omitempty"` memastikan jika pointer bernilai `nil`, field tersebut diabaikan di JSON.
-3. **`user.go`**:
-   - Menyimpan akun login.
-   - **Pelajaran Keamanan**: Tag `json:"-"` pada `Password` memastikan password tidak pernah bocor ke output JSON API.
-   - **GORM Hook (`BeforeSave`)**: Hook ini berjalan otomatis sebelum data masuk ke MySQL untuk mengubah password plain menjadi hash **Bcrypt**.
+### B. Lapisan Repository (`internal/repository/`)
 
----
+1. **Interface & Sentinel Errors (`user_repository.go`, `post_repository.go`, `category_repository.go`, `session_repository.go`)**:
+   - Mendefinisikan kontrak (`PostRepository`, `CategoryRepository`, `UserRepository`, `SessionRepository`) serta sentinel error `ErrNotFound` dan `ErrDuplicate`.
+   - Helper `IsDuplicateKeyError` memakai `errors.As` untuk mendeteksi kode error MySQL `1062` (duplicate key).
+2. **`sqlc` + Dynamic Query**:
+   - Query statis di-generate lewat `sqlc` ke `internal/repository/sqlc/`.
+   - Query filter dinamis (`ListPublic`, `ListAdmin`) merakit klausa `WHERE` dengan placeholder `?` (aman dari SQL injection) dan `JSON_CONTAINS(p.tags, JSON_QUOTE(?))` untuk filter tag.
 
-### B. Lapisan Repositori / Penyimpanan (`internal/store/`)
+### C. Lapisan Service (`internal/service/`)
 
-Lapisan ini bertanggung jawab untuk operasi database (CRUD).
+1. **`auth_service.go` (`AuthServiceInterface`)**:
+   - Memverifikasi password dengan **Argon2id** (`argon2id.ComparePasswordAndHash`).
+   - Menghasilkan token sesi 32-byte acak dari `crypto/rand` (hex 64 karakter) berlaku 7 hari.
+   - `ValidateSession`: menggabungkan pengecekan expiry di SQL dan `session.IsExpired()` di memori sebagai _defense-in-depth_ terhadap selisih jam server aplikasi & database.
+2. **`post_service.go` (`PostServiceInterface`)**:
+   - Menerapkan aturan publikasi: status default `draft`, `published_at` diisi saat pertama kali publish dan dipertahankan meski di-edit atau dikembalikan ke `draft`.
+   - Normalisasi tag secara case-insensitive (`normalizeTags`) dan pengecekan keunikan slug.
+   - Pada `GetPublishedBySlug`, counter views di-increment di DB dan ditambahkan lokal (`post.Views++`) agar tidak melakukan query ulang ke DB.
+3. **`markdown_service.go` (`MarkdownRenderer`)**:
+   - Merender Markdown ke HTML via **Goldmark** (ekstensi GFM, Table, Strikethrough, TaskList) tanpa `html.WithUnsafe()` sehingga raw `<script>` otomatis dinetralkan (proteksi XSS).
 
-1. **Interface `Store` ([store.go](file:///c:/Users/mmdbc/Development/Personal/Sandbox/Golang/go-crud-api/internal/store/store.go))**:
-   - Ini adalah **kontrak**. Handler tidak peduli apakah data disimpan di MySQL, PostgreSQL, atau Memori RAM. Handler hanya tahu metode yang ada di interface ini.
-   - Idiom Go: _"Accept interfaces, return structs"_.
-2. **`InMemoryStore` ([store.go](file:///c:/Users/mmdbc/Development/Personal/Sandbox/Golang/go-crud-api/internal/store/store.go))**:
-   - Menyimpan data di dalam `map[uint]models.Product` di memori RAM.
-   - **Pelajaran Concurrency**: Di Go, server HTTP menangani setiap request pada Goroutine terpisah. Jika dua request menulis ke map secara bersamaan, Go akan crash dengan error `concurrent map read and write`.
-   - Solusi: Dilindungi dengan `sync.RWMutex`.
-     - `mu.RLock()`: Saat membaca (bisa dibaca ramai-ramai).
-     - `mu.Lock()`: Saat menambah/mengubah (hanya 1 goroutine yang boleh menulis).
-3. **`MySQLStore` ([mysql_store.go](file:///c:/Users/mmdbc/Development/Personal/Sandbox/Golang/go-crud-api/internal/store/mysql_store.go))**:
-   - Implementasi query database menggunakan GORM ORM.
-   - **Eager Loading**: `.Preload("Category")` secara otomatis mengambil data kategori yang terikat pada produk (mencegah masalah query N+1).
-   - **Soft Delete**: Karena struct memiliki `gorm.DeletedAt`, pemanggilan `db.Delete` akan mengubah kolom `deleted_at = NOW()` tanpa menghapus baris secara permanen.
+### D. Lapisan Middleware & Routing (`internal/middleware/`, `internal/routes/`)
 
----
+1. **`middleware/auth.go`**:
+   - Membaca token dari HTTP-only Cookie `session_id`, dengan fallback header `Authorization: Bearer <session_id>`.
+   - Memvalidasi sesi lewat interface `SessionValidator`, lalu menyuntikkan `*models.Session` dan `*models.User` ke `request.Context()`.
+2. **`middleware/cors.go`**:
+   - Mengonfigurasi `go-chi/cors` dengan `AllowCredentials: true` agar cookie HTTP-only bekerja lintas origin yang diizinkan di `ALLOWED_ORIGINS`.
+3. **`routes/routes.go`**:
+   - Memasang global middleware Chi (`RequestID`, `RealIP`, `Logger`, `Recoverer`, `CORS`).
+   - Memasang static file server `/uploads/*`, endpoint `/health`, alias URL publik (`/blog/{slug}`, `/articles/{slug}`, `/journal/{slug}`, `/categories/{slug}`), serta API `/api/v1`.
+   - Melindungi `POST /api/v1/admin/login` dengan **`httprate.LimitBy`** (maksimal 10 percobaan/menit per IP).
 
-### C. Lapisan Middleware (`internal/middleware/`)
+### E. Lapisan Handler (`internal/handlers/`)
 
-Lapisan ini menyaring atau memodifikasi request sebelum sampai ke controller/handler.
+- Seluruh handler hanya bergantung pada **interface service** (`AuthServiceInterface`, `PostServiceInterface`, `CategoryServiceInterface`).
+- Error `500` dicatat secara terstruktur lewat `slog.Error(...)` dan mengembalikan pesan generik ke client agar detail database tidak bocor.
+- **`admin_upload_handler.go`**: membatasi multipart form (10 MB), memvalidasi ekstensi file **dan** magic bytes aktual via `http.DetectContentType`, lalu melakukan `Seek(0, io.SeekStart)` sebelum menyimpan file dengan nama acak aman.
 
-1. **`auth.go` (JWT Middleware)**:
-   - Memeriksa header `Authorization: Bearer <TOKEN>`.
-   - Memverifikasi tanda tangan kriptografi token JWT dengan algoritma HMAC-SHA256 (`jwt.SigningMethodHMAC`).
-   - Menyimpan `user_id` ke dalam context Gin via `c.Set("user_id", claims.UserID)` agar handler berikutnya dapat mengetahui siapa yang melakukan request.
-   - Jika token salah/kadaluarsa, panggil `c.AbortWithStatusJSON(401, ...)` agar request terhenti seketika.
-2. **`middleware.go` (CORS)**:
-   - Mengatur header CORS (`Access-Control-Allow-Origin`, dll.) agar API bisa diakses oleh aplikasi web frontend (seperti React / Vue / Vite).
-   - Menangani request pre-flight browser berjenis `OPTIONS` dengan HTTP 204 No Content.
+### F. Lapisan Database & Bootstrap (`internal/database/`, `cmd/server/main.go`)
 
----
-
-### D. Lapisan Handler / Controller (`internal/handlers/`)
-
-Lapisan ini menerima HTTP request, memvalidasi input JSON, memanggil Store, dan mengembalikan respons JSON.
-
-- **Dependency Injection**:
-  ```go
-  type ProductHandler struct {
-      store store.Store // Handler hanya bergantung pada Interface!
-  }
-  ```
-- **Alur Kerja Handler**:
-  1. `c.ShouldBindJSON(&input)`: Mengurai request body JSON ke dalam struct.
-  2. `input.Validate()`: Memeriksa validitas data (nama tidak boleh kosong, harga/stok tidak boleh negatif).
-  3. Memanggil metode store (misal: `h.store.Create(input)`).
-  4. Mengembalikan HTTP Status Code yang tepat:
-     - `200 OK`: Pengambilan data sukses atau update sukses.
-     - `201 Created`: Pembuatan resource baru sukses.
-     - `204 No Content`: Penghapusan sukses tanpa perlu kirim body response.
-     - `400 Bad Request`: Input client tidak valid.
-     - `401 Unauthorized`: Token tidak ada atau salah password.
-     - `404 Not Found`: Data dengan ID tersebut tidak ditemukan.
-     - `409 Conflict`: Email sudah terdaftar.
-     - `500 Internal Server Error`: Kesalahan server/database yang tak terduga.
+1. **`database/migrate.go`**: mengeksekusi migrasi ter-embed (`db.MigrationsFS`) lewat `golang-migrate` dan mendukung flag `-fresh` untuk reset tabel saat development.
+2. **`database/seeder.go`**: mengisi user admin awal (hashing langsung via `argon2id.CreateHash` tanpa bergantung ke `internal/service`), 3 kategori awal, serta 4 sample post secara idempoten.
+3. **`cmd/server/main.go`**:
+   - Menyiapkan `slog` format JSON.
+   - Menjalankan goroutine periodik `startSessionCleanup` setiap 1 jam.
+   - Menjalankan HTTP server dengan _Graceful Shutdown_ (timeout 10 detik saat `SIGINT` / `SIGTERM`).
 
 ---
 
-### E. Lapisan Database & Seeder (`internal/database/`)
+## 4. Alur Request Nyata (Lifecycle Walkthrough)
 
-Lapisan ini mengisolasi seluruh detail teknis database dari `main.go`.
-
-1. **`database.go`**:
-   - Menangani perakitan DSN MySQL, pembukaan koneksi `gorm.Open`, dan pengaturan batas *Connection Pooling* (`SetMaxIdleConns: 10`, `SetMaxOpenConns: 100`, `SetConnMaxLifetime: 1 Jam`).
-   - Menjalankan *Auto-Migration* untuk sinkronisasi skema tabel `categories`, `products`, dan `users`.
-   - Menangani flag reset `-fresh` (`SET FOREIGN_KEY_CHECKS = 0` dan `DropTable`) secara aman.
-2. **`seeder.go`**:
-   - Menerapkan prinsip *Idempotent Seeding*: memeriksa apakah data sudah ada (`count == 0`) sebelum menyemai kategori dan produk awal agar tidak terjadi duplikasi data saat server restart.
-
----
-
-### F. Lapisan Routing (`internal/routes/`)
-
-Lapisan ini mengatur bagaimana request HTTP diarahkan ke handler yang tepat.
-
-1. **`routes.go`**:
-   - Memisahkan pemasangan rute dari `main.go` agar penambahan ratusan endpoint di masa depan tetap terorganisir.
-   - **Route Grouping**: Mengelompokkan rute publik (`/register`, `/login`, `GET /products`) dan rute terproteksi (`POST`, `PUT`, `DELETE /products`, `/me`) menggunakan `r.Group("")` yang dibungkus oleh `middleware.AuthMiddleware`.
-
----
-
-### G. Lapisan Bootstrap Server (`cmd/server/main.go`)
-
-Lapisan ini adalah tempat merakit (_composition root_) seluruh komponen aplikasi.
-
-#### Alur Eksekusi main() (High-Level Orchestration):
-
-1. **Inisialisasi Structured Logger**: Menggunakan `slog.NewJSONHandler` bawaan Go 1.21+ untuk log terstruktur ramah mesin.
-2. **Parsing CLI Flag**: `flag.Bool("fresh", false, ...)` untuk opsi drop tabel dan re-seed (`-fresh`).
-3. **Pemuatan Konfigurasi**: Memanggil `config.Load()` untuk membaca file `.env` atau environment OS.
-4. **Inisialisasi Database Terpadu (`database.Init`)**:
-   - Membuka koneksi MySQL via GORM.
-   - Mengonfigurasi Connection Pooling (`SetMaxIdleConns: 10`, `SetMaxOpenConns: 100`, `SetConnMaxLifetime: 1 Jam`).
-   - Eksekusi reset tabel jika `-fresh` aktif.
-   - Eksekusi `AutoMigrate` dan seeder awal otomatis (`database.Seed`).
-5. **Wiring Dependency Injection**:
-   - `db` disuntikkan ke `MySQLStore`.
-   - `MySQLStore` disuntikkan ke `ProductHandler` dan `AuthHandler`.
-6. **Pemasangan Routing Terpisah (`routes.Setup`)**:
-   - Mengelompokkan rute publik dan terproteksi JWT ke dalam router Gin tanpa mengotori `main.go`.
-7. **HTTP Server & Graceful Shutdown (`runServer`)**:
-   - Server HTTP dijalankan di dalam goroutine terpisah (`go srv.ListenAndServe()`).
-   - Channel `shutdownSignal := make(chan os.Signal, 1)` mendengarkan sinyal `Ctrl+C` atau `SIGTERM`.
-   - Saat sinyal tiba, server diberi waktu 10 detik (`context.WithTimeout`) untuk menyelesaikan request pengguna sebelum dinonaktifkan dengan aman.
-
----
-
-## 4. Simulasi Alur Request Nyata (Lifecycle Walkthrough)
-
-### Skenario: Penambahan Produk Baru (`POST /products`)
+### Skenario: Admin Membuat Post Baru (`POST /api/v1/admin/posts`)
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Client as Frontend / Postman
-    participant Router as Gin Router
-    participant CORS as CORS Middleware
-    participant Auth as Auth Middleware
-    participant Handler as ProductHandler
-    participant Model as Product Model
-    participant Store as MySQLStore
+    participant Router as Chi Router
+    participant Auth as AuthMiddleware
+    participant Handler as AdminPostHandler
+    participant Service as PostService
+    participant Repo as PostRepository
     participant DB as MySQL Server
 
-    Client->>Router: POST /products (Header Bearer Token + JSON Body)
-    Router->>CORS: Lewati CORS Check
-    CORS->>Auth: Teruskan ke AuthMiddleware
-    Auth->>Auth: Verifikasi Signature JWT & Expiry
-    alt Token Tidak Sah
-        Auth-->>Client: 401 Unauthorized (Abort)
+    Client->>Router: POST /api/v1/admin/posts (Cookie session_id / Bearer + JSON)
+    Router->>Auth: Jalankan AuthMiddleware
+    Auth->>Service: ValidateSession(ctx, sessionID)
+    alt Sesi Tidak Valid / Kadaluarsa
+        Auth-->>Client: 401 Unauthorized
     end
-    Auth->>Auth: c.Set("user_id", claims.UserID)
-    Auth->>Handler: Teruskan ke Handler.Create
-    Handler->>Handler: c.ShouldBindJSON(&input)
-    Handler->>Model: input.Validate()
-    alt Validasi Gagal (misal: price < 0)
-        Handler-->>Client: 400 Bad Request
+    Auth->>Handler: Lanjutkan dengan User & Session di Context
+    Handler->>Handler: Decode JSON ke CreatePostInput
+    Handler->>Service: Create(ctx, input)
+    Service->>Service: input.Validate(), GenerateSlug(), normalizeTags()
+    Service->>Repo: GetBySlug() & categoryRepo.GetByID()
+    alt Slug Sudah Dipakai
+        Service-->>Handler: ErrPostSlugExists
+        Handler-->>Client: 409 Conflict
     end
-    Handler->>Store: store.Create(input)
-    Store->>DB: INSERT INTO products (...) VALUES (...)
-    Store->>DB: SELECT * FROM products JOIN categories WHERE id = ?
-    DB-->>Store: Return Record Baru + Objek Category
-    Store-->>Handler: Return models.Product
-    Handler-->>Client: 201 Created (JSON Response Lengkap)
+    Service->>Repo: Create(ctx, post)
+    Repo->>DB: INSERT INTO posts (...) via sqlc
+    DB-->>Repo: LastInsertId
+    Service->>Repo: GetByID(ctx, post.ID)
+    Repo-->>Service: *models.Post lengkap
+    Service-->>Handler: *models.Post
+    Handler-->>Client: 201 Created (JSON Response)
 ```
 
 ---
 
-## 5. Pola Pengujian Otomatis (Unit Testing)
+## 5. Pola Pengujian Otomatis
 
-Proyek ini mendemonstrasikan dua pola pengujian paling penting di Golang:
+1. **Table-Driven Unit Test (`internal/utils/slug_test.go`)**: menguji normalisasi judul menjadi slug pada berbagai kombinasi karakter.
+2. **Service Unit Test (`internal/service/post_service_test.go`, `markdown_service_test.go`)**:
+   - Menguji aturan publikasi (`draft` → `published` → edit → `draft`), fallback SEO, deteksi bentrok slug, validasi kategori, single-query `GetPublishedBySlug` dengan mock `MarkdownRenderer`, serta proteksi XSS pada Goldmark.
+3. **HTTP Integration-Style Test (`internal/handlers/handlers_test.go`)**:
+   - Menggunakan `routes.Setup(...)` + `httptest.NewRecorder()` + in-memory repositories untuk menguji publik post (404 untuk draft), login HTTP-only cookie, logout invalidation, rate limiting (`429 Too Many Requests`), dan validasi magic bytes upload (menolak `.jpg` berisi script PHP).
 
-### 1. Table-Driven Testing ([product_test.go](file:///c:/Users/mmdbc/Development/Personal/Sandbox/Golang/go-crud-api/internal/models/product_test.go))
+Jalankan seluruh pengujian dengan:
 
-Alih-alih membuat fungsi tes berulang kali untuk setiap skenario (nama kosong, harga minus, stok minus), kita membuat tabel slice struct:
-
-```go
-tests := []struct {
-    name    string
-    product Product
-    wantErr bool
-}{
-    {"Produk valid", Product{...}, false},
-    {"Harga negatif harus error", Product{...}, true},
-}
+```bash
+go test -v ./...
 ```
-
-Lalu melakukan perulangan menggunakan subtest `t.Run(tt.name, func(t *testing.T) { ... })`.
-
-### 2. Mocking Menggunakan In-Memory Store & httptest ([product_handler_test.go](file:///c:/Users/mmdbc/Development/Personal/Sandbox/Golang/go-crud-api/internal/handlers/product_handler_test.go))
-
-Karena kita menggunakan interface `Store`, kita tidak perlu menyalakan MySQL asli untuk menguji controller:
-
-```go
-s := store.NewInMemoryStore()
-h := NewProductHandler(s)
-rec := httptest.NewRecorder()
-c, _ := gin.CreateTestContext(rec)
-```
-
-Pengujian ini berjalan dalam hitungan milidetik dan 100% independen!
-
----
-
-## 6. Latihan Mandiri untuk Memperdalam Penguasaan Golang
-
-Untuk menguji dan memperdalam pemahaman Anda terhadap arsitektur ini, cobalah tantangan praktik berikut:
-
-1. **Tantangan 1: CRUD Kategori Lengkap**
-   - Buat endpoint `GET /categories` dan `POST /categories`.
-   - Tambahkan fungsi `GetAllCategories` dan `CreateCategory` pada interface `Store`, lalu implementasikan di `InMemoryStore` dan `MySQLStore`.
-2. **Tantangan 2: Fitur Pencarian Produk (Search)**
-   - Modifikasi endpoint `GET /products?search=keyboard` agar bisa mencari produk berdasarkan nama yang cocok (_LIKE query_).
-3. **Tantangan 3: Pagination**
-   - Tambahkan query parameter `?page=1&limit=10` pada `GET /products` agar API tidak langsung mengambil seluruh data produk sekaligus saat data sudah berjumlah ribuan.
-4. **Tantangan 4: Role-Based Authorization**
-   - Tambahkan kolom `role` (enum: `admin`, `user`) pada model `User`.
-   - Modifikasi middleware agar hanya user dengan role `admin` yang diizinkan melakukan operasi `POST`, `PUT`, dan `DELETE` produk.

@@ -1,75 +1,83 @@
 package middleware
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/mochammadbagas/go-crud-api/internal/models"
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
-// JWTClaims merepresentasikan struktur payload (klaim data) yang disimpan di dalam token JWT.
-//
-// Konsep Belajar Golang & JWT:
-// - Komponen Token JWT:
-//  1. Header: Algoritma tanda tangan (misal: HS256).
-//  2. Payload (Claims): Data yang kita bawa (misal: UserID, waktu expired).
-//  3. Signature: Tanda tangan digital menggunakan Secret Key untuk mencegah pemalsuan data.
-//
-// - `jwt.RegisteredClaims`: Standar klaim bawaan RFC 7519 (seperti `exp` untuk expiry, `iat` untuk issued-at).
-type JWTClaims struct {
-	UserID uint `json:"user_id"`
-	jwt.RegisteredClaims
+type contextKey string
+
+const (
+	UserContextKey    contextKey = "auth_user"
+	SessionContextKey contextKey = "auth_session"
+	CookieSessionName string     = "session_id"
+)
+
+// SessionValidator defines the contract required to validate sessions in middleware.
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, sessionID string) (*models.Session, error)
 }
 
-// AuthMiddleware bertindak sebagai gerbang pengamanan (Gatekeeper) pada rute-rute privat.
-//
-// Konsep Belajar Golang & Gin:
-//  1. Higher-Order Function / Middleware Pattern:
-//     Fungsi ini menerima parameter konfigurasi (`jwtSecret`) dan mengembalikan `gin.HandlerFunc`.
-//  2. Kontrol Alur Middleware:
-//     - `c.AbortWithStatusJSON(...)`: Menghentikan eksekusi rute seketika jika token tidak sah.
-//     Handler berikutnya TIDAK AKAN dieksekusi.
-//     - `c.Set("user_id", claims.UserID)`: Menyimpan data pengguna ke dalam context request Gin.
-//     Ini memungkinkan controller/handler selanjutnya membaca siapa user yang sedang request (mirip `Auth::user()` di Laravel).
-//     - `c.Next()`: Mengizinkan request melanjutkan ke middleware atau controller berikutnya.
-func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 1. Ambil nilai header "Authorization"
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "header Authorization wajib disertakan"})
-			return
-		}
+// AuthMiddleware verifies the secure HTTP-only cookie session.
+func AuthMiddleware(authSvc SessionValidator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var sessionID string
 
-		// 2. Periksa format token: Harus diawali kata "Bearer " diikuti token
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "format token salah, gunakan: Bearer <token>"})
-			return
-		}
-
-		tokenString := parts[1]
-		claims := &JWTClaims{}
-
-		// 3. Parse dan validasi keaslian tanda tangan token menggunakan JWT Secret
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			// Cegah serangan "Algorithm Confusion": Pastikan algoritma yang digunakan adalah HMAC (HS256)
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("metode tanda tangan tidak sesuai: %v", token.Header["alg"])
+			// 1. Try reading from HTTP-only cookie
+			if cookie, err := r.Cookie(CookieSessionName); err == nil && cookie.Value != "" {
+				sessionID = cookie.Value
 			}
-			return []byte(jwtSecret), nil
+
+			// 2. Fallback to Authorization: Bearer <session_id> for REST/HTTP clients like Postman/api.http
+			if sessionID == "" {
+				authHeader := r.Header.Get("Authorization")
+				if strings.HasPrefix(authHeader, "Bearer ") {
+					sessionID = strings.TrimPrefix(authHeader, "Bearer ")
+				}
+			}
+
+			if sessionID == "" {
+				utils.Error(w, http.StatusUnauthorized, "unauthorized: sesi tidak ditemukan")
+				return
+			}
+
+			// 3. Validate session in database
+			session, err := authSvc.ValidateSession(r.Context(), sessionID)
+			if err != nil {
+				utils.Error(w, http.StatusUnauthorized, "unauthorized: sesi tidak valid atau telah kadaluarsa")
+				return
+			}
+
+			// 4. Inject session and user into context
+			ctx := context.WithValue(r.Context(), SessionContextKey, session)
+			ctx = context.WithValue(ctx, UserContextKey, session.User)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
-
-		// 4. Jika ada error saat parsing atau masa berlaku token sudah habis
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token tidak valid atau telah kadaluarsa"})
-			return
-		}
-
-		// 5. Sukses: Sisipkan ID pengguna ke context agar bisa diakses di handler
-		c.Set("user_id", claims.UserID)
-		c.Next()
 	}
+}
+
+// GetUserFromContext retrieves authenticated user from request context.
+func GetUserFromContext(ctx context.Context) *models.User {
+	if val := ctx.Value(UserContextKey); val != nil {
+		if user, ok := val.(*models.User); ok {
+			return user
+		}
+	}
+	return nil
+}
+
+// GetSessionFromContext retrieves active session from request context.
+func GetSessionFromContext(ctx context.Context) *models.Session {
+	if val := ctx.Value(SessionContextKey); val != nil {
+		if sess, ok := val.(*models.Session); ok {
+			return sess
+		}
+	}
+	return nil
 }

@@ -11,51 +11,96 @@ import (
 	"syscall"
 	"time"
 
-	"mochammadbagas/crudapi/internal/config"
-	"mochammadbagas/crudapi/internal/database"
-	"mochammadbagas/crudapi/internal/handlers"
-	"mochammadbagas/crudapi/internal/routes"
-	"mochammadbagas/crudapi/internal/store"
+	"github.com/mochammadbagas/go-crud-api/internal/config"
+	"github.com/mochammadbagas/go-crud-api/internal/database"
+	"github.com/mochammadbagas/go-crud-api/internal/handlers"
+	"github.com/mochammadbagas/go-crud-api/internal/repository"
+	"github.com/mochammadbagas/go-crud-api/internal/routes"
+	"github.com/mochammadbagas/go-crud-api/internal/service"
 )
 
-// main adalah titik masuk (Entry Point) utama aplikasi backend.
-//
-// Konsep Belajar Golang: Composition Root & High-Level Orchestration
-//   - Fungsi `main()` yang ideal hanya bertindak sebagai "konduktor musik":
-//     ia merakit dependensi tingkat tinggi dan tidak memuat logika detail SQL atau rute spesifik.
-//   - Menjaga `main()` tetap ringkas membuat seluruh alur aplikasi terbaca seperti daftar isi.
 func main() {
-	// 1. Inisialisasi Structured Logger (JSON Format)
+	// 1. Structured Logging Setup (JSON)
 	initLogger()
-	slog.Info("Memulai bootstrap aplikasi server...")
+	slog.Info("Memulai bootstrap mmdbconnect CMS (Blog, Article, Journal)...")
 
-	// 2. Parsing CLI Flags
-	fresh := flag.Bool("fresh", false, "Hapus seluruh tabel sebelum migrasi (seperti migrate:fresh)")
+	// 2. Command Line Flags
+	fresh := flag.Bool("fresh", false, "Hapus seluruh tabel sebelum migrasi ulang")
 	flag.Parse()
 
-	// 3. Pemuatan Konfigurasi Lingkungan (.env / OS Env)
+	// 3. Load Configurations
 	cfg := config.Load()
 
-	// 4. Inisialisasi Database (Koneksi, Pool, Migrasi, & Seeder Otomatis)
+	// 4. Initialize Database (Connection Pool, Migrations, & Seeder)
 	db, err := database.Init(cfg, *fresh)
 	if err != nil {
-		slog.Error("Inisialisasi database gagal", slog.Any("error", err))
+		slog.Error("Inisialisasi database MySQL gagal", slog.Any("error", err))
 		os.Exit(1)
 	}
+	defer db.Close()
 
-	// 5. Dependency Injection (Perakitan Repository & Handlers)
-	productStore := store.NewMySQLStore(db)
-	productHandler := handlers.NewProductHandler(productStore)
-	authHandler := handlers.NewAuthHandler(productStore, cfg.JWTSecret)
+	// 5. Initialize Repositories (Database Access Layer via sqlc queries & database/sql)
+	userRepo := repository.NewUserRepository(db)
+	sessionRepo := repository.NewSessionRepository(db)
+	categoryRepo := repository.NewCategoryRepository(db)
+	postRepo := repository.NewPostRepository(db)
 
-	// 6. Inisialisasi Router Gin & Pemetaan Seluruh Rute API
-	router := routes.Setup(productHandler, authHandler, cfg.JWTSecret)
+	// 6. Initialize Services (Business Logic Layer)
+	markdownSvc := service.NewMarkdownService()
+	authSvc := service.NewAuthService(userRepo, sessionRepo)
+	categorySvc := service.NewCategoryService(categoryRepo)
+	postSvc := service.NewPostService(postRepo, categoryRepo, markdownSvc)
 
-	// 7. Menjalankan Server HTTP dengan Mekanisme Graceful Shutdown
+	// 7. Initialize HTTP Handlers
+	adminAuthHandler := handlers.NewAdminAuthHandler(authSvc, cfg)
+	adminPostHandler := handlers.NewAdminPostHandler(postSvc)
+	adminCategoryHandler := handlers.NewAdminCategoryHandler(categorySvc)
+	adminUploadHandler := handlers.NewAdminUploadHandler(cfg)
+	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
+	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
+
+	// 8. Setup Chi HTTP Router
+	router := routes.Setup(
+		cfg,
+		authSvc,
+		adminAuthHandler,
+		adminPostHandler,
+		adminCategoryHandler,
+		adminUploadHandler,
+		publicPostHandler,
+		publicCategoryHandler,
+	)
+
+	// 9. Start Background Periodic Session Cleanup
+	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
+	defer stopCleanup()
+	go startSessionCleanup(cleanupCtx, sessionRepo, 1*time.Hour)
+
+	// 10. Run HTTP Server with Graceful Shutdown
 	runServer(router, cfg.Port)
 }
 
-// initLogger mengonfigurasi logger terstruktur bawaan Go (`log/slog`) ke format JSON.
+func startSessionCleanup(ctx context.Context, sessionRepo repository.SessionRepository, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Run initial cleanup on startup
+	if err := sessionRepo.DeleteExpired(ctx); err != nil {
+		slog.Error("Gagal membersihkan sesi kadaluarsa saat start", slog.Any("error", err))
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := sessionRepo.DeleteExpired(ctx); err != nil {
+				slog.Error("Gagal membersihkan sesi kadaluarsa berkala", slog.Any("error", err))
+			}
+		}
+	}
+}
+
 func initLogger() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -63,40 +108,31 @@ func initLogger() {
 	slog.SetDefault(logger)
 }
 
-// runServer mengonfigurasi HTTP Server dengan batas waktu (timeouts) yang aman
-// dan mendengarkan sinyal terminasi OS (Ctrl+C / SIGTERM) untuk proses Graceful Shutdown.
-//
-// Konsep Belajar Golang:
-// 1. Goroutine: Menjalankan `srv.ListenAndServe()` di thread ringan terpisah agar non-blocking.
-// 2. Channel & OS Signal: Menahan proses utama sampai sinyal interupsi diterima dari sistem operasi.
-// 3. Context Timeout: Memberikan masa tenggang 10 detik agar request yang sedang diproses selesai.
 func runServer(handler http.Handler, port string) {
 	serverAddr := ":" + port
 	srv := &http.Server{
 		Addr:         serverAddr,
 		Handler:      handler,
-		WriteTimeout: 15 * time.Second, // Mencegah request write menggantung
-		ReadTimeout:  15 * time.Second, // Mencegah serangan Slowloris
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Jalankan server di goroutine terpisah
 	go func() {
-		slog.Info("Server berhasil aktif dan siap melayani request", slog.String("url", "http://localhost"+serverAddr))
+		slog.Info("Server berhasil aktif dan siap melayani permintaan", slog.String("url", "http://localhost"+serverAddr))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Server mengalami kegagalan fatal", slog.Any("error", err))
 			os.Exit(1)
 		}
 	}()
 
-	// Menunggu sinyal interrupt/terminasi dari OS (Ctrl+C, kill)
+	// Listen for OS termination signals (Ctrl+C, SIGTERM)
 	shutdownSignal := make(chan os.Signal, 1)
 	signal.Notify(shutdownSignal, os.Interrupt, syscall.SIGTERM)
 
 	<-shutdownSignal
-	slog.Info("Sinyal shutdown diterima. Menghentikan server secara anggun (gracefully)...")
+	slog.Info("Sinyal shutdown diterima. Menghentikan server secara aman (graceful shutdown)...")
 
-	// Timeout context 10 detik untuk proses shutdown bersih
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

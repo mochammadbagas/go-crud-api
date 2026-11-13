@@ -1,79 +1,191 @@
 ### =========================================================================
-### GO CRUD API - HTTP REQUEST COLLECTION (REST CLIENT)
-### Gunakan extension "REST Client" di VS Code untuk klik "Send Request"
+### MMDBConnect CMS - HTTP REQUEST COLLECTION (REST CLIENT)
+### Blog, Article & Journal Content Management System
 ### =========================================================================
 
 @baseUrl = http://localhost:8080
 
-# Simpan token JWT hasil login di variabel ini untuk request yang terproteksi:
-@authToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# Simpan token session jika ingin menggunakan Authorization header sebagai alternatif cookie:
+@sessionToken = 
 
-### -------------------------------------------------------------------------
-### 1. AUTENTIKASI (PUBLIK & PRIVAT)
-### -------------------------------------------------------------------------
 
-### 1.1 Register User Baru (Publik)
-POST {{baseUrl}}/register
+### =========================================================================
+### 1. AUTENTIKASI ADMINISTRATOR (HTTP-only Cookie Session)
+### =========================================================================
+
+### 1.1 Login Administrator
+# Response akan otomatis menyetel HTTP-only cookie 'session_id'
+POST {{baseUrl}}/api/v1/admin/login
 Content-Type: application/json
 
 {
-  "email": "user@gmail.com",
-  "password": "password123"
+  "email": "admin@mmdbconnect.com",
+  "password": "adminpassword123"
 }
 
-### 1.2 Login User (Publik) - Salin token dari response ke variabel @authToken di atas
-POST {{baseUrl}}/login
+### 1.2 Cek Profil Administrator yang Sedang Login
+GET {{baseUrl}}/api/v1/admin/me
+Authorization: Bearer {{sessionToken}}
+
+### 1.3 Logout Administrator (Menghapus Sesi & Cookie)
+POST {{baseUrl}}/api/v1/admin/logout
+Authorization: Bearer {{sessionToken}}
+
+
+### =========================================================================
+### 2. ENDPOINT PUBLIK (Hanya Menampilkan Konten Published)
+### =========================================================================
+
+### 2.1 Daftar Semua Konten Published (Pagination Default: Page 1, Limit 10)
+GET {{baseUrl}}/api/v1/posts
+
+### 2.2 Filter Berdasarkan Jenis Konten (article / blog / journal)
+GET {{baseUrl}}/api/v1/posts?type=article
+
+### 2.3 Filter Berdasarkan Tag (MySQL JSON_CONTAINS)
+GET {{baseUrl}}/api/v1/posts?tag=Go
+
+### 2.4 Filter Konten Unggulan (Featured)
+GET {{baseUrl}}/api/v1/posts?featured=true
+
+### 2.5 Pagination Khusus
+GET {{baseUrl}}/api/v1/posts?page=1&limit=5
+
+### 2.6 Detail Konten Berdasarkan Slug (Render HTML & Increment Views)
+GET {{baseUrl}}/api/v1/posts/building-rest-apis-with-go
+
+### 2.7 Daftar Semua Kategori Publik
+GET {{baseUrl}}/api/v1/categories
+
+### 2.8 Konten Berdasarkan Slug Kategori
+GET {{baseUrl}}/api/v1/categories/tutorials-tech/posts
+
+### 2.9 Format URL Publik Ramah SEO (Direct Pattern Aliases)
+GET {{baseUrl}}/articles/building-rest-apis-with-go
+
+GET {{baseUrl}}/blog/my-development-journey
+
+GET {{baseUrl}}/journal/rust-vs-go-file-hashing
+
+GET {{baseUrl}}/categories/software-engineering
+
+
+### =========================================================================
+### 3. ADMIN: KELOLA KONTEN (POSTS CRUD)
+### =========================================================================
+
+### 3.1 Daftar Semua Konten Admin (Termasuk Draft & Published)
+GET {{baseUrl}}/api/v1/admin/posts
+Authorization: Bearer {{sessionToken}}
+
+### 3.2 Filter Konten Admin (Hanya Draft)
+GET {{baseUrl}}/api/v1/admin/posts?status=draft
+Authorization: Bearer {{sessionToken}}
+
+### 3.3 Buat Konten Baru (Default Status: Draft)
+POST {{baseUrl}}/api/v1/admin/posts
 Content-Type: application/json
+Authorization: Bearer {{sessionToken}}
 
 {
-  "email": "user@gmail.com",
-  "password": "password123"
+  "type": "article",
+  "title": "Optimasi Database MySQL untuk Aplikasi Golang",
+  "excerpt": "Panduan praktis indexing, connection pooling, dan query execution di MySQL.",
+  "content": "# Optimasi Database MySQL\n\nMySQL 8.0 menyediakan berbagai fitur performa tinggi...\n\n- Connection Pooling\n- Indexing yang tepat\n- JSON queries",
+  "cover_image": "/uploads/sample-cover.png",
+  "category_id": 1,
+  "tags": ["Go", "MySQL", "Database", "Performance"],
+  "meta_title": "Optimasi MySQL untuk Golang - Best Practices",
+  "meta_description": "Pelajari cara mengoptimalkan koneksi dan query database MySQL 8.0 pada backend Go.",
+  "is_featured": true,
+  "status": "draft"
 }
 
-### 1.3 Cek Profil User Saya (Terproteksi JWT)
-GET {{baseUrl}}/me
-Authorization: Bearer {{authToken}}
-
-
-### -------------------------------------------------------------------------
-### 2. PRODUK (READ ONLY - PUBLIK)
-### -------------------------------------------------------------------------
-
-### 2.1 Ambil Semua Produk (Publik)
-GET {{baseUrl}}/products
-
-### 2.2 Ambil Satu Produk Berdasarkan ID (Publik)
-GET {{baseUrl}}/products/1
-
-
-### -------------------------------------------------------------------------
-### 3. PRODUK (WRITE OPERATIONS - TERPROTEKSI JWT)
-### -------------------------------------------------------------------------
-
-### 3.1 Tambah Produk Baru (Wajib Token JWT)
-POST {{baseUrl}}/products
+### 3.4 Buat Konten Baru Langsung Dipublikasikan (Status: Published)
+POST {{baseUrl}}/api/v1/admin/posts
 Content-Type: application/json
-Authorization: Bearer {{authToken}}
+Authorization: Bearer {{sessionToken}}
 
 {
-  "name": "Headphone Bluetooth Wireless",
-  "price": 850000,
-  "stock": 15,
-  "category_id": 1
+  "type": "journal",
+  "title": "Eksperimen Memori dan Profiling di Go 1.25",
+  "content": "# Eksperimen Memori Go\n\nHari ini melakukan profiling memori menggunakan pprof dan tracing...",
+  "tags": ["Go", "Profiling", "Memory"],
+  "status": "published"
 }
 
-### 3.2 Update Data Produk (Wajib Token JWT)
-PUT {{baseUrl}}/products/1
+### 3.5 Ambil Detail Konten Berdasarkan ID
+GET {{baseUrl}}/api/v1/admin/posts/1
+Authorization: Bearer {{sessionToken}}
+
+### 3.6 Perbarui Konten (Ubah Status ke Published / Edit Konten)
+PUT {{baseUrl}}/api/v1/admin/posts/1
 Content-Type: application/json
-Authorization: Bearer {{authToken}}
+Authorization: Bearer {{sessionToken}}
 
 {
-  "name": "Keyboard Mekanikal Pro RGB",
-  "price": 520000,
-  "stock": 20,
-  "category_id": 2
+  "type": "article",
+  "title": "Building REST APIs with Go & Chi (Updated)",
+  "slug": "building-rest-apis-with-go",
+  "excerpt": "Panduan komprehensif membangun RESTful API modern dan cepat dengan Go dan Chi.",
+  "content": "# Building REST APIs with Go\n\nVersi revisi dengan penambahan middleware autentikasi cookie session...",
+  "category_id": 2,
+  "tags": ["Go", "Chi", "REST API", "Backend"],
+  "is_featured": true,
+  "status": "published"
 }
 
-### 3.3 Hapus Produk (Soft Delete - Wajib Token JWT)
-DELETE {{baseUrl}}/products/1
-Authorization: Bearer {{authToken}}
+### 3.7 Hapus Konten Berdasarkan ID
+DELETE {{baseUrl}}/api/v1/admin/posts/4
+Authorization: Bearer {{sessionToken}}
+
+
+### =========================================================================
+### 4. ADMIN: KELOLA KATEGORI (CATEGORIES CRUD)
+### =========================================================================
+
+### 4.1 Daftar Kategori Admin
+GET {{baseUrl}}/api/v1/admin/categories
+Authorization: Bearer {{sessionToken}}
+
+### 4.2 Tambah Kategori Baru
+POST {{baseUrl}}/api/v1/admin/categories
+Content-Type: application/json
+Authorization: Bearer {{sessionToken}}
+
+{
+  "name": "Cloud Architecture",
+  "slug": "cloud-architecture"
+}
+
+### 4.3 Update Kategori Berdasarkan ID
+PUT {{baseUrl}}/api/v1/admin/categories/1
+Content-Type: application/json
+Authorization: Bearer {{sessionToken}}
+
+{
+  "name": "Software Engineering & Architecture",
+  "slug": "software-engineering-architecture"
+}
+
+### 4.4 Hapus Kategori Berdasarkan ID
+DELETE {{baseUrl}}/api/v1/admin/categories/4
+Authorization: Bearer {{sessionToken}}
+
+
+### =========================================================================
+### 5. ADMIN: UPLOAD GAMBAR COVER (LOCAL FILESYSTEM)
+### =========================================================================
+
+### 5.1 Upload File Gambar Cover (Multipart Form Data)
+# Catatan: Di REST Client, ganti path file sesuai file gambar lokal di sistem Anda
+POST {{baseUrl}}/api/v1/admin/upload
+Authorization: Bearer {{sessionToken}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="image"; filename="cover.png"
+Content-Type: image/png
+
+< ./cover.png
+------WebKitFormBoundary7MA4YWxkTrZu0gW--

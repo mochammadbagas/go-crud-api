@@ -1,52 +1,38 @@
 {
 	"info": {
-		"_postman_id": "a9d7e32a-5b12-4f38-9cb1-8b27341d1a89",
-		"name": "Go CRUD API - Product & Auth",
-		"description": "Koleksi resmi pengujian API Go CRUD dengan autentikasi JWT dan database relasi MySQL.",
+		"_postman_id": "f5c2b189-9a67-4e92-807e-9cb2a9261a01",
+		"name": "mmdbconnect CMS - REST API",
+		"description": "Koleksi Postman resmi untuk MMDBConnect CMS (Blog, Article, Journal Content Management System). Mendukung autentikasi via HTTP-only Cookie dan fallback Bearer Session Token.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "sessionToken",
+			"value": "",
+			"type": "string"
+		}
+	],
 	"item": [
 		{
-			"name": "1. Authentication",
+			"name": "1. Autentikasi Administrator",
+			"description": "Endpoint login, profil, dan logout admin menggunakan session cookie / bearer token.",
 			"item": [
 				{
-					"name": "1.1 Register User Baru",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"email\": \"user@gmail.com\",\n  \"password\": \"password123\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/register",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"register"
-							]
-						},
-						"description": "Registrasi akun pengguna baru (Publik)"
-					},
-					"response": []
-				},
-				{
-					"name": "1.2 Login & Dapatkan Token JWT",
+					"name": "1.1 Login Administrator",
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
 									"var jsonData = pm.response.json();",
-									"if (jsonData.token) {",
-									"    pm.collectionVariables.set(\"token\", jsonData.token);",
-									"    console.log(\"Token JWT otomatis tersimpan di variable {{token}}\");",
+									"if (pm.response.code === 200 && jsonData.session_id) {",
+									"    pm.collectionVariables.set(\"sessionToken\", jsonData.session_id);",
+									"    console.log(\"Session ID otomatis tersimpan: \" + jsonData.session_id);",
 									"}"
 								],
 								"type": "text/javascript"
@@ -63,30 +49,33 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"user@gmail.com\",\n  \"password\": \"password123\"\n}"
+							"raw": "{\n  \"email\": \"admin@mmdbconnect.com\",\n  \"password\": \"adminpassword123\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/login",
+							"raw": "{{baseUrl}}/api/v1/admin/login",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
+								"api",
+								"v1",
+								"admin",
 								"login"
 							]
 						},
-						"description": "Login untuk mendapatkan token JWT (Token otomatis tersimpan di variabel koleksi Postman)"
+						"description": "Melakukan login admin. Menyimpan HTTP-only cookie 'session_id' secara otomatis di Postman dan mengisi variabel {{sessionToken}}."
 					},
 					"response": []
 				},
 				{
-					"name": "1.3 Cek Profil Saya (/me)",
+					"name": "1.2 Cek Profil Saya (/me)",
 					"request": {
 						"auth": {
 							"type": "bearer",
 							"bearer": [
 								{
 									"key": "token",
-									"value": "{{token}}",
+									"value": "{{sessionToken}}",
 									"type": "string"
 								}
 							]
@@ -94,74 +83,409 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/me",
+							"raw": "{{baseUrl}}/api/v1/admin/me",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
+								"api",
+								"v1",
+								"admin",
 								"me"
 							]
 						},
-						"description": "Mengambil data profil pengguna yang sedang login (Terproteksi JWT)"
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "2. Products (Public Read)",
-			"item": [
-				{
-					"name": "2.1 Ambil Semua Produk",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/products",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"products"
-							]
-						},
-						"description": "Menampilkan daftar seluruh produk dengan kategori yang sudah di-preload (Publik)"
+						"description": "Mengambil detail profil administrator yang sedang aktif."
 					},
 					"response": []
 				},
 				{
-					"name": "2.2 Ambil Detail Produk by ID",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/products/1",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"products",
-								"1"
-							]
-						},
-						"description": "Mengambil detail satu produk berdasarkan ID (Publik)"
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "3. Products (Protected Write)",
-			"item": [
-				{
-					"name": "3.1 Tambah Produk Baru",
+					"name": "1.3 Logout Administrator",
 					"request": {
 						"auth": {
 							"type": "bearer",
 							"bearer": [
 								{
 									"key": "token",
-									"value": "{{token}}",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"logout"
+							]
+						},
+						"description": "Menghapus sesi dari database dan menghapus cookie session."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Endpoint Publik",
+			"description": "Endpoint publik yang hanya menampilkan konten berstatus 'published' dengan caching dan SEO metadata.",
+			"item": [
+				{
+					"name": "2.1 Daftar Semua Konten Published",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/posts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"posts"
+							]
+						},
+						"description": "Mengambil daftar seluruh konten yang telah dipublikasikan (pagination default: page 1, limit 10)."
+					},
+					"response": []
+				},
+				{
+					"name": "2.2 Filter Berdasarkan Tipe Konten",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/posts?type=article",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"posts"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "article",
+									"description": "Pilihan: article, blog, journal"
+								}
+							]
+						},
+						"description": "Filter konten publik berdasarkan jenis: 'article', 'blog', atau 'journal'."
+					},
+					"response": []
+				},
+				{
+					"name": "2.3 Filter Berdasarkan Tag",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/posts?tag=Go",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"posts"
+							],
+							"query": [
+								{
+									"key": "tag",
+									"value": "Go"
+								}
+							]
+						},
+						"description": "Filter konten menggunakan JSON array matching MySQL (JSON_CONTAINS)."
+					},
+					"response": []
+				},
+				{
+					"name": "2.4 Filter Konten Unggulan (Featured)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/posts?featured=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"posts"
+							],
+							"query": [
+								{
+									"key": "featured",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Filter konten yang ditandai sebagai unggulan / featured."
+					},
+					"response": []
+				},
+				{
+					"name": "2.5 Pagination Khusus (Page & Limit)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/posts?page=1&limit=5",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"posts"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "5"
+								}
+							]
+						},
+						"description": "Mengatur nomor halaman dan batasan jumlah item per respons."
+					},
+					"response": []
+				},
+				{
+					"name": "2.6 Detail Konten Berdasarkan Slug",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/posts/building-rest-apis-with-go",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"posts",
+								"building-rest-apis-with-go"
+							]
+						},
+						"description": "Mengambil detail konten publik lengkap dengan konversi markdown ke safe HTML dan penambahan view count."
+					},
+					"response": []
+				},
+				{
+					"name": "2.7 Daftar Semua Kategori Publik",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categories"
+							]
+						},
+						"description": "Mengambil daftar seluruh kategori publik."
+					},
+					"response": []
+				},
+				{
+					"name": "2.8 Konten Berdasarkan Slug Kategori",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categories/tutorials-tech/posts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"tutorials-tech",
+								"posts"
+							]
+						},
+						"description": "Mengambil daftar konten publik yang tergolong dalam slug kategori tertentu."
+					},
+					"response": []
+				},
+				{
+					"name": "2.9 SEO Direct Alias - Article",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/articles/building-rest-apis-with-go",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"articles",
+								"building-rest-apis-with-go"
+							]
+						},
+						"description": "Alias rute ramah SEO langsung untuk artikel."
+					},
+					"response": []
+				},
+				{
+					"name": "2.10 SEO Direct Alias - Blog",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/blog/my-development-journey",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"blog",
+								"my-development-journey"
+							]
+						},
+						"description": "Alias rute ramah SEO langsung untuk blog."
+					},
+					"response": []
+				},
+				{
+					"name": "2.11 SEO Direct Alias - Journal",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/journal/rust-vs-go-file-hashing",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"journal",
+								"rust-vs-go-file-hashing"
+							]
+						},
+						"description": "Alias rute ramah SEO langsung untuk catatan jurnal."
+					},
+					"response": []
+				},
+				{
+					"name": "2.12 Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Cek kesiapan server."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Admin: Kelola Konten (Posts)",
+			"description": "Operasi CRUD postingan admin (draft & published). Memerlukan session cookie atau Bearer token.",
+			"item": [
+				{
+					"name": "3.1 Daftar Konten Admin (Semua Status)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/posts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"posts"
+							]
+						},
+						"description": "Melihat daftar seluruh postingan (draft maupun published) berurutan dari yang paling baru dibuat."
+					},
+					"response": []
+				},
+				{
+					"name": "3.2 Filter Konten Admin (Hanya Draft)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/posts?status=draft",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"posts"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "draft",
+									"description": "Pilihan: draft, published"
+								}
+							]
+						},
+						"description": "Filter konten admin khusus yang masih berupa draft."
+					},
+					"response": []
+				},
+				{
+					"name": "3.3 Buat Konten Baru (Draft)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
 									"type": "string"
 								}
 							]
@@ -175,30 +499,105 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Headphone Bluetooth ANC\",\n  \"price\": 1250000,\n  \"stock\": 10,\n  \"category_id\": 1\n}"
+							"raw": "{\n  \"type\": \"article\",\n  \"title\": \"Optimasi Database MySQL untuk Aplikasi Golang\",\n  \"excerpt\": \"Panduan praktis indexing, connection pooling, dan query execution di MySQL.\",\n  \"content\": \"# Optimasi Database MySQL\\n\\nMySQL 8.0 menyediakan berbagai fitur performa tinggi...\\n\\n- Connection Pooling\\n- Indexing yang tepat\\n- JSON queries\",\n  \"cover_image\": \"/uploads/sample-cover.png\",\n  \"category_id\": 1,\n  \"tags\": [\"Go\", \"MySQL\", \"Database\", \"Performance\"],\n  \"meta_title\": \"Optimasi MySQL untuk Golang - Best Practices\",\n  \"meta_description\": \"Pelajari cara mengoptimalkan koneksi dan query database MySQL 8.0 pada backend Go.\",\n  \"is_featured\": true,\n  \"status\": \"draft\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/products",
+							"raw": "{{baseUrl}}/api/v1/admin/posts",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"products"
+								"api",
+								"v1",
+								"admin",
+								"posts"
 							]
 						},
-						"description": "Menambahkan produk baru ke database (Wajib menyertakan Token JWT)"
+						"description": "Membuat postingan baru dengan status draft."
 					},
 					"response": []
 				},
 				{
-					"name": "3.2 Update Produk by ID",
+					"name": "3.4 Buat Konten Baru (Published)",
 					"request": {
 						"auth": {
 							"type": "bearer",
 							"bearer": [
 								{
 									"key": "token",
-									"value": "{{token}}",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"journal\",\n  \"title\": \"Eksperimen Profiling Memori di Go\",\n  \"content\": \"# Eksperimen Profiling Memori\\n\\nHari ini melakukan profiling memori menggunakan pprof dan tracing internal...\",\n  \"tags\": [\"Go\", \"Profiling\", \"Memory\"],\n  \"is_featured\": false,\n  \"status\": \"published\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/posts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"posts"
+							]
+						},
+						"description": "Membuat postingan yang langsung aktif dan diterbitkan (published_at otomatis terisi)."
+					},
+					"response": []
+				},
+				{
+					"name": "3.5 Detail Konten Berdasarkan ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/posts/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"posts",
+								"1"
+							]
+						},
+						"description": "Mengambil detail konten admin (baik draft maupun published) berdasarkan post ID numerik."
+					},
+					"response": []
+				},
+				{
+					"name": "3.6 Perbarui Konten Berdasarkan ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
 									"type": "string"
 								}
 							]
@@ -212,31 +611,34 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Keyboard Mekanikal Wireless Pro\",\n  \"price\": 650000,\n  \"stock\": 25,\n  \"category_id\": 2\n}"
+							"raw": "{\n  \"type\": \"article\",\n  \"title\": \"Building REST APIs with Go & Chi (Updated Edition)\",\n  \"slug\": \"building-rest-apis-with-go\",\n  \"excerpt\": \"Panduan komprehensif membangun RESTful API modern dan cepat dengan Go dan Chi.\",\n  \"content\": \"# Building REST APIs with Go\\n\\nVersi revisi dengan penambahan middleware autentikasi cookie session...\",\n  \"category_id\": 2,\n  \"tags\": [\"Go\", \"Chi\", \"REST API\", \"Backend\"],\n  \"is_featured\": true,\n  \"status\": \"published\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/products/1",
+							"raw": "{{baseUrl}}/api/v1/admin/posts/1",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"products",
+								"api",
+								"v1",
+								"admin",
+								"posts",
 								"1"
 							]
 						},
-						"description": "Mengubah data produk yang ada secara penuh (Wajib menyertakan Token JWT)"
+						"description": "Memperbarui isi postingan, mengubah status, atau memodifikasi kategori."
 					},
 					"response": []
 				},
 				{
-					"name": "3.3 Hapus Produk (Soft Delete)",
+					"name": "3.7 Hapus Konten Berdasarkan ID",
 					"request": {
 						"auth": {
 							"type": "bearer",
 							"bearer": [
 								{
 									"key": "token",
-									"value": "{{token}}",
+									"value": "{{sessionToken}}",
 									"type": "string"
 								}
 							]
@@ -244,32 +646,239 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/products/1",
+							"raw": "{{baseUrl}}/api/v1/admin/posts/4",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"products",
-								"1"
+								"api",
+								"v1",
+								"admin",
+								"posts",
+								"4"
 							]
 						},
-						"description": "Menghapus produk menggunakan soft delete / 204 No Content (Wajib menyertakan Token JWT)"
+						"description": "Menghapus postingan berdasarkan ID numerik."
 					},
 					"response": []
 				}
 			]
-		}
-	],
-	"variable": [
-		{
-			"key": "baseUrl",
-			"value": "http://localhost:8080",
-			"type": "string"
 		},
 		{
-			"key": "token",
-			"value": "",
-			"type": "string"
+			"name": "4. Admin: Kelola Kategori",
+			"description": "Operasi CRUD kategori admin. Memerlukan session cookie atau Bearer token.",
+			"item": [
+				{
+					"name": "4.1 Daftar Semua Kategori Admin",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories"
+							]
+						},
+						"description": "Mengambil daftar seluruh kategori."
+					},
+					"response": []
+				},
+				{
+					"name": "4.2 Tambah Kategori Baru",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Cloud Architecture\",\n  \"slug\": \"cloud-architecture\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories"
+							]
+						},
+						"description": "Menambahkan kategori baru."
+					},
+					"response": []
+				},
+				{
+					"name": "4.3 Perbarui Kategori Berdasarkan ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Software Engineering & Architecture\",\n  \"slug\": \"software-engineering-architecture\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories",
+								"1"
+							]
+						},
+						"description": "Memperbarui nama dan slug kategori."
+					},
+					"response": []
+				},
+				{
+					"name": "4.4 Hapus Kategori Berdasarkan ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories/4",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories",
+								"4"
+							]
+						},
+						"description": "Menghapus kategori. Postingan dengan kategori ini akan diset category_id = NULL."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "5. Admin: Upload Media",
+			"description": "Upload file gambar cover lokal dengan validasi MIME magic bytes (JPG, PNG, WEBP, GIF).",
+			"item": [
+				{
+					"name": "5.1 Upload Gambar Cover",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{sessionToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"description": "Pilih file gambar lokal (.jpg, .jpeg, .png, .webp, .gif)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/upload",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"upload"
+							]
+						},
+						"description": "Upload file gambar cover artikel. Mengembalikan path URL relatif yang aman."
+					},
+					"response": []
+				},
+				{
+					"name": "5.2 Akses Gambar Statis",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/uploads/sample.png",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"uploads",
+								"sample.png"
+							]
+						},
+						"description": "Mengakses file gambar statis yang tersimpan di direktori uploads."
+					},
+					"response": []
+				}
+			]
 		}
 	]
 }

@@ -40,3 +40,7 @@ coverage.html
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 7. Uploaded Files & Test Artifacts
+/uploads/
+internal/handlers/uploads/
