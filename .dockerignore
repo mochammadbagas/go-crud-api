@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env*
+.air.toml
+tmp/
+uploads/
+docs/
+*.md
+api.http
+*.log

@@ -1,0 +1,46 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: go-crud-api-mysql
+    restart: unless-stopped
+    env_file:
+      - .env.mysql
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # Buka port jika ingin mengakses MySQL dari host (mis. via TablePlus/DBeaver):
+    # ports:
+    #   - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: go-crud-api:local
+    container_name: go-crud-api
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - backend
+
+volumes:
+  mysql_data:
+  uploads_data:
+
+networks:
+  backend:
+    driver: bridge
