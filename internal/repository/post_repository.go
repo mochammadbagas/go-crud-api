@@ -17,13 +17,13 @@ import (
 type PostRepository interface {
 	Create(ctx context.Context, post *models.Post) error
 	Update(ctx context.Context, post *models.Post) error
-	Delete(ctx context.Context, id uint64) error
-	GetByID(ctx context.Context, id uint64) (*models.Post, error)
+	Delete(ctx context.Context, id string) error
+	GetByID(ctx context.Context, id string) (*models.Post, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Post, error)
 	GetPublishedBySlug(ctx context.Context, slug string) (*models.Post, error)
 	ListPublic(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error)
 	ListAdmin(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error)
-	IncrementViews(ctx context.Context, postID uint64) error
+	IncrementViews(ctx context.Context, postID string) error
 	Count(ctx context.Context) (int64, error)
 }
 
@@ -41,6 +41,9 @@ func NewPostRepository(sqlDB *sql.DB) PostRepository {
 
 func (r *sqlPostRepository) Create(ctx context.Context, post *models.Post) error {
 	now := time.Now().UTC()
+	if post.ID == "" {
+		post.ID = utils.NewULID()
+	}
 	if post.CreatedAt.IsZero() {
 		post.CreatedAt = now
 	}
@@ -63,9 +66,9 @@ func (r *sqlPostRepository) Create(ctx context.Context, post *models.Post) error
 		coverImage = sql.NullString{String: *post.CoverImage, Valid: true}
 	}
 
-	var categoryID sql.NullInt64
-	if post.CategoryID != nil && *post.CategoryID > 0 {
-		categoryID = sql.NullInt64{Int64: int64(*post.CategoryID), Valid: true}
+	var categoryID sql.NullString
+	if post.CategoryID != nil && *post.CategoryID != "" {
+		categoryID = sql.NullString{String: *post.CategoryID, Valid: true}
 	}
 
 	var metaTitle sql.NullString
@@ -83,7 +86,8 @@ func (r *sqlPostRepository) Create(ctx context.Context, post *models.Post) error
 		publishedAt = sql.NullTime{Time: *post.PublishedAt, Valid: true}
 	}
 
-	res, err := r.q.CreatePost(ctx, sqlc.CreatePostParams{
+	err = r.q.CreatePost(ctx, sqlc.CreatePostParams{
+		ID:              post.ID,
 		Type:            sqlc.PostsType(post.Type),
 		Title:           post.Title,
 		Slug:            post.Slug,
@@ -107,12 +111,6 @@ func (r *sqlPostRepository) Create(ctx context.Context, post *models.Post) error
 		return err
 	}
 
-	id, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
-	post.ID = uint64(id)
-
 	return nil
 }
 
@@ -134,9 +132,9 @@ func (r *sqlPostRepository) Update(ctx context.Context, post *models.Post) error
 		coverImage = sql.NullString{String: *post.CoverImage, Valid: true}
 	}
 
-	var categoryID sql.NullInt64
-	if post.CategoryID != nil && *post.CategoryID > 0 {
-		categoryID = sql.NullInt64{Int64: int64(*post.CategoryID), Valid: true}
+	var categoryID sql.NullString
+	if post.CategoryID != nil && *post.CategoryID != "" {
+		categoryID = sql.NullString{String: *post.CategoryID, Valid: true}
 	}
 
 	var metaTitle sql.NullString
@@ -180,11 +178,11 @@ func (r *sqlPostRepository) Update(ctx context.Context, post *models.Post) error
 	return nil
 }
 
-func (r *sqlPostRepository) Delete(ctx context.Context, id uint64) error {
+func (r *sqlPostRepository) Delete(ctx context.Context, id string) error {
 	return r.q.DeletePost(ctx, id)
 }
 
-func (r *sqlPostRepository) GetByID(ctx context.Context, id uint64) (*models.Post, error) {
+func (r *sqlPostRepository) GetByID(ctx context.Context, id string) (*models.Post, error) {
 	row, err := r.q.GetPostByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -235,8 +233,9 @@ func (r *sqlPostRepository) GetPublishedBySlug(ctx context.Context, slug string)
 	), nil
 }
 
-func (r *sqlPostRepository) IncrementViews(ctx context.Context, postID uint64) error {
+func (r *sqlPostRepository) IncrementViews(ctx context.Context, postID string) error {
 	return r.q.IncrementPostViews(ctx, sqlc.IncrementPostViewsParams{
+		ID:        utils.NewULID(),
 		PostID:    postID,
 		UpdatedAt: time.Now().UTC(),
 	})
@@ -247,7 +246,6 @@ func (r *sqlPostRepository) Count(ctx context.Context) (int64, error) {
 }
 
 func (r *sqlPostRepository) ListPublic(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error) {
-	// Base query enforces FR-010: Only published posts accessible publicly
 	whereClauses := []string{"p.status = 'published'"}
 	var args []interface{}
 
@@ -259,7 +257,7 @@ func (r *sqlPostRepository) ListPublic(ctx context.Context, filter models.PostFi
 	if filter.CategorySlug != "" {
 		whereClauses = append(whereClauses, "c.slug = ?")
 		args = append(args, filter.CategorySlug)
-	} else if filter.CategoryID != nil && *filter.CategoryID > 0 {
+	} else if filter.CategoryID != nil && *filter.CategoryID != "" {
 		whereClauses = append(whereClauses, "p.category_id = ?")
 		args = append(args, *filter.CategoryID)
 	}
@@ -270,14 +268,12 @@ func (r *sqlPostRepository) ListPublic(ctx context.Context, filter models.PostFi
 	}
 
 	if filter.Tag != "" {
-		// FR-014: Filter tags using MySQL JSON_CONTAINS
 		whereClauses = append(whereClauses, "JSON_CONTAINS(p.tags, JSON_QUOTE(?))")
 		args = append(args, filter.Tag)
 	}
 
 	whereSQL := strings.Join(whereClauses, " AND ")
 
-	// 1. Count total items
 	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM posts p
@@ -289,7 +285,6 @@ func (r *sqlPostRepository) ListPublic(ctx context.Context, filter models.PostFi
 		return nil, 0, err
 	}
 
-	// 2. Fetch paginated posts (FR-012: Ordered by latest publication date)
 	offset := utils.CalculateOffset(filter.Page, filter.Limit)
 	query := fmt.Sprintf(`
 		SELECT 
@@ -334,7 +329,7 @@ func (r *sqlPostRepository) ListAdmin(ctx context.Context, filter models.PostFil
 		args = append(args, filter.Type)
 	}
 
-	if filter.CategoryID != nil && *filter.CategoryID > 0 {
+	if filter.CategoryID != nil && *filter.CategoryID != "" {
 		whereClauses = append(whereClauses, "p.category_id = ?")
 		args = append(args, *filter.CategoryID)
 	}
@@ -351,7 +346,6 @@ func (r *sqlPostRepository) ListAdmin(ctx context.Context, filter models.PostFil
 
 	whereSQL := strings.Join(whereClauses, " AND ")
 
-	// 1. Count total items
 	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM posts p
@@ -363,7 +357,6 @@ func (r *sqlPostRepository) ListAdmin(ctx context.Context, filter models.PostFil
 		return nil, 0, err
 	}
 
-	// 2. Fetch paginated posts (Admin ordered by created_at DESC)
 	offset := utils.CalculateOffset(filter.Page, filter.Limit)
 	query := fmt.Sprintf(`
 		SELECT 
@@ -398,14 +391,14 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 	var posts []models.Post
 	for rows.Next() {
 		var (
-			id              uint64
+			id              string
 			postType        string
 			title           string
 			slug            string
 			excerpt         sql.NullString
 			content         string
 			coverImage      sql.NullString
-			categoryID      sql.NullInt64
+			categoryID      sql.NullString
 			tagsRaw         json.RawMessage
 			metaTitle       sql.NullString
 			metaDescription sql.NullString
@@ -445,14 +438,14 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 }
 
 func mapRowToPost(
-	id uint64,
+	id string,
 	postType string,
 	title string,
 	slug string,
 	excerpt sql.NullString,
 	content string,
 	coverImage sql.NullString,
-	categoryID sql.NullInt64,
+	categoryID sql.NullString,
 	categoryName sql.NullString,
 	categorySlug sql.NullString,
 	tagsRaw json.RawMessage,
@@ -486,7 +479,7 @@ func mapRowToPost(
 		p.CoverImage = &coverImage.String
 	}
 	if categoryID.Valid {
-		catID := uint64(categoryID.Int64)
+		catID := categoryID.String
 		p.CategoryID = &catID
 	}
 	if categoryName.Valid {
@@ -516,4 +509,3 @@ func mapRowToPost(
 
 	return p
 }
-

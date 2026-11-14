@@ -18,11 +18,11 @@ var (
 // CategoryServiceInterface defines business actions for category management and retrieval.
 type CategoryServiceInterface interface {
 	List(ctx context.Context) ([]models.Category, error)
-	GetByID(ctx context.Context, id uint64) (*models.Category, error)
+	GetByID(ctx context.Context, id string) (*models.Category, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Category, error)
 	Create(ctx context.Context, input models.CategoryInput) (*models.Category, error)
-	Update(ctx context.Context, id uint64, input models.CategoryInput) (*models.Category, error)
-	Delete(ctx context.Context, id uint64) error
+	Update(ctx context.Context, id string, input models.CategoryInput) (*models.Category, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type CategoryService struct {
@@ -37,7 +37,7 @@ func (s *CategoryService) List(ctx context.Context) ([]models.Category, error) {
 	return s.categoryRepo.List(ctx)
 }
 
-func (s *CategoryService) GetByID(ctx context.Context, id uint64) (*models.Category, error) {
+func (s *CategoryService) GetByID(ctx context.Context, id string) (*models.Category, error) {
 	cat, err := s.categoryRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -71,7 +71,6 @@ func (s *CategoryService) Create(ctx context.Context, input models.CategoryInput
 		slug = utils.GenerateSlug(slug)
 	}
 
-	// Check slug uniqueness
 	existing, err := s.categoryRepo.GetBySlug(ctx, slug)
 	if err == nil && existing != nil {
 		return nil, ErrCategorySlugExists
@@ -92,7 +91,7 @@ func (s *CategoryService) Create(ctx context.Context, input models.CategoryInput
 	return cat, nil
 }
 
-func (s *CategoryService) Update(ctx context.Context, id uint64, input models.CategoryInput) (*models.Category, error) {
+func (s *CategoryService) Update(ctx context.Context, id string, input models.CategoryInput) (*models.Category, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
@@ -112,7 +111,6 @@ func (s *CategoryService) Update(ctx context.Context, id uint64, input models.Ca
 		slug = utils.GenerateSlug(slug)
 	}
 
-	// If slug changed, verify uniqueness
 	if slug != existing.Slug {
 		collision, err := s.categoryRepo.GetBySlug(ctx, slug)
 		if err == nil && collision != nil && collision.ID != id {
@@ -133,7 +131,7 @@ func (s *CategoryService) Update(ctx context.Context, id uint64, input models.Ca
 	return existing, nil
 }
 
-func (s *CategoryService) Delete(ctx context.Context, id uint64) error {
+func (s *CategoryService) Delete(ctx context.Context, id string) error {
 	_, err := s.categoryRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -143,4 +141,3 @@ func (s *CategoryService) Delete(ctx context.Context, id uint64) error {
 	}
 	return s.categoryRepo.Delete(ctx, id)
 }
-

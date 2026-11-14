@@ -17,7 +17,7 @@ WHERE post_id = ?
 LIMIT 1
 `
 
-func (q *Queries) GetPostViews(ctx context.Context, postID uint64) (PostViews, error) {
+func (q *Queries) GetPostViews(ctx context.Context, postID string) (PostViews, error) {
 	row := q.db.QueryRowContext(ctx, getPostViews, postID)
 	var i PostViews
 	err := row.Scan(
@@ -30,19 +30,20 @@ func (q *Queries) GetPostViews(ctx context.Context, postID uint64) (PostViews, e
 }
 
 const incrementPostViews = `-- name: IncrementPostViews :exec
-INSERT INTO post_views (post_id, views, updated_at)
-VALUES (?, 1, ?)
+INSERT INTO post_views (id, post_id, views, updated_at)
+VALUES (?, ?, 1, ?)
 ON DUPLICATE KEY UPDATE
     views = views + 1,
     updated_at = VALUES(updated_at)
 `
 
 type IncrementPostViewsParams struct {
-	PostID    uint64    `json:"post_id"`
+	ID        string    `json:"id"`
+	PostID    string    `json:"post_id"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (q *Queries) IncrementPostViews(ctx context.Context, arg IncrementPostViewsParams) error {
-	_, err := q.db.ExecContext(ctx, incrementPostViews, arg.PostID, arg.UpdatedAt)
+	_, err := q.db.ExecContext(ctx, incrementPostViews, arg.ID, arg.PostID, arg.UpdatedAt)
 	return err
 }

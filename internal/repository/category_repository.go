@@ -8,15 +8,16 @@ import (
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository/sqlc"
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 type CategoryRepository interface {
 	List(ctx context.Context) ([]models.Category, error)
-	GetByID(ctx context.Context, id uint64) (*models.Category, error)
+	GetByID(ctx context.Context, id string) (*models.Category, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Category, error)
 	Create(ctx context.Context, cat *models.Category) error
 	Update(ctx context.Context, cat *models.Category) error
-	Delete(ctx context.Context, id uint64) error
+	Delete(ctx context.Context, id string) error
 	Count(ctx context.Context) (int64, error)
 }
 
@@ -49,7 +50,7 @@ func (r *sqlCategoryRepository) List(ctx context.Context) ([]models.Category, er
 	return result, nil
 }
 
-func (r *sqlCategoryRepository) GetByID(ctx context.Context, id uint64) (*models.Category, error) {
+func (r *sqlCategoryRepository) GetByID(ctx context.Context, id string) (*models.Category, error) {
 	row, err := r.q.GetCategoryByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -87,6 +88,9 @@ func (r *sqlCategoryRepository) GetBySlug(ctx context.Context, slug string) (*mo
 
 func (r *sqlCategoryRepository) Create(ctx context.Context, cat *models.Category) error {
 	now := time.Now().UTC()
+	if cat.ID == "" {
+		cat.ID = utils.NewULID()
+	}
 	if cat.CreatedAt.IsZero() {
 		cat.CreatedAt = now
 	}
@@ -94,7 +98,8 @@ func (r *sqlCategoryRepository) Create(ctx context.Context, cat *models.Category
 		cat.UpdatedAt = now
 	}
 
-	res, err := r.q.CreateCategory(ctx, sqlc.CreateCategoryParams{
+	err := r.q.CreateCategory(ctx, sqlc.CreateCategoryParams{
+		ID:        cat.ID,
 		Name:      cat.Name,
 		Slug:      cat.Slug,
 		CreatedAt: cat.CreatedAt,
@@ -107,11 +112,6 @@ func (r *sqlCategoryRepository) Create(ctx context.Context, cat *models.Category
 		return err
 	}
 
-	id, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
-	cat.ID = uint64(id)
 	return nil
 }
 
@@ -132,7 +132,7 @@ func (r *sqlCategoryRepository) Update(ctx context.Context, cat *models.Category
 	return nil
 }
 
-func (r *sqlCategoryRepository) Delete(ctx context.Context, id uint64) error {
+func (r *sqlCategoryRepository) Delete(ctx context.Context, id string) error {
 	return r.q.DeleteCategory(ctx, id)
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/alexedwards/argon2id"
 )
@@ -28,14 +29,26 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 			return err
 		}
 
+		adminID := utils.NewULID()
 		_, err = db.Exec(
-			"INSERT INTO users (name, email, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			cfg.AdminName, cfg.AdminEmail, passwordHash, now, now,
+			`INSERT INTO users (id, username, email, password_hash, role, status, email_verified_at, created_at, updated_at) 
+			 VALUES (?, ?, ?, ?, 'admin', 'active', ?, ?, ?)`,
+			adminID, "admin", cfg.AdminEmail, passwordHash, now, now, now,
 		)
 		if err != nil {
 			return err
 		}
-		slog.Info("Administrator berhasil dibuat", slog.String("email", cfg.AdminEmail))
+
+		_, err = db.Exec(
+			`INSERT INTO user_profiles (user_id, full_name, bio, created_at, updated_at) 
+			 VALUES (?, ?, ?, ?, ?)`,
+			adminID, cfg.AdminName, "Administrator sistem", now, now,
+		)
+		if err != nil {
+			return err
+		}
+
+		slog.Info("Administrator berhasil dibuat", slog.String("email", cfg.AdminEmail), slog.String("id", adminID))
 	}
 
 	var categoryCount int64
@@ -45,29 +58,28 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 
 	// 2. Seed Categories & Posts if empty
 	if categoryCount == 0 {
-		slog.Info("Menyemai data awal kategori dan postingan...")
+		slog.Info("Menyemai data awal kategori dan postingan dengan ULID...")
 
-		// Categories
-		res1, err := db.Exec("INSERT INTO categories (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)",
-			"Software Engineering", "software-engineering", now, now)
+		cat1ID := utils.NewULID()
+		_, err := db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			cat1ID, "Software Engineering", "software-engineering", now, now)
 		if err != nil {
 			return err
 		}
-		cat1ID, _ := res1.LastInsertId()
 
-		res2, err := db.Exec("INSERT INTO categories (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)",
-			"Tutorials & Tech", "tutorials-tech", now, now)
+		cat2ID := utils.NewULID()
+		_, err = db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			cat2ID, "Tutorials & Tech", "tutorials-tech", now, now)
 		if err != nil {
 			return err
 		}
-		cat2ID, _ := res2.LastInsertId()
 
-		res3, err := db.Exec("INSERT INTO categories (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)",
-			"Personal Journey", "personal-journey", now, now)
+		cat3ID := utils.NewULID()
+		_, err = db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			cat3ID, "Personal Journey", "personal-journey", now, now)
 		if err != nil {
 			return err
 		}
-		cat3ID, _ := res3.LastInsertId()
 
 		// Sample Posts
 		tags1, _ := json.Marshal([]string{"Go", "MySQL", "REST API", "Backend"})
@@ -77,9 +89,10 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 		// Article
 		_, err = db.Exec(`
 			INSERT INTO posts (
-				type, title, slug, excerpt, content, cover_image, category_id, tags,
+				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
 				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			utils.NewULID(),
 			"article",
 			"Building REST APIs with Go",
 			"building-rest-apis-with-go",
@@ -103,9 +116,10 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 		// Blog
 		_, err = db.Exec(`
 			INSERT INTO posts (
-				type, title, slug, excerpt, content, cover_image, category_id, tags,
+				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
 				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			utils.NewULID(),
 			"blog",
 			"My Development Journey",
 			"my-development-journey",
@@ -129,9 +143,10 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 		// Journal
 		_, err = db.Exec(`
 			INSERT INTO posts (
-				type, title, slug, excerpt, content, cover_image, category_id, tags,
+				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
 				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			utils.NewULID(),
 			"journal",
 			"Rust vs Go File Hashing",
 			"rust-vs-go-file-hashing",
@@ -155,9 +170,10 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 		// Draft Post
 		_, err = db.Exec(`
 			INSERT INTO posts (
-				type, title, slug, excerpt, content, cover_image, category_id, tags,
+				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
 				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			utils.NewULID(),
 			"article",
 			"Upcoming: Event Driven Architecture in Go",
 			"upcoming-event-driven-architecture-in-go",

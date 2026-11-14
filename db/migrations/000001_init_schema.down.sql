@@ -1,8 +1,10 @@
 -- Migration: 000001_init_schema.down.sql
 
-DROP TABLE IF EXISTS sessions;
+SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS post_views;
 DROP TABLE IF EXISTS posts;
 DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS user_profiles;
 DROP TABLE IF EXISTS users;
-
+SET FOREIGN_KEY_CHECKS = 1;

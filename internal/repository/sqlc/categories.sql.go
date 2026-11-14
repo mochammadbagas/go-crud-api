@@ -7,7 +7,6 @@ package sqlc
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
@@ -22,25 +21,28 @@ func (q *Queries) CountCategories(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-const createCategory = `-- name: CreateCategory :execresult
-INSERT INTO categories (name, slug, created_at, updated_at)
-VALUES (?, ?, ?, ?)
+const createCategory = `-- name: CreateCategory :exec
+INSERT INTO categories (id, name, slug, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type CreateCategoryParams struct {
+	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Slug      string    `json:"slug"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, createCategory,
+func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, createCategory,
+		arg.ID,
 		arg.Name,
 		arg.Slug,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
+	return err
 }
 
 const deleteCategory = `-- name: DeleteCategory :exec
@@ -48,7 +50,7 @@ DELETE FROM categories
 WHERE id = ?
 `
 
-func (q *Queries) DeleteCategory(ctx context.Context, id uint64) error {
+func (q *Queries) DeleteCategory(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deleteCategory, id)
 	return err
 }
@@ -60,7 +62,7 @@ WHERE id = ?
 LIMIT 1
 `
 
-func (q *Queries) GetCategoryByID(ctx context.Context, id uint64) (Categories, error) {
+func (q *Queries) GetCategoryByID(ctx context.Context, id string) (Categories, error) {
 	row := q.db.QueryRowContext(ctx, getCategoryByID, id)
 	var i Categories
 	err := row.Scan(
@@ -138,7 +140,7 @@ type UpdateCategoryParams struct {
 	Name      string    `json:"name"`
 	Slug      string    `json:"slug"`
 	UpdatedAt time.Time `json:"updated_at"`
-	ID        uint64    `json:"id"`
+	ID        string    `json:"id"`
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) error {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
@@ -53,10 +52,8 @@ func (h *AdminPostHandler) List(w http.ResponseWriter, r *http.Request) {
 		filter.Featured = &f
 	}
 
-	if q.Get("category_id") != "" {
-		if catID, err := strconv.ParseUint(q.Get("category_id"), 10, 64); err == nil {
-			filter.CategoryID = &catID
-		}
+	if catID := strings.TrimSpace(q.Get("category_id")); catID != "" {
+		filter.CategoryID = &catID
 	}
 
 	posts, total, err := h.postSvc.ListAdmin(r.Context(), filter)
@@ -100,19 +97,19 @@ func (h *AdminPostHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get handles GET /api/v1/admin/posts/{id}
 func (h *AdminPostHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idVal, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || idVal == 0 {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus angka positif")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
 		return
 	}
 
-	post, err := h.postSvc.GetByID(r.Context(), idVal)
+	post, err := h.postSvc.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal mengambil konten admin", slog.String("id", chi.URLParam(r, "id")), slog.Any("error", err))
+		slog.Error("gagal mengambil konten admin", slog.String("id", id), slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "gagal mengambil konten")
 		return
 	}
@@ -122,9 +119,9 @@ func (h *AdminPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /api/v1/admin/posts/{id}
 func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idVal, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || idVal == 0 {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus angka positif")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
 		return
 	}
 
@@ -134,7 +131,7 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	post, err := h.postSvc.Update(r.Context(), idVal, input)
+	post, err := h.postSvc.Update(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
 			utils.Error(w, http.StatusNotFound, err.Error())
@@ -157,22 +154,21 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /api/v1/admin/posts/{id}
 func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idVal, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || idVal == 0 {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus angka positif")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
 		return
 	}
 
-	if err := h.postSvc.Delete(r.Context(), idVal); err != nil {
+	if err := h.postSvc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal menghapus konten", slog.String("id", chi.URLParam(r, "id")), slog.Any("error", err))
+		slog.Error("gagal menghapus konten", slog.String("id", id), slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "gagal menghapus konten")
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
-

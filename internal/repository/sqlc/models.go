@@ -97,8 +97,93 @@ func (ns NullPostsType) Value() (driver.Value, error) {
 	return string(ns.PostsType), nil
 }
 
+type UsersRole string
+
+const (
+	UsersRoleAdmin UsersRole = "admin"
+	UsersRoleUser  UsersRole = "user"
+)
+
+func (e *UsersRole) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UsersRole(s)
+	case string:
+		*e = UsersRole(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UsersRole: %T", src)
+	}
+	return nil
+}
+
+type NullUsersRole struct {
+	UsersRole UsersRole `json:"users_role"`
+	Valid     bool      `json:"valid"` // Valid is true if UsersRole is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUsersRole) Scan(value interface{}) error {
+	if value == nil {
+		ns.UsersRole, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UsersRole.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUsersRole) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UsersRole), nil
+}
+
+type UsersStatus string
+
+const (
+	UsersStatusActive              UsersStatus = "active"
+	UsersStatusPendingVerification UsersStatus = "pending_verification"
+	UsersStatusSuspended           UsersStatus = "suspended"
+)
+
+func (e *UsersStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UsersStatus(s)
+	case string:
+		*e = UsersStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UsersStatus: %T", src)
+	}
+	return nil
+}
+
+type NullUsersStatus struct {
+	UsersStatus UsersStatus `json:"users_status"`
+	Valid       bool        `json:"valid"` // Valid is true if UsersStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUsersStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.UsersStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UsersStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUsersStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UsersStatus), nil
+}
+
 type Categories struct {
-	ID        uint64    `json:"id"`
+	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Slug      string    `json:"slug"`
 	CreatedAt time.Time `json:"created_at"`
@@ -106,21 +191,21 @@ type Categories struct {
 }
 
 type PostViews struct {
-	ID        uint64    `json:"id"`
-	PostID    uint64    `json:"post_id"`
+	ID        string    `json:"id"`
+	PostID    string    `json:"post_id"`
 	Views     uint64    `json:"views"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Posts struct {
-	ID              uint64          `json:"id"`
+	ID              string          `json:"id"`
 	Type            PostsType       `json:"type"`
 	Title           string          `json:"title"`
 	Slug            string          `json:"slug"`
 	Excerpt         sql.NullString  `json:"excerpt"`
 	Content         string          `json:"content"`
 	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullInt64   `json:"category_id"`
+	CategoryID      sql.NullString  `json:"category_id"`
 	Tags            json.RawMessage `json:"tags"`
 	MetaTitle       sql.NullString  `json:"meta_title"`
 	MetaDescription sql.NullString  `json:"meta_description"`
@@ -131,18 +216,36 @@ type Posts struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
-type Sessions struct {
-	ID        string    `json:"id"`
-	UserID    uint64    `json:"user_id"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+type RefreshTokens struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	TokenHash   string         `json:"token_hash"`
+	TokenFamily string         `json:"token_family"`
+	IsRevoked   bool           `json:"is_revoked"`
+	ExpiresAt   time.Time      `json:"expires_at"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UserAgent   sql.NullString `json:"user_agent"`
+	IpAddress   sql.NullString `json:"ip_address"`
+}
+
+type UserProfiles struct {
+	UserID      string         `json:"user_id"`
+	FullName    string         `json:"full_name"`
+	Bio         sql.NullString `json:"bio"`
+	PhoneNumber sql.NullString `json:"phone_number"`
+	AvatarUrl   sql.NullString `json:"avatar_url"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 type Users struct {
-	ID           uint64    `json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              string       `json:"id"`
+	Username        string       `json:"username"`
+	Email           string       `json:"email"`
+	PasswordHash    string       `json:"password_hash"`
+	Role            UsersRole    `json:"role"`
+	Status          UsersStatus  `json:"status"`
+	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
 }

@@ -21,7 +21,7 @@ const (
 
 // Post represents a blog, article, or journal entry.
 type Post struct {
-	ID              uint64     `json:"id"`
+	ID              string     `json:"id"`
 	Type            string     `json:"type"`
 	Title           string     `json:"title"`
 	Slug            string     `json:"slug"`
@@ -29,7 +29,7 @@ type Post struct {
 	Content         string     `json:"content"`
 	ContentHTML     string     `json:"content_html,omitempty"`
 	CoverImage      *string    `json:"cover_image"`
-	CategoryID      *uint64    `json:"category_id"`
+	CategoryID      *string    `json:"category_id"`
 	CategoryName    *string    `json:"category_name,omitempty"`
 	CategorySlug    *string    `json:"category_slug,omitempty"`
 	Tags            []string   `json:"tags"`
@@ -45,7 +45,7 @@ type Post struct {
 	Views           uint64     `json:"views"`
 }
 
-// ComputeSEOMetadata applies SEO fallback rules (FR-018, FR-019, FR-020).
+// ComputeSEOMetadata applies SEO fallback rules.
 func (p *Post) ComputeSEOMetadata() {
 	if p.MetaTitle != nil && strings.TrimSpace(*p.MetaTitle) != "" {
 		p.SEOTitle = *p.MetaTitle
@@ -70,7 +70,7 @@ type CreatePostInput struct {
 	Excerpt         *string  `json:"excerpt"`
 	Content         string   `json:"content"`
 	CoverImage      *string  `json:"cover_image"`
-	CategoryID      *uint64  `json:"category_id"`
+	CategoryID      *string  `json:"category_id"`
 	Tags            []string `json:"tags"`
 	MetaTitle       *string  `json:"meta_title"`
 	MetaDescription *string  `json:"meta_description"`
@@ -115,7 +115,7 @@ type UpdatePostInput struct {
 	Excerpt         *string  `json:"excerpt"`
 	Content         string   `json:"content"`
 	CoverImage      *string  `json:"cover_image"`
-	CategoryID      *uint64  `json:"category_id"`
+	CategoryID      *string  `json:"category_id"`
 	Tags            []string `json:"tags"`
 	MetaTitle       *string  `json:"meta_title"`
 	MetaDescription *string  `json:"meta_description"`
@@ -153,7 +153,7 @@ type PostFilter struct {
 	Type         string
 	Tag          string
 	Featured     *bool
-	CategoryID   *uint64
+	CategoryID   *string
 	CategorySlug string
 	Status       string
 	Page         int
@@ -161,7 +161,6 @@ type PostFilter struct {
 }
 
 // ValidateType returns an error if the Type field is non-empty and not a recognized post type.
-// Handlers should call this to avoid duplicating validation logic.
 func ValidateType(postType string) error {
 	if postType == "" {
 		return nil
@@ -182,4 +181,3 @@ func ValidateStatus(status string) error {
 	}
 	return nil
 }
-

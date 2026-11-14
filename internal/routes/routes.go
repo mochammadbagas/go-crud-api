@@ -11,7 +11,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
 	"github.com/mochammadbagas/go-crud-api/internal/middleware"
-	"github.com/mochammadbagas/go-crud-api/internal/service"
+	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -19,11 +19,11 @@ import (
 	"github.com/go-chi/httprate"
 )
 
-// Setup sets up Chi router with all public and admin endpoints.
+// Setup sets up Chi router with all public, auth, user, and admin endpoints.
 func Setup(
 	cfg *config.Config,
-	authSvc service.AuthServiceInterface,
-	adminAuthHandler *handlers.AdminAuthHandler,
+	authHandler *handlers.AuthHandler,
+	userHandler *handlers.UserHandler,
 	adminPostHandler *handlers.AdminPostHandler,
 	adminCategoryHandler *handlers.AdminCategoryHandler,
 	adminUploadHandler *handlers.AdminUploadHandler,
@@ -46,13 +46,13 @@ func Setup(
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// Static file server for local image uploads
+	// Static file server for local image/avatar uploads
 	_ = os.MkdirAll(cfg.UploadDir, 0755)
 	workDir, _ := os.Getwd()
 	filesDir := http.Dir(filepath.Join(workDir, cfg.UploadDir))
 	fileServer(r, "/uploads", filesDir)
 
-	// Section 7 URL Structure aliases
+	// SEO / URL Structure aliases
 	r.Get("/blog/{slug}", publicPostHandler.Get)
 	r.Get("/articles/{slug}", publicPostHandler.Get)
 	r.Get("/journal/{slug}", publicPostHandler.Get)
@@ -61,7 +61,7 @@ func Setup(
 	// API v1 Routes
 	r.Route("/api/v1", func(v1 chi.Router) {
 		// ---------------------------------------------------------------------
-		// 1. PUBLIC ENDPOINTS (Section 6.1)
+		// 1. PUBLIC CONTENT ENDPOINTS
 		// ---------------------------------------------------------------------
 		v1.Get("/posts", publicPostHandler.List)
 		v1.Get("/posts/{slug}", publicPostHandler.Get)
@@ -69,43 +69,69 @@ func Setup(
 		v1.Get("/categories/{slug}/posts", publicCategoryHandler.ListPostsByCategory)
 
 		// ---------------------------------------------------------------------
-		// 2. ADMIN ENDPOINTS (Section 6.2)
+		// 2. AUTHENTICATION ENDPOINTS (/api/v1/auth)
 		// ---------------------------------------------------------------------
-		v1.Route("/admin", func(admin chi.Router) {
-			// Public admin login with rate limiting (10 attempts/minute per IP)
-			loginLimiter := httprate.LimitBy(
+		v1.Route("/auth", func(auth chi.Router) {
+			// Rate limiter for login & register (10 attempts/minute per IP)
+			authLimiter := httprate.LimitBy(
 				10,
 				time.Minute,
 				clientIPKey,
 				httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
-					utils.Error(w, http.StatusTooManyRequests, "terlalu banyak percobaan login, silakan coba lagi nanti")
+					utils.Error(w, http.StatusTooManyRequests, "terlalu banyak percobaan autentikasi, silakan coba lagi nanti")
 				}),
 			)
-			admin.With(loginLimiter).Post("/login", adminAuthHandler.Login)
 
-			// Protected admin routes (Requires valid HTTP-only cookie session)
-			admin.Group(func(protected chi.Router) {
-				protected.Use(middleware.AuthMiddleware(authSvc))
+			// Public auth routes
+			auth.With(authLimiter).Post("/register", authHandler.Register)
+			auth.With(authLimiter).Post("/login", authHandler.Login)
+			auth.Post("/refresh", authHandler.RefreshToken)
 
-				protected.Post("/logout", adminAuthHandler.Logout)
-				protected.Get("/me", adminAuthHandler.Me)
+			// Protected auth routes (requires valid JWT Access Token)
+			auth.Group(func(protected chi.Router) {
+				protected.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
 
-				// Posts CRUD
-				protected.Get("/posts", adminPostHandler.List)
-				protected.Post("/posts", adminPostHandler.Create)
-				protected.Get("/posts/{id}", adminPostHandler.Get)
-				protected.Put("/posts/{id}", adminPostHandler.Update)
-				protected.Delete("/posts/{id}", adminPostHandler.Delete)
-
-				// Categories CRUD
-				protected.Get("/categories", adminCategoryHandler.List)
-				protected.Post("/categories", adminCategoryHandler.Create)
-				protected.Put("/categories/{id}", adminCategoryHandler.Update)
-				protected.Delete("/categories/{id}", adminCategoryHandler.Delete)
-
-				// Image upload (Local Filesystem storage)
-				protected.Post("/upload", adminUploadHandler.Upload)
+				protected.Post("/logout", authHandler.Logout)
+				protected.Post("/change-password", authHandler.ChangePassword)
 			})
+		})
+
+		// ---------------------------------------------------------------------
+		// 3. USER MANAGEMENT ENDPOINTS (/api/v1/users)
+		// ---------------------------------------------------------------------
+		v1.Route("/users", func(users chi.Router) {
+			users.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
+
+			users.Get("/me", userHandler.GetProfile)
+			users.Put("/profile", userHandler.UpdateProfile)
+			users.Post("/avatar", userHandler.UploadAvatar)
+			users.Delete("/avatar", userHandler.DeleteAvatar)
+			users.Put("/username", userHandler.UpdateUsername)
+			users.Get("/status", userHandler.GetStatus)
+		})
+
+		// ---------------------------------------------------------------------
+		// 4. ADMIN MANAGEMENT ENDPOINTS (/api/v1/admin)
+		// ---------------------------------------------------------------------
+		v1.Route("/admin", func(admin chi.Router) {
+			admin.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
+			admin.Use(middleware.RequireRole(models.RoleAdmin))
+
+			// Posts CRUD
+			admin.Get("/posts", adminPostHandler.List)
+			admin.Post("/posts", adminPostHandler.Create)
+			admin.Get("/posts/{id}", adminPostHandler.Get)
+			admin.Put("/posts/{id}", adminPostHandler.Update)
+			admin.Delete("/posts/{id}", adminPostHandler.Delete)
+
+			// Categories CRUD
+			admin.Get("/categories", adminCategoryHandler.List)
+			admin.Post("/categories", adminCategoryHandler.Create)
+			admin.Put("/categories/{id}", adminCategoryHandler.Update)
+			admin.Delete("/categories/{id}", adminCategoryHandler.Delete)
+
+			// General file/image upload
+			admin.Post("/upload", adminUploadHandler.Upload)
 		})
 	})
 

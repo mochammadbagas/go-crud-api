@@ -1,0 +1,38 @@
+package utils
+
+import (
+	"crypto/rand"
+	"errors"
+	"time"
+
+	"github.com/oklog/ulid/v2"
+)
+
+var (
+	ErrInvalidULID = errors.New("format ULID tidak valid, harus 26 karakter Crockford Base32")
+)
+
+// NewULID generates a new cryptographically secure ULID string.
+func NewULID() string {
+	t := time.Now().UTC()
+	entropy := ulid.Monotonic(rand.Reader, 0)
+	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
+}
+
+// IsValidULID checks if a string is a valid ULID.
+func IsValidULID(id string) bool {
+	if len(id) != 26 {
+		return false
+	}
+	_, err := ulid.Parse(id)
+	return err == nil
+}
+
+// ParseULID parses and validates a ULID string.
+func ParseULID(id string) (ulid.ULID, error) {
+	parsed, err := ulid.Parse(id)
+	if err != nil {
+		return ulid.ULID{}, ErrInvalidULID
+	}
+	return parsed, nil
+}

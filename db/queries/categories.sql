@@ -15,9 +15,9 @@ FROM categories
 WHERE slug = ?
 LIMIT 1;
 
--- name: CreateCategory :execresult
-INSERT INTO categories (name, slug, created_at, updated_at)
-VALUES (?, ?, ?, ?);
+-- name: CreateCategory :exec
+INSERT INTO categories (id, name, slug, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?);
 
 -- name: UpdateCategory :exec
 UPDATE categories
@@ -30,4 +30,3 @@ WHERE id = ?;
 
 -- name: CountCategories :one
 SELECT COUNT(*) FROM categories;
-

@@ -8,27 +8,27 @@ import (
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 // mockPostRepo implements repository.PostRepository in memory for unit testing
 type mockPostRepo struct {
-	posts             map[uint64]*models.Post
+	posts             map[string]*models.Post
 	bySlug            map[string]*models.Post
-	nextID            uint64
 	getPublishedCalls int
 }
 
 func newMockPostRepo() *mockPostRepo {
 	return &mockPostRepo{
-		posts:  make(map[uint64]*models.Post),
+		posts:  make(map[string]*models.Post),
 		bySlug: make(map[string]*models.Post),
-		nextID: 1,
 	}
 }
 
 func (m *mockPostRepo) Create(ctx context.Context, post *models.Post) error {
-	post.ID = m.nextID
-	m.nextID++
+	if post.ID == "" {
+		post.ID = utils.NewULID()
+	}
 	m.posts[post.ID] = post
 	m.bySlug[post.Slug] = post
 	return nil
@@ -43,7 +43,7 @@ func (m *mockPostRepo) Update(ctx context.Context, post *models.Post) error {
 	return nil
 }
 
-func (m *mockPostRepo) Delete(ctx context.Context, id uint64) error {
+func (m *mockPostRepo) Delete(ctx context.Context, id string) error {
 	if p, ok := m.posts[id]; ok {
 		delete(m.bySlug, p.Slug)
 		delete(m.posts, id)
@@ -52,7 +52,7 @@ func (m *mockPostRepo) Delete(ctx context.Context, id uint64) error {
 	return repository.ErrNotFound
 }
 
-func (m *mockPostRepo) GetByID(ctx context.Context, id uint64) (*models.Post, error) {
+func (m *mockPostRepo) GetByID(ctx context.Context, id string) (*models.Post, error) {
 	if p, ok := m.posts[id]; ok {
 		copy := *p
 		return &copy, nil
@@ -95,7 +95,7 @@ func (m *mockPostRepo) ListAdmin(ctx context.Context, filter models.PostFilter) 
 	return list, int64(len(list)), nil
 }
 
-func (m *mockPostRepo) IncrementViews(ctx context.Context, postID uint64) error {
+func (m *mockPostRepo) IncrementViews(ctx context.Context, postID string) error {
 	if p, ok := m.posts[postID]; ok {
 		p.Views++
 	}
@@ -108,11 +108,11 @@ func (m *mockPostRepo) Count(ctx context.Context) (int64, error) {
 
 // mockCategoryRepo implements repository.CategoryRepository in memory
 type mockCategoryRepo struct {
-	categories map[uint64]*models.Category
+	categories map[string]*models.Category
 }
 
 func (m *mockCategoryRepo) List(ctx context.Context) ([]models.Category, error) { return nil, nil }
-func (m *mockCategoryRepo) GetByID(ctx context.Context, id uint64) (*models.Category, error) {
+func (m *mockCategoryRepo) GetByID(ctx context.Context, id string) (*models.Category, error) {
 	if m.categories != nil {
 		if c, ok := m.categories[id]; ok {
 			return c, nil
@@ -125,7 +125,7 @@ func (m *mockCategoryRepo) GetBySlug(ctx context.Context, slug string) (*models.
 }
 func (m *mockCategoryRepo) Create(ctx context.Context, cat *models.Category) error { return nil }
 func (m *mockCategoryRepo) Update(ctx context.Context, cat *models.Category) error { return nil }
-func (m *mockCategoryRepo) Delete(ctx context.Context, id uint64) error             { return nil }
+func (m *mockCategoryRepo) Delete(ctx context.Context, id string) error             { return nil }
 func (m *mockCategoryRepo) Count(ctx context.Context) (int64, error)                { return 0, nil }
 
 type mockMarkdownRenderer struct {
@@ -277,20 +277,20 @@ func TestPost_SEOFallback(t *testing.T) {
 
 func TestPostService_SlugCollisionAndCategoryValidation(t *testing.T) {
 	postRepo := newMockPostRepo()
+	cat1ID := utils.NewULID()
 	catRepo := &mockCategoryRepo{
-		categories: map[uint64]*models.Category{
-			1: {ID: 1, Name: "Go", Slug: "go"},
+		categories: map[string]*models.Category{
+			cat1ID: {ID: cat1ID, Name: "Go", Slug: "go"},
 		},
 	}
 	svc := NewPostService(postRepo, catRepo, NewMarkdownService())
 	ctx := context.Background()
 
-	validCatID := uint64(1)
 	_, err := svc.Create(ctx, models.CreatePostInput{
 		Type:       models.TypeArticle,
 		Title:      "Unique Post",
 		Content:    "Body",
-		CategoryID: &validCatID,
+		CategoryID: &cat1ID,
 		Status:     models.StatusPublished,
 	})
 	if err != nil {
@@ -308,7 +308,7 @@ func TestPostService_SlugCollisionAndCategoryValidation(t *testing.T) {
 	}
 
 	// Non-existent category on Create
-	invalidCatID := uint64(999)
+	invalidCatID := "non-existent-cat-id"
 	_, err = svc.Create(ctx, models.CreatePostInput{
 		Type:       models.TypeBlog,
 		Title:      "Second Post",
@@ -373,5 +373,3 @@ func TestPostService_GetPublishedBySlugSingleQueryAndInterfaceRenderer(t *testin
 		t.Errorf("expected mocked markdown output, got %q", post.ContentHTML)
 	}
 }
-
-

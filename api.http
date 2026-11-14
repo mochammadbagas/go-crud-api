@@ -1,21 +1,37 @@
 ### =========================================================================
-### MMDBConnect CMS - HTTP REQUEST COLLECTION (REST CLIENT)
-### Blog, Article & Journal Content Management System
+### GO REST API STARTER KIT - HTTP REQUEST COLLECTION (REST CLIENT)
+### Auth (JWT + RTR), User Management, & Content Modules
 ### =========================================================================
 
 @baseUrl = http://localhost:8080
 
-# Simpan token session jika ingin menggunakan Authorization header sebagai alternatif cookie:
-@sessionToken = 
+# Masukkan access token yang didapat dari respons login / register / refresh:
+@accessToken = 
+@refreshToken = 
+
+# Ganti dengan ULID riil saat melakukan pengujian detail/update/delete:
+@samplePostId = 01ARZ3NDEKTSV4RRFFQ69G5FAV
+@sampleCategoryId = 01ARZ3NDEKTSV4RRFFQ69G5FC1
 
 
 ### =========================================================================
-### 1. AUTENTIKASI ADMINISTRATOR (HTTP-only Cookie Session)
+### 1. AUTENTIKASI (JWT + REFRESH TOKEN ROTATION)
 ### =========================================================================
 
-### 1.1 Login Administrator
-# Response akan otomatis menyetel HTTP-only cookie 'session_id'
-POST {{baseUrl}}/api/v1/admin/login
+### 1.1 Register Akun Baru
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "johndoe",
+  "email": "john@example.com",
+  "password": "password123",
+  "full_name": "John Doe"
+}
+
+### 1.2 Login Akun (Admin / User)
+# Menghasilkan JWT access_token dan refresh_token, serta memasang HTTP-only cookie
+POST {{baseUrl}}/api/v1/auth/login
 Content-Type: application/json
 
 {
@@ -23,169 +39,174 @@ Content-Type: application/json
   "password": "adminpassword123"
 }
 
-### 1.2 Cek Profil Administrator yang Sedang Login
-GET {{baseUrl}}/api/v1/admin/me
-Authorization: Bearer {{sessionToken}}
+### 1.3 Refresh Token (Refresh Token Rotation - RTR)
+# Dapat dikirim melalui body JSON, cookie HTTP-only otomatis, atau header X-Refresh-Token
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
 
-### 1.3 Logout Administrator (Menghapus Sesi & Cookie)
-POST {{baseUrl}}/api/v1/admin/logout
-Authorization: Bearer {{sessionToken}}
+{
+  "refresh_token": "{{refreshToken}}"
+}
+
+### 1.4 Logout (Mencabut Sesi & Hapus Cookie)
+POST {{baseUrl}}/api/v1/auth/logout
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refreshToken}}"
+}
+
+### 1.5 Ganti Password Akun
+POST {{baseUrl}}/api/v1/auth/change-password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "old_password": "adminpassword123",
+  "new_password": "newadminpassword123"
+}
 
 
 ### =========================================================================
-### 2. ENDPOINT PUBLIK (Hanya Menampilkan Konten Published)
+### 2. USER MANAGEMENT (/api/v1/users)
 ### =========================================================================
 
-### 2.1 Daftar Semua Konten Published (Pagination Default: Page 1, Limit 10)
+### 2.1 Ambil Data Profil Sendiri (/me)
+GET {{baseUrl}}/api/v1/users/me
+Authorization: Bearer {{accessToken}}
+
+### 2.2 Perbarui Informasi Profil
+PUT {{baseUrl}}/api/v1/users/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "full_name": "Mochammad Bagas Pratama",
+  "bio": "Software Engineer & Backend Enthusiast",
+  "phone_number": "081234567890"
+}
+
+### 2.3 Ganti Username
+PUT {{baseUrl}}/api/v1/users/username
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "username": "bagaspratama"
+}
+
+### 2.4 Cek Status Akun & Verifikasi Email
+GET {{baseUrl}}/api/v1/users/status
+Authorization: Bearer {{accessToken}}
+
+### 2.5 Hapus Avatar
+DELETE {{baseUrl}}/api/v1/users/avatar
+Authorization: Bearer {{accessToken}}
+
+
+### =========================================================================
+### 3. KONTEN PUBLIK (Read-Only)
+### =========================================================================
+
+### 3.1 Daftar Konten Published
 GET {{baseUrl}}/api/v1/posts
 
-### 2.2 Filter Berdasarkan Jenis Konten (article / blog / journal)
-GET {{baseUrl}}/api/v1/posts?type=article
+### 3.2 Filter Konten (Type, Tag, Featured, Pagination)
+GET {{baseUrl}}/api/v1/posts?type=article&tag=Go&featured=true&page=1&limit=5
 
-### 2.3 Filter Berdasarkan Tag (MySQL JSON_CONTAINS)
-GET {{baseUrl}}/api/v1/posts?tag=Go
-
-### 2.4 Filter Konten Unggulan (Featured)
-GET {{baseUrl}}/api/v1/posts?featured=true
-
-### 2.5 Pagination Khusus
-GET {{baseUrl}}/api/v1/posts?page=1&limit=5
-
-### 2.6 Detail Konten Berdasarkan Slug (Render HTML & Increment Views)
+### 3.3 Detail Konten Berdasarkan Slug (Increment Views)
 GET {{baseUrl}}/api/v1/posts/building-rest-apis-with-go
 
-### 2.7 Daftar Semua Kategori Publik
+### 3.4 Daftar Semua Kategori Publik
 GET {{baseUrl}}/api/v1/categories
 
-### 2.8 Konten Berdasarkan Slug Kategori
+### 3.5 Konten Berdasarkan Slug Kategori
 GET {{baseUrl}}/api/v1/categories/tutorials-tech/posts
 
-### 2.9 Format URL Publik Ramah SEO (Direct Pattern Aliases)
+### 3.6 URL Aliases Ramah SEO
 GET {{baseUrl}}/articles/building-rest-apis-with-go
 
 GET {{baseUrl}}/blog/my-development-journey
 
 GET {{baseUrl}}/journal/rust-vs-go-file-hashing
 
-GET {{baseUrl}}/categories/software-engineering
-
 
 ### =========================================================================
-### 3. ADMIN: KELOLA KONTEN (POSTS CRUD)
+### 4. ADMIN: MANAJEMEN KONTEN & KATEGORI (Role: Admin)
 ### =========================================================================
 
-### 3.1 Daftar Semua Konten Admin (Termasuk Draft & Published)
+### 4.1 Daftar Seluruh Konten (Draft & Published)
 GET {{baseUrl}}/api/v1/admin/posts
-Authorization: Bearer {{sessionToken}}
+Authorization: Bearer {{accessToken}}
 
-### 3.2 Filter Konten Admin (Hanya Draft)
-GET {{baseUrl}}/api/v1/admin/posts?status=draft
-Authorization: Bearer {{sessionToken}}
-
-### 3.3 Buat Konten Baru (Default Status: Draft)
+### 4.2 Buat Konten Baru (ULID Otomatis)
 POST {{baseUrl}}/api/v1/admin/posts
+Authorization: Bearer {{accessToken}}
 Content-Type: application/json
-Authorization: Bearer {{sessionToken}}
 
 {
   "type": "article",
-  "title": "Optimasi Database MySQL untuk Aplikasi Golang",
-  "excerpt": "Panduan praktis indexing, connection pooling, dan query execution di MySQL.",
-  "content": "# Optimasi Database MySQL\n\nMySQL 8.0 menyediakan berbagai fitur performa tinggi...\n\n- Connection Pooling\n- Indexing yang tepat\n- JSON queries",
-  "cover_image": "/uploads/sample-cover.png",
-  "category_id": 1,
-  "tags": ["Go", "MySQL", "Database", "Performance"],
-  "meta_title": "Optimasi MySQL untuk Golang - Best Practices",
-  "meta_description": "Pelajari cara mengoptimalkan koneksi dan query database MySQL 8.0 pada backend Go.",
+  "title": "Optimasi Query Database di Go Starter Kit",
+  "excerpt": "Panduan praktis pembuatan index, connection pool, dan SQLC.",
+  "content": "# Optimasi Query Database\n\nMySQL 8.0 dan Go menyediakan throughput tinggi...",
+  "category_id": "{{sampleCategoryId}}",
+  "tags": ["Go", "MySQL", "Database"],
+  "meta_title": "Optimasi Database - Go Starter Kit",
+  "meta_description": "Praktik terbaik mengoptimalkan query MySQL pada Go REST API.",
   "is_featured": true,
-  "status": "draft"
-}
-
-### 3.4 Buat Konten Baru Langsung Dipublikasikan (Status: Published)
-POST {{baseUrl}}/api/v1/admin/posts
-Content-Type: application/json
-Authorization: Bearer {{sessionToken}}
-
-{
-  "type": "journal",
-  "title": "Eksperimen Memori dan Profiling di Go 1.25",
-  "content": "# Eksperimen Memori Go\n\nHari ini melakukan profiling memori menggunakan pprof dan tracing...",
-  "tags": ["Go", "Profiling", "Memory"],
   "status": "published"
 }
 
-### 3.5 Ambil Detail Konten Berdasarkan ID
-GET {{baseUrl}}/api/v1/admin/posts/1
-Authorization: Bearer {{sessionToken}}
+### 4.3 Detail Konten Berdasarkan ULID
+GET {{baseUrl}}/api/v1/admin/posts/{{samplePostId}}
+Authorization: Bearer {{accessToken}}
 
-### 3.6 Perbarui Konten (Ubah Status ke Published / Edit Konten)
-PUT {{baseUrl}}/api/v1/admin/posts/1
+### 4.4 Perbarui Konten Berdasarkan ULID
+PUT {{baseUrl}}/api/v1/admin/posts/{{samplePostId}}
+Authorization: Bearer {{accessToken}}
 Content-Type: application/json
-Authorization: Bearer {{sessionToken}}
 
 {
   "type": "article",
-  "title": "Building REST APIs with Go & Chi (Updated)",
+  "title": "Building REST APIs with Go & Chi (Revisi)",
   "slug": "building-rest-apis-with-go",
-  "excerpt": "Panduan komprehensif membangun RESTful API modern dan cepat dengan Go dan Chi.",
-  "content": "# Building REST APIs with Go\n\nVersi revisi dengan penambahan middleware autentikasi cookie session...",
-  "category_id": 2,
-  "tags": ["Go", "Chi", "REST API", "Backend"],
+  "excerpt": "Panduan membangun RESTful API dengan Go, Chi, ULID, dan JWT.",
+  "content": "# Building REST APIs with Go\n\nVersi revisi dengan arsitektur JWT RTR dan ULID...",
+  "category_id": "{{sampleCategoryId}}",
+  "tags": ["Go", "Chi", "REST API", "Starter Kit"],
   "is_featured": true,
   "status": "published"
 }
 
-### 3.7 Hapus Konten Berdasarkan ID
-DELETE {{baseUrl}}/api/v1/admin/posts/4
-Authorization: Bearer {{sessionToken}}
+### 4.5 Hapus Konten Berdasarkan ULID
+DELETE {{baseUrl}}/api/v1/admin/posts/{{samplePostId}}
+Authorization: Bearer {{accessToken}}
 
-
-### =========================================================================
-### 4. ADMIN: KELOLA KATEGORI (CATEGORIES CRUD)
-### =========================================================================
-
-### 4.1 Daftar Kategori Admin
+### 4.6 Daftar Seluruh Kategori
 GET {{baseUrl}}/api/v1/admin/categories
-Authorization: Bearer {{sessionToken}}
+Authorization: Bearer {{accessToken}}
 
-### 4.2 Tambah Kategori Baru
+### 4.7 Buat Kategori Baru
 POST {{baseUrl}}/api/v1/admin/categories
+Authorization: Bearer {{accessToken}}
 Content-Type: application/json
-Authorization: Bearer {{sessionToken}}
 
 {
-  "name": "Cloud Architecture",
-  "slug": "cloud-architecture"
+  "name": "Cloud & DevOps",
+  "slug": "cloud-devops"
 }
 
-### 4.3 Update Kategori Berdasarkan ID
-PUT {{baseUrl}}/api/v1/admin/categories/1
+### 4.8 Perbarui Kategori Berdasarkan ULID
+PUT {{baseUrl}}/api/v1/admin/categories/{{sampleCategoryId}}
+Authorization: Bearer {{accessToken}}
 Content-Type: application/json
-Authorization: Bearer {{sessionToken}}
 
 {
-  "name": "Software Engineering & Architecture",
-  "slug": "software-engineering-architecture"
+  "name": "Cloud Architecture & DevOps",
+  "slug": "cloud-architecture-devops"
 }
 
-### 4.4 Hapus Kategori Berdasarkan ID
-DELETE {{baseUrl}}/api/v1/admin/categories/4
-Authorization: Bearer {{sessionToken}}
-
-
-### =========================================================================
-### 5. ADMIN: UPLOAD GAMBAR COVER (LOCAL FILESYSTEM)
-### =========================================================================
-
-### 5.1 Upload File Gambar Cover (Multipart Form Data)
-# Catatan: Di REST Client, ganti path file sesuai file gambar lokal di sistem Anda
-POST {{baseUrl}}/api/v1/admin/upload
-Authorization: Bearer {{sessionToken}}
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
-
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="image"; filename="cover.png"
-Content-Type: image/png
-
-< ./cover.png
-------WebKitFormBoundary7MA4YWxkTrZu0gW--
+### 4.9 Hapus Kategori Berdasarkan ULID
+DELETE {{baseUrl}}/api/v1/admin/categories/{{sampleCategoryId}}
+Authorization: Bearer {{accessToken}}

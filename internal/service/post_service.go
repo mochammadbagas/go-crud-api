@@ -19,9 +19,9 @@ var (
 // PostServiceInterface defines business actions for post management and retrieval.
 type PostServiceInterface interface {
 	Create(ctx context.Context, input models.CreatePostInput) (*models.Post, error)
-	Update(ctx context.Context, id uint64, input models.UpdatePostInput) (*models.Post, error)
-	Delete(ctx context.Context, id uint64) error
-	GetByID(ctx context.Context, id uint64) (*models.Post, error)
+	Update(ctx context.Context, id string, input models.UpdatePostInput) (*models.Post, error)
+	Delete(ctx context.Context, id string) error
+	GetByID(ctx context.Context, id string) (*models.Post, error)
 	GetPublishedBySlug(ctx context.Context, slug string) (*models.Post, error)
 	ListPublic(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error)
 	ListAdmin(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error)
@@ -65,7 +65,7 @@ func (s *PostService) Create(ctx context.Context, input models.CreatePostInput) 
 	}
 
 	// Validate category_id if provided
-	if input.CategoryID != nil && *input.CategoryID > 0 {
+	if input.CategoryID != nil && *input.CategoryID != "" {
 		if _, err := s.categoryRepo.GetByID(ctx, *input.CategoryID); err != nil {
 			return nil, ErrCategoryNotFound
 		}
@@ -91,7 +91,6 @@ func (s *PostService) Create(ctx context.Context, input models.CreatePostInput) 
 		UpdatedAt:       now,
 	}
 
-	// Business rule 5.2: Saat pertama kali dipublikasikan, published_at diisi waktu publikasi
 	if post.Status == models.StatusPublished {
 		post.PublishedAt = &now
 	}
@@ -103,12 +102,11 @@ func (s *PostService) Create(ctx context.Context, input models.CreatePostInput) 
 		return nil, err
 	}
 
-	// Load complete post data
 	return s.postRepo.GetByID(ctx, post.ID)
 }
 
 // Update handles modifying an existing post.
-func (s *PostService) Update(ctx context.Context, id uint64, input models.UpdatePostInput) (*models.Post, error) {
+func (s *PostService) Update(ctx context.Context, id string, input models.UpdatePostInput) (*models.Post, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
@@ -128,7 +126,6 @@ func (s *PostService) Update(ctx context.Context, id uint64, input models.Update
 		slug = utils.GenerateSlug(slug)
 	}
 
-	// If slug changed, verify uniqueness
 	if slug != existing.Slug {
 		collision, err := s.postRepo.GetBySlug(ctx, slug)
 		if err == nil && collision != nil && collision.ID != id {
@@ -136,8 +133,7 @@ func (s *PostService) Update(ctx context.Context, id uint64, input models.Update
 		}
 	}
 
-	// Validate category_id if provided
-	if input.CategoryID != nil && *input.CategoryID > 0 {
+	if input.CategoryID != nil && *input.CategoryID != "" {
 		if _, err := s.categoryRepo.GetByID(ctx, *input.CategoryID); err != nil {
 			return nil, ErrCategoryNotFound
 		}
@@ -159,10 +155,6 @@ func (s *PostService) Update(ctx context.Context, id uint64, input models.Update
 	existing.IsFeatured = input.IsFeatured
 	existing.UpdatedAt = now
 
-	// Business rule 5.2:
-	// - Saat pertama kali dipublikasikan, published_at diisi waktu publikasi
-	// - Saat konten diperbarui, updated_at berubah tanpa mengubah published_at
-	// - published_at dipertahankan jika konten yang pernah dipublikasikan dikembalikan menjadi draft
 	if input.Status == models.StatusPublished {
 		if existing.PublishedAt == nil {
 			existing.PublishedAt = &now
@@ -170,7 +162,6 @@ func (s *PostService) Update(ctx context.Context, id uint64, input models.Update
 		existing.Status = models.StatusPublished
 	} else {
 		existing.Status = models.StatusDraft
-		// Note: existing.PublishedAt is preserved
 	}
 
 	if err := s.postRepo.Update(ctx, existing); err != nil {
@@ -184,7 +175,7 @@ func (s *PostService) Update(ctx context.Context, id uint64, input models.Update
 }
 
 // Delete handles removing a post.
-func (s *PostService) Delete(ctx context.Context, id uint64) error {
+func (s *PostService) Delete(ctx context.Context, id string) error {
 	_, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -196,7 +187,7 @@ func (s *PostService) Delete(ctx context.Context, id uint64) error {
 }
 
 // GetByID returns post details for admin view (draft or published).
-func (s *PostService) GetByID(ctx context.Context, id uint64) (*models.Post, error) {
+func (s *PostService) GetByID(ctx context.Context, id string) (*models.Post, error) {
 	post, err := s.postRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -218,13 +209,9 @@ func (s *PostService) GetPublishedBySlug(ctx context.Context, slug string) (*mod
 		return nil, err
 	}
 
-	// Increment view count in database
 	_ = s.postRepo.IncrementViews(ctx, post.ID)
-
-	// Reflect the incremented count locally to avoid a redundant DB roundtrip.
 	post.Views++
 
-	// Render Markdown to safe HTML (FR-005, NFR-005)
 	htmlContent, err := s.markdownSvc.RenderToHTML(post.Content)
 	if err == nil {
 		post.ContentHTML = htmlContent
@@ -281,4 +268,3 @@ func normalizeTags(tags []string) []string {
 	}
 	return result
 }
-

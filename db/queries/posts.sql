@@ -37,12 +37,12 @@ LEFT JOIN post_views pv ON p.id = pv.post_id
 WHERE p.slug = ?
 LIMIT 1;
 
--- name: CreatePost :execresult
+-- name: CreatePost :exec
 INSERT INTO posts (
-    type, title, slug, excerpt, content, cover_image,
+    id, type, title, slug, excerpt, content, cover_image,
     category_id, tags, meta_title, meta_description,
     is_featured, status, published_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdatePost :exec
 UPDATE posts
@@ -69,4 +69,3 @@ WHERE id = ?;
 
 -- name: CountPosts :one
 SELECT COUNT(*) FROM posts;
-

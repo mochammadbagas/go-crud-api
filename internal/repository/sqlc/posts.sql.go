@@ -23,22 +23,23 @@ func (q *Queries) CountPosts(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-const createPost = `-- name: CreatePost :execresult
+const createPost = `-- name: CreatePost :exec
 INSERT INTO posts (
-    type, title, slug, excerpt, content, cover_image,
+    id, type, title, slug, excerpt, content, cover_image,
     category_id, tags, meta_title, meta_description,
     is_featured, status, published_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreatePostParams struct {
+	ID              string          `json:"id"`
 	Type            PostsType       `json:"type"`
 	Title           string          `json:"title"`
 	Slug            string          `json:"slug"`
 	Excerpt         sql.NullString  `json:"excerpt"`
 	Content         string          `json:"content"`
 	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullInt64   `json:"category_id"`
+	CategoryID      sql.NullString  `json:"category_id"`
 	Tags            json.RawMessage `json:"tags"`
 	MetaTitle       sql.NullString  `json:"meta_title"`
 	MetaDescription sql.NullString  `json:"meta_description"`
@@ -49,8 +50,9 @@ type CreatePostParams struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
-func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, createPost,
+func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
+	_, err := q.db.ExecContext(ctx, createPost,
+		arg.ID,
 		arg.Type,
 		arg.Title,
 		arg.Slug,
@@ -67,6 +69,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (sql.Res
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
+	return err
 }
 
 const deletePost = `-- name: DeletePost :exec
@@ -74,7 +77,7 @@ DELETE FROM posts
 WHERE id = ?
 `
 
-func (q *Queries) DeletePost(ctx context.Context, id uint64) error {
+func (q *Queries) DeletePost(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deletePost, id)
 	return err
 }
@@ -94,14 +97,14 @@ LIMIT 1
 `
 
 type GetPostByIDRow struct {
-	ID              uint64          `json:"id"`
+	ID              string          `json:"id"`
 	Type            PostsType       `json:"type"`
 	Title           string          `json:"title"`
 	Slug            string          `json:"slug"`
 	Excerpt         sql.NullString  `json:"excerpt"`
 	Content         string          `json:"content"`
 	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullInt64   `json:"category_id"`
+	CategoryID      sql.NullString  `json:"category_id"`
 	Tags            json.RawMessage `json:"tags"`
 	MetaTitle       sql.NullString  `json:"meta_title"`
 	MetaDescription sql.NullString  `json:"meta_description"`
@@ -115,7 +118,7 @@ type GetPostByIDRow struct {
 	Views           uint64          `json:"views"`
 }
 
-func (q *Queries) GetPostByID(ctx context.Context, id uint64) (GetPostByIDRow, error) {
+func (q *Queries) GetPostByID(ctx context.Context, id string) (GetPostByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getPostByID, id)
 	var i GetPostByIDRow
 	err := row.Scan(
@@ -157,14 +160,14 @@ LIMIT 1
 `
 
 type GetPostBySlugRow struct {
-	ID              uint64          `json:"id"`
+	ID              string          `json:"id"`
 	Type            PostsType       `json:"type"`
 	Title           string          `json:"title"`
 	Slug            string          `json:"slug"`
 	Excerpt         sql.NullString  `json:"excerpt"`
 	Content         string          `json:"content"`
 	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullInt64   `json:"category_id"`
+	CategoryID      sql.NullString  `json:"category_id"`
 	Tags            json.RawMessage `json:"tags"`
 	MetaTitle       sql.NullString  `json:"meta_title"`
 	MetaDescription sql.NullString  `json:"meta_description"`
@@ -220,14 +223,14 @@ LIMIT 1
 `
 
 type GetPublishedPostBySlugRow struct {
-	ID              uint64          `json:"id"`
+	ID              string          `json:"id"`
 	Type            PostsType       `json:"type"`
 	Title           string          `json:"title"`
 	Slug            string          `json:"slug"`
 	Excerpt         sql.NullString  `json:"excerpt"`
 	Content         string          `json:"content"`
 	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullInt64   `json:"category_id"`
+	CategoryID      sql.NullString  `json:"category_id"`
 	Tags            json.RawMessage `json:"tags"`
 	MetaTitle       sql.NullString  `json:"meta_title"`
 	MetaDescription sql.NullString  `json:"meta_description"`
@@ -295,7 +298,7 @@ type UpdatePostParams struct {
 	Excerpt         sql.NullString  `json:"excerpt"`
 	Content         string          `json:"content"`
 	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullInt64   `json:"category_id"`
+	CategoryID      sql.NullString  `json:"category_id"`
 	Tags            json.RawMessage `json:"tags"`
 	MetaTitle       sql.NullString  `json:"meta_title"`
 	MetaDescription sql.NullString  `json:"meta_description"`
@@ -303,7 +306,7 @@ type UpdatePostParams struct {
 	Status          PostsStatus     `json:"status"`
 	PublishedAt     sql.NullTime    `json:"published_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
-	ID              uint64          `json:"id"`
+	ID              string          `json:"id"`
 }
 
 func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) error {

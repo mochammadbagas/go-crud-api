@@ -5,79 +5,84 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 type contextKey string
 
 const (
-	UserContextKey    contextKey = "auth_user"
-	SessionContextKey contextKey = "auth_session"
-	CookieSessionName string     = "session_id"
+	ClaimsContextKey contextKey = "auth_claims"
+	UserIDContextKey contextKey = "auth_user_id"
+	RoleContextKey   contextKey = "auth_role"
 )
 
-// SessionValidator defines the contract required to validate sessions in middleware.
-type SessionValidator interface {
-	ValidateSession(ctx context.Context, sessionID string) (*models.Session, error)
-}
-
-// AuthMiddleware verifies the secure HTTP-only cookie session.
-func AuthMiddleware(authSvc SessionValidator) func(http.Handler) http.Handler {
+// JWTAuthMiddleware verifies the JWT Bearer access token.
+func JWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var sessionID string
-
-			// 1. Try reading from HTTP-only cookie
-			if cookie, err := r.Cookie(CookieSessionName); err == nil && cookie.Value != "" {
-				sessionID = cookie.Value
-			}
-
-			// 2. Fallback to Authorization: Bearer <session_id> for REST/HTTP clients like Postman/api.http
-			if sessionID == "" {
-				authHeader := r.Header.Get("Authorization")
-				if strings.HasPrefix(authHeader, "Bearer ") {
-					sessionID = strings.TrimPrefix(authHeader, "Bearer ")
-				}
-			}
-
-			if sessionID == "" {
-				utils.Error(w, http.StatusUnauthorized, "unauthorized: sesi tidak ditemukan")
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				utils.Error(w, http.StatusUnauthorized, "unauthorized: header Authorization 'Bearer <token>' wajib disertakan")
 				return
 			}
 
-			// 3. Validate session in database
-			session, err := authSvc.ValidateSession(r.Context(), sessionID)
+			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+			claims, err := utils.ValidateAccessToken(jwtSecret, tokenStr)
 			if err != nil {
-				utils.Error(w, http.StatusUnauthorized, "unauthorized: sesi tidak valid atau telah kadaluarsa")
+				utils.Error(w, http.StatusUnauthorized, "unauthorized: token tidak valid atau telah kedaluwarsa")
 				return
 			}
 
-			// 4. Inject session and user into context
-			ctx := context.WithValue(r.Context(), SessionContextKey, session)
-			ctx = context.WithValue(ctx, UserContextKey, session.User)
+			// Inject claims into request context
+			ctx := context.WithValue(r.Context(), ClaimsContextKey, claims)
+			ctx = context.WithValue(ctx, UserIDContextKey, claims.UserID)
+			ctx = context.WithValue(ctx, RoleContextKey, claims.Role)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-// GetUserFromContext retrieves authenticated user from request context.
-func GetUserFromContext(ctx context.Context) *models.User {
-	if val := ctx.Value(UserContextKey); val != nil {
-		if user, ok := val.(*models.User); ok {
-			return user
+// RequireRole ensures that the authenticated user possesses the required role (e.g. "admin").
+func RequireRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := GetClaimsFromContext(r.Context())
+			if claims == nil || claims.Role != role {
+				utils.Error(w, http.StatusForbidden, "forbidden: Anda tidak memiliki hak akses untuk resource ini")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// GetClaimsFromContext retrieves JWT claims from request context.
+func GetClaimsFromContext(ctx context.Context) *utils.JWTClaims {
+	if val := ctx.Value(ClaimsContextKey); val != nil {
+		if claims, ok := val.(*utils.JWTClaims); ok {
+			return claims
 		}
 	}
 	return nil
 }
 
-// GetSessionFromContext retrieves active session from request context.
-func GetSessionFromContext(ctx context.Context) *models.Session {
-	if val := ctx.Value(SessionContextKey); val != nil {
-		if sess, ok := val.(*models.Session); ok {
-			return sess
+// GetUserIDFromContext retrieves the authenticated user's ID from context.
+func GetUserIDFromContext(ctx context.Context) string {
+	if val := ctx.Value(UserIDContextKey); val != nil {
+		if id, ok := val.(string); ok {
+			return id
 		}
 	}
-	return nil
+	return ""
+}
+
+// GetRoleFromContext retrieves the authenticated user's role from context.
+func GetRoleFromContext(ctx context.Context) string {
+	if val := ctx.Value(RoleContextKey); val != nil {
+		if role, ok := val.(string); ok {
+			return role
+		}
+	}
+	return ""
 }

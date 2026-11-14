@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -24,6 +25,9 @@ type Config struct {
 	AdminEmail     string
 	AdminPassword  string
 	AllowedOrigins []string
+	JWTSecret      string
+	JWTAccessTTL   time.Duration
+	JWTRefreshTTL  time.Duration
 }
 
 // Load loads configuration from environment variables or .env file.
@@ -43,6 +47,16 @@ func Load() *Config {
 		}
 	}
 
+	accessTTLMin, _ := strconv.Atoi(getEnv("JWT_ACCESS_TTL_MINUTES", "15"))
+	if accessTTLMin <= 0 {
+		accessTTLMin = 15
+	}
+
+	refreshTTLDays, _ := strconv.Atoi(getEnv("JWT_REFRESH_TTL_DAYS", "7"))
+	if refreshTTLDays <= 0 {
+		refreshTTLDays = 7
+	}
+
 	return &Config{
 		Port:           getEnv("PORT", "8080"),
 		DBHost:         getEnv("DB_HOST", "127.0.0.1"),
@@ -57,6 +71,9 @@ func Load() *Config {
 		AdminEmail:     getEnv("ADMIN_EMAIL", "admin@mmdbconnect.com"),
 		AdminPassword:  getEnv("ADMIN_PASSWORD", "adminpassword123"),
 		AllowedOrigins: allowedOrigins,
+		JWTSecret:      getEnv("JWT_SECRET", "super-secret-starter-kit-jwt-key-change-in-production"),
+		JWTAccessTTL:   time.Duration(accessTTLMin) * time.Minute,
+		JWTRefreshTTL:  time.Duration(refreshTTLDays) * 24 * time.Hour,
 	}
 }
 
