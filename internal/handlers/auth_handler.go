@@ -168,6 +168,99 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ForgotPassword handles POST /api/v1/auth/forgot-password
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var input models.ForgotPasswordInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		return
+	}
+
+	if err := h.authSvc.ForgotPassword(r.Context(), input); err != nil {
+		utils.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Always return anti-enumeration message
+	utils.JSON(w, http.StatusOK, map[string]string{
+		"message": "Jika alamat email terdaftar di sistem kami, instruksi pemulihan kata sandi telah dikirim.",
+	})
+}
+
+// ResetPassword handles POST /api/v1/auth/reset-password
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var input models.ResetPasswordInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		return
+	}
+
+	if err := h.authSvc.ResetPassword(r.Context(), input); err != nil {
+		if errors.Is(err, service.ErrAuthTokenInvalid) || errors.Is(err, service.ErrAuthTokenUsed) {
+			utils.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		utils.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.clearRefreshTokenCookie(w)
+
+	utils.JSON(w, http.StatusOK, map[string]string{
+		"message": "kata sandi berhasil diatur ulang. Silakan masuk menggunakan kata sandi baru Anda.",
+	})
+}
+
+// VerifyEmail handles POST and GET /api/v1/auth/verify-email
+func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		var input models.VerifyEmailInput
+		_ = json.NewDecoder(r.Body).Decode(&input)
+		token = input.Token
+	}
+
+	if strings.TrimSpace(token) == "" {
+		utils.Error(w, http.StatusBadRequest, "token verifikasi email wajib disertakan")
+		return
+	}
+
+	if err := h.authSvc.VerifyEmail(r.Context(), models.VerifyEmailInput{Token: token}); err != nil {
+		if errors.Is(err, service.ErrAuthTokenInvalid) || errors.Is(err, service.ErrAuthTokenUsed) {
+			utils.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		utils.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]string{
+		"message": "alamat email berhasil diverifikasi. Akun Anda kini aktif penuh.",
+	})
+}
+
+// ResendVerification handles POST /api/v1/auth/resend-verification
+func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request) {
+	var input models.ResendVerificationInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		return
+	}
+
+	if err := h.authSvc.ResendVerification(r.Context(), input); err != nil {
+		if errors.Is(err, service.ErrEmailAlreadyVerified) {
+			utils.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		utils.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]string{
+		"message": "Jika alamat email terdaftar dan belum diverifikasi, tautan verifikasi baru telah dikirim.",
+	})
+}
+
 func (h *AuthHandler) extractRefreshToken(r *http.Request) string {
 	// 1. Try reading from HTTP-only Cookie
 	if cookie, err := r.Cookie(RefreshTokenCookieName); err == nil && strings.TrimSpace(cookie.Value) != "" {

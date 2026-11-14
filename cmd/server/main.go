@@ -14,6 +14,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 	"github.com/mochammadbagas/go-crud-api/internal/database"
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
+	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/routes"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
@@ -43,17 +44,21 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	profileRepo := repository.NewUserProfileRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+	authTokenRepo := repository.NewAuthTokenRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 	postRepo := repository.NewPostRepository(db)
 
-	// 6. Initialize Services (Business Logic Layer)
+	// 6. Initialize Mailer (Pluggable: LogMailer for Dev / ResendMailer for Prod)
+	mailSvc := mailer.New(cfg)
+
+	// 7. Initialize Services (Business Logic Layer)
 	markdownSvc := service.NewMarkdownService()
-	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, cfg)
-	userSvc := service.NewUserService(userRepo, profileRepo)
+	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg)
+	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(categoryRepo)
 	postSvc := service.NewPostService(postRepo, categoryRepo, markdownSvc)
 
-	// 7. Initialize HTTP Handlers
+	// 8. Initialize HTTP Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
 	userHandler := handlers.NewUserHandler(userSvc, cfg)
 	adminPostHandler := handlers.NewAdminPostHandler(postSvc)
@@ -62,7 +67,7 @@ func main() {
 	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
 	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
 
-	// 8. Setup Chi HTTP Router
+	// 9. Setup Chi HTTP Router
 	router := routes.Setup(
 		cfg,
 		authHandler,
@@ -74,22 +79,25 @@ func main() {
 		publicCategoryHandler,
 	)
 
-	// 9. Start Background Periodic Expired Refresh Tokens Cleanup (Every 24 hours)
+	// 10. Start Background Periodic Expired Tokens Cleanup (Every 24 hours)
 	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
 	defer stopCleanup()
-	go startTokenCleanup(cleanupCtx, refreshTokenRepo, 24*time.Hour)
+	go startTokenCleanup(cleanupCtx, refreshTokenRepo, authTokenRepo, 24*time.Hour)
 
-	// 10. Run HTTP Server with Graceful Shutdown
+	// 11. Run HTTP Server with Graceful Shutdown
 	runServer(router, cfg.Port)
 }
 
-func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRepository, interval time.Duration) {
+func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRepository, authTokenRepo repository.AuthTokenRepository, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// Run initial cleanup on startup
 	if err := tokenRepo.DeleteExpired(ctx); err != nil {
 		slog.Error("Gagal membersihkan refresh token kedaluwarsa saat start", slog.Any("error", err))
+	}
+	if err := authTokenRepo.DeleteExpiredOrUsed(ctx); err != nil {
+		slog.Error("Gagal membersihkan auth token kedaluwarsa saat start", slog.Any("error", err))
 	}
 
 	for {
@@ -99,6 +107,9 @@ func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRep
 		case <-ticker.C:
 			if err := tokenRepo.DeleteExpired(ctx); err != nil {
 				slog.Error("Gagal membersihkan refresh token kedaluwarsa berkala", slog.Any("error", err))
+			}
+			if err := authTokenRepo.DeleteExpiredOrUsed(ctx); err != nil {
+				slog.Error("Gagal membersihkan auth token kedaluwarsa berkala", slog.Any("error", err))
 			}
 		}
 	}

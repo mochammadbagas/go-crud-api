@@ -12,6 +12,49 @@ import (
 	"time"
 )
 
+type AuthTokensTokenType string
+
+const (
+	AuthTokensTokenTypePasswordReset     AuthTokensTokenType = "password_reset"
+	AuthTokensTokenTypeEmailVerification AuthTokensTokenType = "email_verification"
+	AuthTokensTokenTypeEmailChange       AuthTokensTokenType = "email_change"
+)
+
+func (e *AuthTokensTokenType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AuthTokensTokenType(s)
+	case string:
+		*e = AuthTokensTokenType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AuthTokensTokenType: %T", src)
+	}
+	return nil
+}
+
+type NullAuthTokensTokenType struct {
+	AuthTokensTokenType AuthTokensTokenType `json:"auth_tokens_token_type"`
+	Valid               bool                `json:"valid"` // Valid is true if AuthTokensTokenType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAuthTokensTokenType) Scan(value interface{}) error {
+	if value == nil {
+		ns.AuthTokensTokenType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AuthTokensTokenType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAuthTokensTokenType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AuthTokensTokenType), nil
+}
+
 type PostsStatus string
 
 const (
@@ -180,6 +223,17 @@ func (ns NullUsersStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.UsersStatus), nil
+}
+
+type AuthTokens struct {
+	ID        string              `json:"id"`
+	UserID    string              `json:"user_id"`
+	TokenHash string              `json:"token_hash"`
+	TokenType AuthTokensTokenType `json:"token_type"`
+	Payload   sql.NullString      `json:"payload"`
+	IsUsed    bool                `json:"is_used"`
+	ExpiresAt time.Time           `json:"expires_at"`
+	CreatedAt time.Time           `json:"created_at"`
 }
 
 type Categories struct {

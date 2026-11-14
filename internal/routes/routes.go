@@ -86,6 +86,11 @@ func Setup(
 			auth.With(authLimiter).Post("/register", authHandler.Register)
 			auth.With(authLimiter).Post("/login", authHandler.Login)
 			auth.Post("/refresh", authHandler.RefreshToken)
+			auth.With(authLimiter).Post("/forgot-password", authHandler.ForgotPassword)
+			auth.With(authLimiter).Post("/reset-password", authHandler.ResetPassword)
+			auth.Post("/verify-email", authHandler.VerifyEmail)
+			auth.Get("/verify-email", authHandler.VerifyEmail)
+			auth.With(authLimiter).Post("/resend-verification", authHandler.ResendVerification)
 
 			// Protected auth routes (requires valid JWT Access Token)
 			auth.Group(func(protected chi.Router) {
@@ -100,14 +105,22 @@ func Setup(
 		// 3. USER MANAGEMENT ENDPOINTS (/api/v1/users)
 		// ---------------------------------------------------------------------
 		v1.Route("/users", func(users chi.Router) {
-			users.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
+			// Public email change confirmation (token-gated)
+			users.Post("/email/confirm-change", userHandler.ConfirmEmailChange)
+			users.Get("/email/confirm-change", userHandler.ConfirmEmailChange)
 
-			users.Get("/me", userHandler.GetProfile)
-			users.Put("/profile", userHandler.UpdateProfile)
-			users.Post("/avatar", userHandler.UploadAvatar)
-			users.Delete("/avatar", userHandler.DeleteAvatar)
-			users.Put("/username", userHandler.UpdateUsername)
-			users.Get("/status", userHandler.GetStatus)
+			// Protected user routes (requires valid JWT Access Token)
+			users.Group(func(protected chi.Router) {
+				protected.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
+
+				protected.Get("/me", userHandler.GetProfile)
+				protected.Put("/profile", userHandler.UpdateProfile)
+				protected.Post("/avatar", userHandler.UploadAvatar)
+				protected.Delete("/avatar", userHandler.DeleteAvatar)
+				protected.Put("/username", userHandler.UpdateUsername)
+				protected.Get("/status", userHandler.GetStatus)
+				protected.Post("/email/request-change", userHandler.RequestEmailChange)
+			})
 		})
 
 		// ---------------------------------------------------------------------

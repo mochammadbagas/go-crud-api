@@ -160,6 +160,29 @@ func (q *Queries) UpdateStatus(ctx context.Context, arg UpdateStatusParams) erro
 	return err
 }
 
+const updateUserEmail = `-- name: UpdateUserEmail :exec
+UPDATE users
+SET email = ?, email_verified_at = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateUserEmailParams struct {
+	Email           string       `json:"email"`
+	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+	ID              string       `json:"id"`
+}
+
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserEmail,
+		arg.Email,
+		arg.EmailVerifiedAt,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const updateUsername = `-- name: UpdateUsername :exec
 UPDATE users
 SET username = ?, updated_at = ?
@@ -174,5 +197,22 @@ type UpdateUsernameParams struct {
 
 func (q *Queries) UpdateUsername(ctx context.Context, arg UpdateUsernameParams) error {
 	_, err := q.db.ExecContext(ctx, updateUsername, arg.Username, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const verifyUserEmail = `-- name: VerifyUserEmail :exec
+UPDATE users
+SET email_verified_at = ?, status = 'active', updated_at = ?
+WHERE id = ?
+`
+
+type VerifyUserEmailParams struct {
+	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+	ID              string       `json:"id"`
+}
+
+func (q *Queries) VerifyUserEmail(ctx context.Context, arg VerifyUserEmailParams) error {
+	_, err := q.db.ExecContext(ctx, verifyUserEmail, arg.EmailVerifiedAt, arg.UpdatedAt, arg.ID)
 	return err
 }

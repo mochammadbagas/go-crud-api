@@ -35,5 +35,15 @@ UPDATE users
 SET status = ?, updated_at = ?
 WHERE id = ?;
 
+-- name: VerifyUserEmail :exec
+UPDATE users
+SET email_verified_at = ?, status = 'active', updated_at = ?
+WHERE id = ?;
+
+-- name: UpdateUserEmail :exec
+UPDATE users
+SET email = ?, email_verified_at = ?, updated_at = ?
+WHERE id = ?;
+
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;

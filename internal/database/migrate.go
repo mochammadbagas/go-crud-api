@@ -19,6 +19,7 @@ func RunMigrations(sqlDB *sql.DB, dbName string, fresh bool) error {
 		slog.Warn("Flag -fresh aktif. Menjatuhkan (dropping) seluruh tabel database...")
 		dropScript := `
 			SET FOREIGN_KEY_CHECKS = 0;
+			DROP TABLE IF EXISTS auth_tokens;
 			DROP TABLE IF EXISTS refresh_tokens;
 			DROP TABLE IF EXISTS user_profiles;
 			DROP TABLE IF EXISTS sessions;

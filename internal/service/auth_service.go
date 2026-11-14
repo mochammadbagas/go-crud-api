@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
+	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
@@ -15,13 +17,16 @@ import (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("email atau password salah")
-	ErrUnauthorized       = errors.New("unauthorized")
-	ErrEmailExists        = errors.New("email sudah terdaftar, silakan gunakan email lain")
-	ErrUsernameExists     = errors.New("username sudah digunakan, silakan pilih username lain")
-	ErrUserNotActive      = errors.New("akun tidak aktif atau sedang ditangguhkan")
-	ErrTokenReused        = errors.New("indikasi pembajakan sesi terdeteksi, silakan login ulang")
-	ErrTokenExpired       = errors.New("refresh token telah kedaluwarsa")
+	ErrInvalidCredentials   = errors.New("email atau password salah")
+	ErrUnauthorized         = errors.New("unauthorized")
+	ErrEmailExists          = errors.New("email sudah terdaftar, silakan gunakan email lain")
+	ErrUsernameExists       = errors.New("username sudah digunakan, silakan pilih username lain")
+	ErrUserNotActive        = errors.New("akun tidak aktif atau sedang ditangguhkan")
+	ErrTokenReused          = errors.New("indikasi pembajakan sesi terdeteksi, silakan login ulang")
+	ErrTokenExpired         = errors.New("refresh token telah kedaluwarsa")
+	ErrAuthTokenInvalid     = errors.New("token tidak valid atau telah kedaluwarsa")
+	ErrAuthTokenUsed        = errors.New("token telah digunakan sebelumnya")
+	ErrEmailAlreadyVerified = errors.New("alamat email ini sudah terverifikasi sebelumnya")
 )
 
 type AuthServiceInterface interface {
@@ -30,12 +35,19 @@ type AuthServiceInterface interface {
 	RefreshToken(ctx context.Context, rawRefreshToken, userAgent, ipAddress string) (*models.TokenResponse, error)
 	Logout(ctx context.Context, rawRefreshToken string) error
 	ChangePassword(ctx context.Context, userID string, input models.ChangePasswordInput) error
+	ForgotPassword(ctx context.Context, input models.ForgotPasswordInput) error
+	ResetPassword(ctx context.Context, input models.ResetPasswordInput) error
+	VerifyEmail(ctx context.Context, input models.VerifyEmailInput) error
+	ResendVerification(ctx context.Context, input models.ResendVerificationInput) error
+	SendVerification(ctx context.Context, userID string) error
 }
 
 type AuthService struct {
 	userRepo         repository.UserRepository
 	profileRepo      repository.UserProfileRepository
 	refreshTokenRepo repository.RefreshTokenRepository
+	authTokenRepo    repository.AuthTokenRepository
+	mailer           mailer.Mailer
 	cfg              *config.Config
 }
 
@@ -43,12 +55,16 @@ func NewAuthService(
 	userRepo repository.UserRepository,
 	profileRepo repository.UserProfileRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
+	authTokenRepo repository.AuthTokenRepository,
+	mail mailer.Mailer,
 	cfg *config.Config,
 ) *AuthService {
 	return &AuthService{
 		userRepo:         userRepo,
 		profileRepo:      profileRepo,
 		refreshTokenRepo: refreshTokenRepo,
+		authTokenRepo:    authTokenRepo,
+		mailer:           mail,
 		cfg:              cfg,
 	}
 }
@@ -112,6 +128,11 @@ func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) 
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	})
+
+	// 6. Send initial email verification in background
+	go func() {
+		_ = s.SendVerification(context.Background(), user.ID)
+	}()
 
 	return user, nil
 }
@@ -339,4 +360,193 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, input m
 
 	// Revoke all active refresh tokens for this user
 	return s.refreshTokenRepo.RevokeAllForUser(ctx, userID)
+}
+
+func (s *AuthService) ForgotPassword(ctx context.Context, input models.ForgotPasswordInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.GetByEmail(ctx, input.Email)
+	if err != nil {
+		// Anti user-enumeration: return success even if user not found
+		if errors.Is(err, repository.ErrNotFound) {
+			slog.Info("Forgot password diminta untuk email yang tidak terdaftar (anti-enumeration diterapkan)", slog.String("email", input.Email))
+			return nil
+		}
+		return err
+	}
+
+	// Invalidate any existing unused reset tokens for this user
+	_ = s.authTokenRepo.InvalidateUserTokensByType(ctx, user.ID, models.TokenTypePasswordReset)
+
+	// Generate secure raw token
+	rawToken, err := utils.GenerateRefreshToken()
+	if err != nil {
+		return err
+	}
+
+	tokenHash := utils.HashToken(rawToken)
+	expiresAt := time.Now().UTC().Add(15 * time.Minute)
+
+	tokenModel := &models.AuthToken{
+		ID:        utils.NewULID(),
+		UserID:    user.ID,
+		TokenHash: tokenHash,
+		TokenType: models.TokenTypePasswordReset,
+		IsUsed:    false,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := s.authTokenRepo.Create(ctx, tokenModel); err != nil {
+		return err
+	}
+
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.FrontendURL, rawToken)
+	if s.mailer != nil {
+		if err := s.mailer.SendResetPasswordEmail(ctx, user.Email, resetLink); err != nil {
+			slog.Error("Gagal mengirim email reset password", slog.String("email", user.Email), slog.Any("error", err))
+		}
+	}
+
+	return nil
+}
+
+func (s *AuthService) ResetPassword(ctx context.Context, input models.ResetPasswordInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	tokenHash := utils.HashToken(input.Token)
+	storedToken, err := s.authTokenRepo.GetByHashAndType(ctx, tokenHash, models.TokenTypePasswordReset)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrAuthTokenInvalid
+		}
+		return err
+	}
+
+	if storedToken.IsUsed {
+		return ErrAuthTokenUsed
+	}
+
+	if time.Now().UTC().After(storedToken.ExpiresAt) {
+		return ErrAuthTokenInvalid
+	}
+
+	// Hash new password
+	newHash, err := argon2id.CreateHash(input.NewPassword, argon2id.DefaultParams)
+	if err != nil {
+		return err
+	}
+
+	// Update user's password
+	if err := s.userRepo.UpdatePassword(ctx, storedToken.UserID, newHash); err != nil {
+		return err
+	}
+
+	// Mark token as used
+	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
+		slog.Error("Gagal menandai auth token sebagai used", slog.String("id", storedToken.ID), slog.Any("error", err))
+	}
+
+	// Revoke all active sessions
+	return s.refreshTokenRepo.RevokeAllForUser(ctx, storedToken.UserID)
+}
+
+func (s *AuthService) SendVerification(ctx context.Context, userID string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.EmailVerifiedAt != nil {
+		return ErrEmailAlreadyVerified
+	}
+
+	_ = s.authTokenRepo.InvalidateUserTokensByType(ctx, user.ID, models.TokenTypeEmailVerification)
+
+	rawToken, err := utils.GenerateRefreshToken()
+	if err != nil {
+		return err
+	}
+
+	tokenHash := utils.HashToken(rawToken)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+
+	tokenModel := &models.AuthToken{
+		ID:        utils.NewULID(),
+		UserID:    user.ID,
+		TokenHash: tokenHash,
+		TokenType: models.TokenTypeEmailVerification,
+		IsUsed:    false,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := s.authTokenRepo.Create(ctx, tokenModel); err != nil {
+		return err
+	}
+
+	verifyLink := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.FrontendURL, rawToken)
+	if s.mailer != nil {
+		if err := s.mailer.SendVerificationEmail(ctx, user.Email, verifyLink); err != nil {
+			slog.Error("Gagal mengirim email verifikasi", slog.String("email", user.Email), slog.Any("error", err))
+		}
+	}
+
+	return nil
+}
+
+func (s *AuthService) VerifyEmail(ctx context.Context, input models.VerifyEmailInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	tokenHash := utils.HashToken(input.Token)
+	storedToken, err := s.authTokenRepo.GetByHashAndType(ctx, tokenHash, models.TokenTypeEmailVerification)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrAuthTokenInvalid
+		}
+		return err
+	}
+
+	if storedToken.IsUsed {
+		return ErrAuthTokenUsed
+	}
+
+	if time.Now().UTC().After(storedToken.ExpiresAt) {
+		return ErrAuthTokenInvalid
+	}
+
+	// Update user email_verified_at and activate status
+	if err := s.userRepo.VerifyEmail(ctx, storedToken.UserID); err != nil {
+		return err
+	}
+
+	// Mark token as used
+	return s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID)
+}
+
+func (s *AuthService) ResendVerification(ctx context.Context, input models.ResendVerificationInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.GetByEmail(ctx, input.Email)
+	if err != nil {
+		// Anti user-enumeration: return nil if email not found
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	if user.EmailVerifiedAt != nil {
+		return ErrEmailAlreadyVerified
+	}
+
+	return s.SendVerification(ctx, user.ID)
 }

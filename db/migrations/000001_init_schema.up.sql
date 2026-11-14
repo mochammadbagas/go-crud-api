@@ -47,6 +47,22 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     INDEX idx_refresh_tokens_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    id CHAR(26) NOT NULL,
+    user_id CHAR(26) NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    token_type ENUM('password_reset', 'email_verification', 'email_change') NOT NULL,
+    payload VARCHAR(255) NULL,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_auth_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_auth_tokens_lookup (token_hash, token_type),
+    INDEX idx_auth_tokens_user (user_id),
+    INDEX idx_auth_tokens_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS categories (
     id CHAR(26) NOT NULL,
     name VARCHAR(100) NOT NULL,

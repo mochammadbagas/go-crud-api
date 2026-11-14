@@ -30,6 +30,11 @@
 			"key": "sampleCategoryId",
 			"value": "",
 			"type": "string"
+		},
+		{
+			"key": "sampleToken",
+			"value": "",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -140,6 +145,21 @@
 				},
 				{
 					"name": "1.4 Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    pm.collectionVariables.set(\"accessToken\", \"\");",
+									"    pm.collectionVariables.set(\"refreshToken\", \"\");",
+									"    console.log(\"Access Token & Refresh Token berhasil dibersihkan dari variable Postman!\");",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"auth": {
 							"type": "bearer",
@@ -201,6 +221,119 @@
 							"path": ["api", "v1", "auth", "change-password"]
 						},
 						"description": "Mengganti password akun dan mencabut seluruh sesi refresh token aktif pengguna."
+					},
+					"response": []
+				},
+				{
+					"name": "1.6 Lupa Password (Forgot Password)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@mmdbconnect.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "forgot-password"]
+						},
+						"description": "Mengirim tautan reset password. Proteksi anti user-enumeration (selalu mengembalikan 200 OK)."
+					},
+					"response": []
+				},
+				{
+					"name": "1.7 Reset Password (dengan Token)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{sampleToken}}\",\n  \"new_password\": \"newpassword12345\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/reset-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
+						},
+						"description": "Mengatur ulang password menggunakan token reset dari email (disimpan di variabel {{sampleToken}}). Mencabut seluruh refresh token aktif."
+					},
+					"response": []
+				},
+				{
+					"name": "1.8 Verifikasi Email (Token via Query)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/verify-email?token={{sampleToken}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "verify-email"],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{sampleToken}}",
+									"description": "Token verifikasi yang didapat dari email / terminal LogMailer"
+								}
+							]
+						},
+						"description": "Verifikasi alamat email pengguna via tautan browser / GET request."
+					},
+					"response": []
+				},
+				{
+					"name": "1.9 Verifikasi Email (Token via Body)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{sampleToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/verify-email",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "verify-email"]
+						},
+						"description": "Verifikasi alamat email pengguna via JSON payload POST (Mobile / API Client)."
+					},
+					"response": []
+				},
+				{
+					"name": "1.10 Kirim Ulang Email Verifikasi",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@mmdbconnect.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "resend-verification"]
+						},
+						"description": "Mengirim ulang tautan verifikasi email jika token kedaluwarsa atau belum diterima. Dilengkapi anti-enumerasi."
 					},
 					"response": []
 				}
@@ -379,6 +512,83 @@
 							"path": ["api", "v1", "users", "status"]
 						},
 						"description": "Melihat status akun dan status verifikasi email."
+					},
+					"response": []
+				},
+				{
+					"name": "2.7 Permintaan Ganti Email (Request Change)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"new_email\": \"bagas.new@example.com\",\n  \"password\": \"adminpassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/email/request-change",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "email", "request-change"]
+						},
+						"description": "Mengajukan penggantian email akun dengan validasi password saat ini. Token verifikasi dikirim ke email baru."
+					},
+					"response": []
+				},
+				{
+					"name": "2.8 Konfirmasi Ganti Email (Token via Query)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/email/confirm-change?token={{sampleToken}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "email", "confirm-change"],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{sampleToken}}",
+									"description": "Token verifikasi konfirmasi ganti email (disimpan di variabel {{sampleToken}})"
+								}
+							]
+						},
+						"description": "Konfirmasi ganti email via tautan browser / GET request. Mengubah email akun dan menandainya terverifikasi."
+					},
+					"response": []
+				},
+				{
+					"name": "2.9 Konfirmasi Ganti Email (Token via Body)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{sampleToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/email/confirm-change",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "email", "confirm-change"]
+						},
+						"description": "Konfirmasi ganti email via JSON payload POST (Mobile / REST Client)."
 					},
 					"response": []
 				}

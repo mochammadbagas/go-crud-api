@@ -28,6 +28,10 @@ type Config struct {
 	JWTSecret      string
 	JWTAccessTTL   time.Duration
 	JWTRefreshTTL  time.Duration
+	MailerDriver   string
+	ResendAPIKey   string
+	MailFrom       string
+	FrontendURL    string
 }
 
 // Load loads configuration from environment variables or .env file.
@@ -74,6 +78,10 @@ func Load() *Config {
 		JWTSecret:      getEnv("JWT_SECRET", "super-secret-starter-kit-jwt-key-change-in-production"),
 		JWTAccessTTL:   time.Duration(accessTTLMin) * time.Minute,
 		JWTRefreshTTL:  time.Duration(refreshTTLDays) * 24 * time.Hour,
+		MailerDriver:   strings.ToLower(strings.TrimSpace(getEnv("MAILER_DRIVER", "log"))),
+		ResendAPIKey:   getEnv("RESEND_API_KEY", ""),
+		MailFrom:       getEnv("MAIL_FROM", "Go Starter Kit <no-reply@localhost>"),
+		FrontendURL:    strings.TrimRight(getEnv("FRONTEND_URL", "http://localhost:3000"), "/"),
 	}
 }
 

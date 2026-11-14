@@ -38,6 +38,8 @@ type UserRepository interface {
 	UpdatePassword(ctx context.Context, id string, passwordHash string) error
 	UpdateUsername(ctx context.Context, id string, username string) error
 	UpdateStatus(ctx context.Context, id string, status string) error
+	VerifyEmail(ctx context.Context, id string) error
+	UpdateEmail(ctx context.Context, id string, newEmail string) error
 	Count(ctx context.Context) (int64, error)
 }
 
@@ -207,6 +209,32 @@ func (r *sqlUserRepository) UpdateStatus(ctx context.Context, id string, status 
 		UpdatedAt: time.Now().UTC(),
 		ID:        id,
 	})
+}
+
+func (r *sqlUserRepository) VerifyEmail(ctx context.Context, id string) error {
+	now := time.Now().UTC()
+	return r.q.VerifyUserEmail(ctx, sqlc.VerifyUserEmailParams{
+		EmailVerifiedAt: sql.NullTime{Time: now, Valid: true},
+		UpdatedAt:       now,
+		ID:              id,
+	})
+}
+
+func (r *sqlUserRepository) UpdateEmail(ctx context.Context, id string, newEmail string) error {
+	now := time.Now().UTC()
+	err := r.q.UpdateUserEmail(ctx, sqlc.UpdateUserEmailParams{
+		Email:           newEmail,
+		EmailVerifiedAt: sql.NullTime{Time: now, Valid: true},
+		UpdatedAt:       now,
+		ID:              id,
+	})
+	if err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrDuplicate
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *sqlUserRepository) Count(ctx context.Context) (int64, error) {

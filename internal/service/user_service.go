@@ -3,9 +3,17 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"time"
 
+	"github.com/mochammadbagas/go-crud-api/internal/config"
+	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
+
+	"github.com/alexedwards/argon2id"
 )
 
 var (
@@ -18,17 +26,31 @@ type UserServiceInterface interface {
 	UpdateAvatar(ctx context.Context, userID string, avatarURL string) error
 	DeleteAvatar(ctx context.Context, userID string) error
 	UpdateUsername(ctx context.Context, userID string, input models.UpdateUsernameInput) error
+	RequestEmailChange(ctx context.Context, userID string, input models.RequestEmailChangeInput) error
+	ConfirmEmailChange(ctx context.Context, input models.ConfirmEmailChangeInput) error
 }
 
 type UserService struct {
-	userRepo    repository.UserRepository
-	profileRepo repository.UserProfileRepository
+	userRepo      repository.UserRepository
+	profileRepo   repository.UserProfileRepository
+	authTokenRepo repository.AuthTokenRepository
+	mailer        mailer.Mailer
+	cfg           *config.Config
 }
 
-func NewUserService(userRepo repository.UserRepository, profileRepo repository.UserProfileRepository) *UserService {
+func NewUserService(
+	userRepo repository.UserRepository,
+	profileRepo repository.UserProfileRepository,
+	authTokenRepo repository.AuthTokenRepository,
+	mail mailer.Mailer,
+	cfg *config.Config,
+) *UserService {
 	return &UserService{
-		userRepo:    userRepo,
-		profileRepo: profileRepo,
+		userRepo:      userRepo,
+		profileRepo:   profileRepo,
+		authTokenRepo: authTokenRepo,
+		mailer:        mail,
+		cfg:           cfg,
 	}
 }
 
@@ -48,7 +70,6 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input mo
 		return nil, err
 	}
 
-	// Ensure profile exists; if not, create it
 	existingProfile, err := s.profileRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -78,7 +99,6 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input mo
 }
 
 func (s *UserService) UpdateAvatar(ctx context.Context, userID string, avatarURL string) error {
-	// Ensure profile exists
 	_, err := s.profileRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -104,7 +124,6 @@ func (s *UserService) UpdateUsername(ctx context.Context, userID string, input m
 		return err
 	}
 
-	// Check if username is already taken by someone else
 	existingUser, err := s.userRepo.GetByUsername(ctx, input.Username)
 	if err == nil && existingUser != nil && existingUser.ID != userID {
 		return ErrUsernameExists
@@ -114,4 +133,113 @@ func (s *UserService) UpdateUsername(ctx context.Context, userID string, input m
 	}
 
 	return s.userRepo.UpdateUsername(ctx, userID, input.Username)
+}
+
+func (s *UserService) RequestEmailChange(ctx context.Context, userID string, input models.RequestEmailChangeInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if user.Email == input.NewEmail {
+		return errors.New("email baru tidak boleh sama dengan email saat ini")
+	}
+
+	// Verify current password for sensitive email change operation
+	match, err := argon2id.ComparePasswordAndHash(input.Password, user.PasswordHash)
+	if err != nil || !match {
+		return errors.New("password konfirmasi salah")
+	}
+
+	// Ensure new email is not already taken by another user
+	existing, err := s.userRepo.GetByEmail(ctx, input.NewEmail)
+	if err == nil && existing != nil {
+		return ErrEmailExists
+	}
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return err
+	}
+
+	// Invalidate any previous email_change tokens for this user
+	_ = s.authTokenRepo.InvalidateUserTokensByType(ctx, userID, models.TokenTypeEmailChange)
+
+	rawToken, err := utils.GenerateRefreshToken()
+	if err != nil {
+		return err
+	}
+
+	tokenHash := utils.HashToken(rawToken)
+	expiresAt := time.Now().UTC().Add(1 * time.Hour)
+	newEmailPayload := input.NewEmail
+
+	tokenModel := &models.AuthToken{
+		ID:        utils.NewULID(),
+		UserID:    userID,
+		TokenHash: tokenHash,
+		TokenType: models.TokenTypeEmailChange,
+		Payload:   &newEmailPayload,
+		IsUsed:    false,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := s.authTokenRepo.Create(ctx, tokenModel); err != nil {
+		return err
+	}
+
+	confirmLink := fmt.Sprintf("%s/confirm-email-change?token=%s", s.cfg.FrontendURL, rawToken)
+	if s.mailer != nil {
+		if err := s.mailer.SendEmailChangeEmail(ctx, input.NewEmail, confirmLink); err != nil {
+			slog.Error("Gagal mengirim email konfirmasi perubahan email", slog.String("email", input.NewEmail), slog.Any("error", err))
+		}
+	}
+
+	return nil
+}
+
+func (s *UserService) ConfirmEmailChange(ctx context.Context, input models.ConfirmEmailChangeInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	tokenHash := utils.HashToken(input.Token)
+	storedToken, err := s.authTokenRepo.GetByHashAndType(ctx, tokenHash, models.TokenTypeEmailChange)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrAuthTokenInvalid
+		}
+		return err
+	}
+
+	if storedToken.IsUsed {
+		return ErrAuthTokenUsed
+	}
+
+	if time.Now().UTC().After(storedToken.ExpiresAt) {
+		return ErrAuthTokenInvalid
+	}
+
+	if storedToken.Payload == nil || *storedToken.Payload == "" {
+		return errors.New("data email baru tidak valid pada token")
+	}
+
+	newEmail := *storedToken.Payload
+
+	// Final duplicate check in case another user registered this email while token was pending
+	existing, err := s.userRepo.GetByEmail(ctx, newEmail)
+	if err == nil && existing != nil && existing.ID != storedToken.UserID {
+		return ErrEmailExists
+	}
+
+	// Update email and mark email as verified
+	if err := s.userRepo.UpdateEmail(ctx, storedToken.UserID, newEmail); err != nil {
+		return err
+	}
+
+	// Mark token as used
+	return s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID)
 }

@@ -9,6 +9,9 @@
 @accessToken = 
 @refreshToken = 
 
+# Masukkan token verifikasi / reset yang didapat dari konsol LogMailer atau inbox email Resend:
+@sampleToken = 
+
 # Ganti dengan ULID riil saat melakukan pengujian detail/update/delete:
 @samplePostId = 01ARZ3NDEKTSV4RRFFQ69G5FAV
 @sampleCategoryId = 01ARZ3NDEKTSV4RRFFQ69G5FC1
@@ -67,6 +70,48 @@ Content-Type: application/json
   "new_password": "newadminpassword123"
 }
 
+### 1.6 Minta Tautan Reset Password (Forgot Password)
+# Anti-enumerasi: selalu merespons 200 OK. Token dicetak di konsol (LogMailer) atau dikirim via Resend
+POST {{baseUrl}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "admin@mmdbconnect.com"
+}
+
+### 1.7 Reset Password (Menggunakan Token)
+# Token didapat dari konsol/email (dapat diisi pada variabel @sampleToken di atas).
+# Seluruh sesi refresh token lama akan dicabut otomatis saat reset berhasil.
+POST {{baseUrl}}/api/v1/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "{{sampleToken}}",
+  "new_password": "newpassword12345"
+}
+
+### 1.8 Verifikasi Email (Token via Query Parameter)
+# Digunakan saat pengguna mengeklik tautan verifikasi dari email/browser
+GET {{baseUrl}}/api/v1/auth/verify-email?token={{sampleToken}}
+
+### 1.9 Verifikasi Email (Token via JSON Body)
+# Alternatif untuk mobile app atau API client
+POST {{baseUrl}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "{{sampleToken}}"
+}
+
+### 1.10 Kirim Ulang Email Verifikasi (Resend Verification)
+# Anti-enumerasi: selalu merespons 200 OK. Token lama akan dibatalkan otomatis.
+POST {{baseUrl}}/api/v1/auth/resend-verification
+Content-Type: application/json
+
+{
+  "email": "admin@mmdbconnect.com"
+}
+
 
 ### =========================================================================
 ### 2. USER MANAGEMENT (/api/v1/users)
@@ -100,9 +145,45 @@ Content-Type: application/json
 GET {{baseUrl}}/api/v1/users/status
 Authorization: Bearer {{accessToken}}
 
-### 2.5 Hapus Avatar
+### 2.5 Unggah Avatar Profil (Multipart Form Data)
+POST {{baseUrl}}/api/v1/users/avatar
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="avatar"; filename="avatar.png"
+Content-Type: image/png
+
+< ./testdata/sample.png
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 2.6 Hapus Avatar
 DELETE {{baseUrl}}/api/v1/users/avatar
 Authorization: Bearer {{accessToken}}
+
+### 2.7 Minta Penggantian Alamat Email (Request Email Change)
+# Memerlukan autentikasi & konfirmasi password akun saat ini. Token dikirim ke email baru.
+POST {{baseUrl}}/api/v1/users/email/request-change
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "new_email": "bagas.new@example.com",
+  "password": "adminpassword123"
+}
+
+### 2.8 Konfirmasi Penggantian Email (Klik Tautan Email / Browser)
+# Dapat diakses publik (tanpa bearer token) melalui browser
+GET {{baseUrl}}/api/v1/users/email/confirm-change?token={{sampleToken}}
+
+### 2.9 Konfirmasi Penggantian Email (Token via JSON Body)
+# Alternatif untuk mobile client / REST client
+POST {{baseUrl}}/api/v1/users/email/confirm-change
+Content-Type: application/json
+
+{
+  "token": "{{sampleToken}}"
+}
 
 
 ### =========================================================================

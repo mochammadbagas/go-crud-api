@@ -12,6 +12,7 @@ import (
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
+	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/routes"
@@ -85,8 +86,72 @@ func (r *testUserRepo) UpdateStatus(ctx context.Context, id string, status strin
 	}
 	return repository.ErrNotFound
 }
+func (r *testUserRepo) VerifyEmail(ctx context.Context, id string) error {
+	if u, ok := r.usersByID[id]; ok {
+		now := time.Now().UTC()
+		u.EmailVerifiedAt = &now
+		u.Status = models.StatusActive
+		return nil
+	}
+	return repository.ErrNotFound
+}
+func (r *testUserRepo) UpdateEmail(ctx context.Context, id string, newEmail string) error {
+	if u, ok := r.usersByID[id]; ok {
+		delete(r.usersByEmail, u.Email)
+		u.Email = newEmail
+		now := time.Now().UTC()
+		u.EmailVerifiedAt = &now
+		r.usersByEmail[newEmail] = u
+		return nil
+	}
+	return repository.ErrNotFound
+}
 func (r *testUserRepo) Count(ctx context.Context) (int64, error) {
 	return int64(len(r.usersByID)), nil
+}
+
+type testAuthTokenRepo struct {
+	tokens map[string]*models.AuthToken
+}
+
+func newTestAuthTokenRepo() *testAuthTokenRepo {
+	return &testAuthTokenRepo{tokens: make(map[string]*models.AuthToken)}
+}
+
+func (r *testAuthTokenRepo) Create(ctx context.Context, token *models.AuthToken) error {
+	r.tokens[token.TokenHash+":"+token.TokenType] = token
+	return nil
+}
+
+func (r *testAuthTokenRepo) GetByHashAndType(ctx context.Context, tokenHash, tokenType string) (*models.AuthToken, error) {
+	if t, ok := r.tokens[tokenHash+":"+tokenType]; ok {
+		copy := *t
+		return &copy, nil
+	}
+	return nil, repository.ErrNotFound
+}
+
+func (r *testAuthTokenRepo) MarkAsUsed(ctx context.Context, id string) error {
+	for _, t := range r.tokens {
+		if t.ID == id {
+			t.IsUsed = true
+			return nil
+		}
+	}
+	return nil
+}
+
+func (r *testAuthTokenRepo) InvalidateUserTokensByType(ctx context.Context, userID, tokenType string) error {
+	for _, t := range r.tokens {
+		if t.UserID == userID && t.TokenType == tokenType {
+			t.IsUsed = true
+		}
+	}
+	return nil
+}
+
+func (r *testAuthTokenRepo) DeleteExpiredOrUsed(ctx context.Context) error {
+	return nil
 }
 
 type testProfileRepo struct {
@@ -362,6 +427,7 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	})
 
 	refreshTokenRepo := newTestRefreshTokenRepo()
+	authTokenRepo := newTestAuthTokenRepo()
 	catRepo := newTestCategoryRepo()
 	postRepo := newTestPostRepo()
 
@@ -373,11 +439,14 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 		JWTSecret:      "test-starter-kit-secret-key-12345",
 		JWTAccessTTL:   15 * time.Minute,
 		JWTRefreshTTL:  7 * 24 * time.Hour,
+		FrontendURL:    "http://localhost:3000",
+		MailerDriver:   "log",
 	}
 
+	mailSvc := mailer.NewLogMailer()
 	markdownSvc := service.NewMarkdownService()
-	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, cfg)
-	userSvc := service.NewUserService(userRepo, profileRepo)
+	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg)
+	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(catRepo)
 	postSvc := service.NewPostService(postRepo, catRepo, markdownSvc)
 
@@ -609,5 +678,79 @@ func TestUploadEndpoints(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Errorf("expected 201 for admin upload, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestForgotPasswordAndResetPasswordEndpoints(t *testing.T) {
+	router, _, _ := setupTestServer(t)
+
+	// 1. Forgot password request (anti user-enumeration should return 200 for any valid email)
+	payload := `{"email":"admin@mmdbconnect.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/forgot-password", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for forgot password, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// 2. Reset password with invalid token
+	resetPayload := `{"token":"invalid-token","new_password":"newpassword123"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewBufferString(resetPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for reset password with invalid token, got %d", rec.Code)
+	}
+}
+
+func TestEmailVerificationAndChangeEndpoints(t *testing.T) {
+	router, adminToken, _ := setupTestServer(t)
+
+	// 1. Verify email with empty/invalid token
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/verify-email?token=invalid-token", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for verify email with invalid token, got %d", rec.Code)
+	}
+
+	// 2. Resend verification
+	resendPayload := `{"email":"admin@mmdbconnect.com"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/resend-verification", bytes.NewBufferString(resendPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
+		t.Errorf("unexpected status code for resend verification: %d", rec.Code)
+	}
+
+	// 3. Request email change without auth -> 401
+	changeReq := `{"new_email":"newadmin@example.com","password":"secret123"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/email/request-change", bytes.NewBufferString(changeReq))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth for request email change, got %d", rec.Code)
+	}
+
+	// 4. Request email change with valid auth
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/email/request-change", bytes.NewBufferString(changeReq))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for request email change with auth, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// 5. Confirm email change with bogus token
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/email/confirm-change?token=bogus", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for confirm email change with bogus token, got %d", rec.Code)
 	}
 }

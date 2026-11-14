@@ -1,24 +1,26 @@
 # Referensi Arsitektur Backend Go (Starter Kit Blueprint)
 
-Dokumen ini adalah **cetak biru (*blueprint*) arsitektur resmi** dari **Go REST API Starter Kit (`go-crud-api`)**. Gunakan dokumen ini sebagai acuan standar setiap kali memulai proyek backend Go baru agar struktur folder, pemisahan layer, identitas berbasis ULID, autentikasi modern (JWT + RTR), konvensi kode, keamanan, dan alur pengembangannya konsisten dan teruji.
+Dokumen ini adalah **cetak biru (_blueprint_) arsitektur resmi** dari **Go REST API Starter Kit (`go-crud-api`)**. Gunakan dokumen ini sebagai acuan standar setiap kali memulai proyek backend Go baru agar struktur folder, pemisahan layer, identitas berbasis ULID, autentikasi modern (JWT + RTR), konvensi kode, keamanan, dan alur pengembangannya konsisten dan teruji.
 
 ---
 
 ## 1. Tech Stack & Dependensi Inti
 
-| Komponen | Pilihan Standar | Catatan Penggunaan |
-| :--- | :--- | :--- |
-| **Bahasa** | Go `1.25+` | Menggunakan pustaka standar modern (`log/slog`, `embed`, `net/http`) |
-| **HTTP Router** | `github.com/go-chi/chi/v5` | Ringan, idiomatik `net/http`, kompatibel penuh dengan `http.Handler` |
-| **Identitas (ID)** | `github.com/oklog/ulid/v2` | ULID 26-karakter (`CHAR(26)`), aman dari URL enumeration, terurut kronologis |
-| **Autentikasi** | `github.com/golang-jwt/jwt/v5` | Access Token stateless HS256 + Refresh Token Rotation (RTR) |
-| **Password Hashing** | `github.com/alexedwards/argon2id` | Standar hashing kredensial modern (RFC 9106) |
-| **Rate Limiter** | `github.com/go-chi/httprate` | Proteksi endpoint sensitif (login/register) berbasis IP (10 req/menit) |
-| **CORS** | `github.com/go-chi/cors` | Konfigurasi origin via environment variable |
-| **Database Driver** | `database/sql` + `go-sql-driver/mysql` | Kontrol penuh atas connection pool & transaksi |
-| **SQL Codegen** | `sqlc` (`sqlc.yaml`) | Type-safe Go code dari query SQL murni tanpa overhead ORM |
-| **Migrasi DB** | `github.com/golang-migrate/migrate/v4` | File SQL di-embed ke binary via `//go:embed` dengan dukungan flag `-fresh` |
-| **Live Reload** | Air (`.air.toml`) | Auto-rebuild saat development |
+| Komponen                   | Pilihan Standar                        | Catatan Penggunaan                                                                 |
+| :------------------------- | :------------------------------------- | :--------------------------------------------------------------------------------- |
+| **Bahasa**                 | Go `1.25+`                             | Menggunakan pustaka standar modern (`log/slog`, `embed`, `net/http`)               |
+| **HTTP Router**            | `github.com/go-chi/chi/v5`             | Ringan, idiomatik `net/http`, kompatibel penuh dengan `http.Handler`               |
+| **Identitas (ID)**         | `github.com/oklog/ulid/v2`             | ULID 26-karakter (`CHAR(26)`), aman dari URL enumeration, terurut kronologis       |
+| **Autentikasi**            | `github.com/golang-jwt/jwt/v5`         | Access Token stateless HS256 + Refresh Token Rotation (RTR)                        |
+| **Pemulihan & Verifikasi** | One-time token SHA-256 hash            | Token acak 32-byte (TTL 15m/1h/24h) untuk reset password, verifikasi & ganti email |
+| **Pluggable Mailer**       | Adapter Pattern (`internal/mailer`)    | `LogMailer` untuk dev lokal (terminal) & `ResendMailer` untuk production           |
+| **Password Hashing**       | `github.com/alexedwards/argon2id`      | Standar hashing kredensial modern (RFC 9106)                                       |
+| **Rate Limiter**           | `github.com/go-chi/httprate`           | Proteksi endpoint sensitif (login/register/forgot) berbasis IP (10 req/menit)      |
+| **CORS**                   | `github.com/go-chi/cors`               | Konfigurasi origin via environment variable                                        |
+| **Database Driver**        | `database/sql` + `go-sql-driver/mysql` | Kontrol penuh atas connection pool & transaksi                                     |
+| **SQL Codegen**            | `sqlc` (`sqlc.yaml`)                   | Type-safe Go code dari query SQL murni tanpa overhead ORM                          |
+| **Migrasi DB**             | `github.com/golang-migrate/migrate/v4` | File SQL di-embed ke binary via `//go:embed` dengan dukungan flag `-fresh`         |
+| **Live Reload**            | Air (`.air.toml`)                      | Auto-rebuild saat development                                                      |
 
 ---
 
@@ -35,10 +37,13 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │   ├── embed.go                        # Export migrations FS via //go:embed migrations/*.sql
 │   ├── migrations/                     # File migrasi SQL berurutan (000001_init_schema.up.sql & .down.sql)
 │   └── queries/                        # File .sql mentah sebagai sumber generator sqlc
+│       ├── auth_tokens.sql             # Query untuk tabel auth_tokens (verifikasi & reset)
+│       └── <domain>.sql
 ├── docs/
 │   ├── ref/
 │   │   └── architecture_reference.md   # Blueprint arsitektur ini
 │   ├── starter_kit_specification.md    # Spesifikasi teknis & arsitektur proyek
+│   ├── technical_specification.md      # Spesifikasi teknis modul & database schema
 │   ├── learning_guide.md               # Panduan belajar arsitektur proyek
 │   └── postman_collection.json         # Koleksi endpoint siap uji untuk Postman/Insomnia
 ├── internal/
@@ -49,26 +54,33 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │   │   ├── migrate.go                  # Runner golang-migrate (+ dukungan flag -fresh untuk reset dev)
 │   │   └── seeder.go                   # Idempotent initial data seeder dengan ULID
 │   ├── handlers/
-│   │   ├── auth_handler.go             # Handler login, register, refresh (RTR), logout, change-password
-│   │   ├── user_handler.go             # Handler profil, avatar upload/delete, username, status akun
+│   │   ├── auth_handler.go             # Handler login, register, refresh (RTR), logout, forgot/reset password, email verification
+│   │   ├── user_handler.go             # Handler profil, avatar, username, status akun, email change
 │   │   ├── admin_*_handler.go          # Handler endpoint terproteksi khusus role admin
 │   │   ├── public_*_handler.go         # Handler endpoint publik
 │   │   └── handlers_test.go            # Integration-style HTTP tests via httptest + in-memory repo
+│   ├── mailer/
+│   │   ├── mailer.go                   # Interface Mailer abstraksi pengiriman email
+│   │   ├── log_mailer.go               # Driver development lokal (cetak box ASCII ke console)
+│   │   ├── resend_mailer.go            # Driver production plug-and-play via Resend REST API
+│   │   └── factory.go                  # Factory konstruktor memilih driver berdasarkan config
 │   ├── middleware/
 │   │   ├── auth.go                     # JWTAuthMiddleware, RequireRole, & helper context
 │   │   └── cors.go                     # Konfigurasi middleware CORS
 │   ├── models/
 │   │   ├── auth.go                     # DTO autentikasi, TokenResponse, RegisterInput, RefreshToken
+│   │   ├── auth_token.go               # Entitas AuthToken & DTOs Forgot/Reset/Verify/ChangeEmail
 │   │   ├── user.go                     # Entitas User, UserProfile, UserWithProfile, DTOs
 │   │   └── <entity>.go                 # Domain struct, Input DTO, & metode Validate()
 │   ├── repository/
 │   │   ├── sqlc/                       # Hasil generate otomatis dari `sqlc generate` (jangan edit manual)
+│   │   ├── auth_token_repository.go    # Interface & implementasi penyimpanan token sementara
 │   │   └── <entity>_repository.go      # Interface repository, sentinel error, wrapper sqlc & dynamic query
 │   ├── routes/
 │   │   └── routes.go                   # Registrasi global middleware, health check, static files, & sub-routes
 │   ├── service/
-│   │   ├── auth_service.go             # Logika autentikasi, RTR, Reuse Detection, Argon2id
-│   │   ├── user_service.go             # Logika pengelolaan profil, avatar, & username
+│   │   ├── auth_service.go             # Logika autentikasi, RTR, Reuse Detection, Argon2id, Forgot/Reset/Verify
+│   │   ├── user_service.go             # Logika pengelolaan profil, avatar, username, email change request/confirm
 │   │   ├── <domain>_service.go         # Domain service lainnya (posts, categories, markdown)
 │   │   └── *_test.go                   # Unit test business logic dengan mock repository
 │   └── utils/
@@ -105,13 +117,13 @@ HTTP Request
      │ (via Service Interface)
      ▼
 [ internal/service ]        ──► Business rules, password hash Argon2id, token family, reuse detection
-     │ (via Repository Interface)
-     ▼
-[ internal/repository ]     ──► Penugasan ULID sebelum INSERT, wrapper query sqlc, mapping error DB
-     │
-     ▼
-[ internal/repository/sqlc ] ──► Kode SQL type-safe hasil compile sqlc
-     │
+     │ (via Repository Interface)               │ (via Mailer Interface)
+     ▼                                          ▼
+[ internal/repository ]                         [ internal/mailer ]
+     │ (Penugasan ULID & Error Mapping)              ├── LogMailer (Terminal Dev Box)
+     ▼                                               └── ResendMailer (Production API)
+[ internal/repository/sqlc ]
+     │ (Kode compile sqlc)
      ▼
   Database (MySQL 8.0+)
 ```
@@ -131,12 +143,20 @@ HTTP Request
    - Disimpan di database hanya dalam bentuk **SHA-256 Hash** (`token_hash`).
    - Setiap kali refresh token digunakan, token lama dicabut (`is_revoked = true`) dan token baru diterbitkan di bawah `token_family` yang sama.
    - **Reuse Detection**: Jika token yang sudah di-revoke dicoba digunakan kembali, sistem mencabut seluruh keluarga token (`token_family`) sebagai mitigasi pembajakan sesi.
-4. **Delivery Hybrid**:
+4. **Alur Pemulihan & Verifikasi Akun (One-Time Token)**:
+   - Menggunakan token acak 32-byte (64 hex string) yang disimpan dalam hash **SHA-256** di tabel `auth_tokens`.
+   - **Anti User-Enumeration**: Endpoint `forgot-password` dan `resend-verification` selalu mengembalikan status konstan `200 OK` tanpa membocorkan status keberadaan email di database.
+   - **Pencabutan Sesi Paksa**: Saat reset password berhasil, seluruh sesi refresh token aktif pengguna dicabut seketika (_forced session revocation_).
+5. **Pluggable Mailer Architecture**:
+   - Menerapkan adapter pattern: pengiriman email diabstraksi oleh interface `Mailer`.
+   - Secara default menggunakan `LogMailer` untuk lingkungan dev lokal (100% tanpa setup eksternal).
+   - Siap plug-and-play dengan `ResendMailer` via konfigurasi `.env`.
+6. **Delivery Hybrid**:
    - Response JSON body: `{ access_token, refresh_token, token_type, expires_in }`.
    - Response Cookie: `HttpOnly = true`, `SameSite = Lax`, `Path = /api/v1/auth`.
-5. **Password Hashing Argon2id**:
+7. **Password Hashing Argon2id**:
    - Selalu menggunakan `argon2id.CreateHash` dengan default OWASP parameter.
-6. **Upload File Aman**:
+8. **Upload File Aman**:
    - Validasi format dan **magic bytes** konten aktual via `http.DetectContentType`.
    - Menggunakan stream rewind (`io.SeekStart`) sebelum menyalin konten.
 

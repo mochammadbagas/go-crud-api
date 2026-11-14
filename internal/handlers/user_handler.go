@@ -241,3 +241,63 @@ func (h *UserHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		"is_email_verified": profile.EmailVerifiedAt != nil,
 	})
 }
+
+// RequestEmailChange handles POST /api/v1/users/email/request-change
+func (h *UserHandler) RequestEmailChange(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserIDFromContext(r.Context())
+	if userID == "" {
+		utils.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var input models.RequestEmailChangeInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		return
+	}
+
+	if err := h.userSvc.RequestEmailChange(r.Context(), userID, input); err != nil {
+		if errors.Is(err, service.ErrEmailExists) {
+			utils.Error(w, http.StatusConflict, err.Error())
+			return
+		}
+		utils.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]string{
+		"message": "tautan konfirmasi telah dikirimkan ke alamat email baru Anda. Silakan periksa inbox.",
+	})
+}
+
+// ConfirmEmailChange handles POST and GET /api/v1/users/email/confirm-change
+func (h *UserHandler) ConfirmEmailChange(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		var input models.ConfirmEmailChangeInput
+		_ = json.NewDecoder(r.Body).Decode(&input)
+		token = input.Token
+	}
+
+	if strings.TrimSpace(token) == "" {
+		utils.Error(w, http.StatusBadRequest, "token konfirmasi perubahan email wajib disertakan")
+		return
+	}
+
+	if err := h.userSvc.ConfirmEmailChange(r.Context(), models.ConfirmEmailChangeInput{Token: token}); err != nil {
+		if errors.Is(err, service.ErrEmailExists) {
+			utils.Error(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrAuthTokenInvalid) || errors.Is(err, service.ErrAuthTokenUsed) {
+			utils.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		utils.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]string{
+		"message": "alamat email utama Anda berhasil diperbarui dan telah terverifikasi.",
+	})
+}

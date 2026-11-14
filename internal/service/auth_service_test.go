@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
+	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 )
@@ -75,16 +76,85 @@ func (m *mockUserRepo) UpdateUsername(ctx context.Context, id string, username s
 	return repository.ErrNotFound
 }
 
-func (m *mockUserRepo) UpdateStatus(ctx context.Context, id string, status string) error {
-	if u, ok := m.usersByID[id]; ok {
+func (r *mockUserRepo) UpdateStatus(ctx context.Context, id string, status string) error {
+	if u, ok := r.usersByID[id]; ok {
 		u.Status = status
 		return nil
 	}
 	return repository.ErrNotFound
 }
 
-func (m *mockUserRepo) Count(ctx context.Context) (int64, error) {
-	return int64(len(m.usersByID)), nil
+func (r *mockUserRepo) VerifyEmail(ctx context.Context, id string) error {
+	if u, ok := r.usersByID[id]; ok {
+		now := time.Now().UTC()
+		u.EmailVerifiedAt = &now
+		u.Status = models.StatusActive
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *mockUserRepo) UpdateEmail(ctx context.Context, id string, newEmail string) error {
+	if u, ok := r.usersByID[id]; ok {
+		delete(r.usersByEmail, u.Email)
+		u.Email = newEmail
+		now := time.Now().UTC()
+		u.EmailVerifiedAt = &now
+		r.usersByEmail[newEmail] = u
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *mockUserRepo) Count(ctx context.Context) (int64, error) {
+	return int64(len(r.usersByID)), nil
+}
+
+// mockAuthTokenRepo implements repository.AuthTokenRepository in-memory
+type mockAuthTokenRepo struct {
+	tokens map[string]*models.AuthToken
+}
+
+func newMockAuthTokenRepo() *mockAuthTokenRepo {
+	return &mockAuthTokenRepo{
+		tokens: make(map[string]*models.AuthToken),
+	}
+}
+
+func (m *mockAuthTokenRepo) Create(ctx context.Context, token *models.AuthToken) error {
+	m.tokens[token.TokenHash+":"+token.TokenType] = token
+	return nil
+}
+
+func (m *mockAuthTokenRepo) GetByHashAndType(ctx context.Context, tokenHash, tokenType string) (*models.AuthToken, error) {
+	if t, ok := m.tokens[tokenHash+":"+tokenType]; ok {
+		copy := *t
+		return &copy, nil
+	}
+	return nil, repository.ErrNotFound
+}
+
+func (m *mockAuthTokenRepo) MarkAsUsed(ctx context.Context, id string) error {
+	for _, t := range m.tokens {
+		if t.ID == id {
+			t.IsUsed = true
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *mockAuthTokenRepo) InvalidateUserTokensByType(ctx context.Context, userID, tokenType string) error {
+	for _, t := range m.tokens {
+		if t.UserID == userID && t.TokenType == tokenType {
+			t.IsUsed = true
+		}
+	}
+	return nil
+}
+
+func (m *mockAuthTokenRepo) DeleteExpiredOrUsed(ctx context.Context) error {
+	return nil
 }
 
 // mockProfileRepo implements repository.UserProfileRepository in-memory
@@ -197,13 +267,16 @@ func TestAuthService_FullLifecycleAndRTR(t *testing.T) {
 	userRepo := newMockUserRepo()
 	profileRepo := newMockProfileRepo()
 	tokenRepo := newMockRefreshTokenRepo()
+	authTokenRepo := newMockAuthTokenRepo()
+	mailSvc := mailer.NewLogMailer()
 	cfg := &config.Config{
 		JWTSecret:     "test-auth-secret",
 		JWTAccessTTL:  15 * time.Minute,
 		JWTRefreshTTL: 7 * 24 * time.Hour,
+		FrontendURL:   "http://localhost:3000",
 	}
 
-	svc := NewAuthService(userRepo, profileRepo, tokenRepo, cfg)
+	svc := NewAuthService(userRepo, profileRepo, tokenRepo, authTokenRepo, mailSvc, cfg)
 	ctx := context.Background()
 
 	// 1. Register User
@@ -265,5 +338,38 @@ func TestAuthService_FullLifecycleAndRTR(t *testing.T) {
 	_, err = svc.RefreshToken(ctx, tokenResp2.RefreshToken, "Mozilla/5.0", "127.0.0.1")
 	if !errors.Is(err, ErrTokenReused) {
 		t.Errorf("expected tokenResp2 to be revoked after reuse detection, got %v", err)
+	}
+
+	// 6. Forgot Password (Anti user-enumeration check)
+	err = svc.ForgotPassword(ctx, models.ForgotPasswordInput{Email: "nonexistent@example.com"})
+	if err != nil {
+		t.Errorf("expected nil on non-existent email for anti-enumeration, got %v", err)
+	}
+
+	err = svc.ForgotPassword(ctx, models.ForgotPasswordInput{Email: "john@example.com"})
+	if err != nil {
+		t.Fatalf("failed to request forgot password: %v", err)
+	}
+
+	// Locate the generated reset token from mockAuthTokenRepo
+	var resetRawTokenHash string
+	for _, tok := range authTokenRepo.tokens {
+		if tok.UserID == user.ID && tok.TokenType == models.TokenTypePasswordReset {
+			resetRawTokenHash = tok.TokenHash
+			break
+		}
+	}
+	if resetRawTokenHash == "" {
+		t.Fatal("expected reset token to be generated in authTokenRepo")
+	}
+
+	// 7. Reset Password
+	// Find raw token representation or verify with wrong token
+	err = svc.ResetPassword(ctx, models.ResetPasswordInput{
+		Token:       "invalid-token",
+		NewPassword: "newpassword123",
+	})
+	if !errors.Is(err, ErrAuthTokenInvalid) {
+		t.Errorf("expected ErrAuthTokenInvalid for bogus token, got %v", err)
 	}
 }
