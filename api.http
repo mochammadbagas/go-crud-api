@@ -1,6 +1,6 @@
 ### =========================================================================
 ### GO REST API STARTER KIT - HTTP REQUEST COLLECTION (REST CLIENT)
-### Auth (JWT + RTR), User Management, & Content Modules
+### Auth (JWT + RTR), User Management, Granular RBAC, Admin Users, & Content Modules
 ### =========================================================================
 
 @baseUrl = http://localhost:8080
@@ -15,6 +15,9 @@
 # Ganti dengan ULID riil saat melakukan pengujian detail/update/delete:
 @samplePostId = 01ARZ3NDEKTSV4RRFFQ69G5FAV
 @sampleCategoryId = 01ARZ3NDEKTSV4RRFFQ69G5FC1
+@sampleRoleId = 01M7ECAYAE7NB3X6BT4BK3DKAQ
+@samplePermissionId = 01M7ECAYAE7NB3X6BT4BK3DKB1
+@sampleUserId = 01M7ECBRK61JN9T5ANTCF1THVP
 
 
 ### =========================================================================
@@ -290,4 +293,142 @@ Content-Type: application/json
 
 ### 4.9 Hapus Kategori Berdasarkan ULID
 DELETE {{baseUrl}}/api/v1/admin/categories/{{sampleCategoryId}}
+Authorization: Bearer {{accessToken}}
+
+
+### =========================================================================
+### 5. RBAC MANAGEMENT (ROLES & PERMISSIONS)
+### =========================================================================
+
+@sampleRoleId = 01M7ECAYAE7NB3X6BT4BK3DKAQ
+@samplePermissionId = 01M7ECAYAE7NB3X6BT4BK3DKB1
+
+### 5.1 Daftar Seluruh Role
+GET {{baseUrl}}/api/v1/admin/roles
+Authorization: Bearer {{accessToken}}
+
+### 5.2 Detail Role Berdasarkan ULID
+GET {{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}
+Authorization: Bearer {{accessToken}}
+
+### 5.3 Buat Role Baru
+POST {{baseUrl}}/api/v1/admin/roles
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "editor",
+  "display_name": "Content Editor",
+  "description": "Dapat mengelola postingan dan melihat daftar user"
+}
+
+### 5.4 Perbarui Role
+PUT {{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "display_name": "Senior Content Editor",
+  "description": "Akses editor tingkat senior"
+}
+
+### 5.5 Tetapkan Permissions ke Role
+PUT {{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}/permissions
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "permission_ids": [
+    "{{samplePermissionId}}"
+  ]
+}
+
+### 5.6 Hapus Role
+DELETE {{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}
+Authorization: Bearer {{accessToken}}
+
+### 5.7 Daftar Seluruh Permission
+GET {{baseUrl}}/api/v1/admin/permissions
+Authorization: Bearer {{accessToken}}
+
+### 5.8 Detail Permission Berdasarkan ULID
+GET {{baseUrl}}/api/v1/admin/permissions/{{samplePermissionId}}
+Authorization: Bearer {{accessToken}}
+
+### 5.9 Buat Permission Baru
+POST {{baseUrl}}/api/v1/admin/permissions
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "reports.export",
+  "description": "Mengunduh dan mengekspor laporan sistem"
+}
+
+### 5.10 Perbarui Deskripsi Permission
+PUT {{baseUrl}}/api/v1/admin/permissions/{{samplePermissionId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "description": "Mengunduh file laporan spreadsheet dan PDF"
+}
+
+### 5.11 Hapus Permission
+DELETE {{baseUrl}}/api/v1/admin/permissions/{{samplePermissionId}}
+Authorization: Bearer {{accessToken}}
+
+
+### =========================================================================
+### 6. ADMIN USER MANAGEMENT
+### =========================================================================
+
+@sampleUserId = 01M7ECBRK61JN9T5ANTCF1THVP
+
+### 6.1 Daftar Seluruh Pengguna (Search, Filter, Pagination)
+GET {{baseUrl}}/api/v1/admin/users?page=1&limit=10&search=&status=active&role=
+Authorization: Bearer {{accessToken}}
+
+### 6.2 Detail Pengguna Lengkap (Profile & Roles)
+GET {{baseUrl}}/api/v1/admin/users/{{sampleUserId}}
+Authorization: Bearer {{accessToken}}
+
+### 6.3 Perbarui Informasi Pengguna oleh Admin
+PUT {{baseUrl}}/api/v1/admin/users/{{sampleUserId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "username": "bagas_updated",
+  "email": "bagas.new@example.com",
+  "full_name": "Mochammad Bagas Triadi",
+  "bio": "Software Engineer & Backend Enthusiast",
+  "phone_number": "+6281234567890"
+}
+
+### 6.4 Ubah Status Akun Pengguna (active / inactive / pending_verification / suspended)
+# Catatan: Dilengkapi proteksi pencegahan penonaktifan/penangguhan Super Admin aktif terakhir (HTTP 403)
+PUT {{baseUrl}}/api/v1/admin/users/{{sampleUserId}}/status
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "status": "suspended"
+}
+
+### 6.5 Tetapkan Multi-Role ke Pengguna
+# Catatan: Dilengkapi proteksi pencegahan pencabutan role Super Admin dari Super Admin aktif terakhir (HTTP 403)
+PUT {{baseUrl}}/api/v1/admin/users/{{sampleUserId}}/roles
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "role_ids": [
+    "{{sampleRoleId}}"
+  ]
+}
+
+### 6.6 Hapus Akun Pengguna
+# Catatan: Dilengkapi proteksi pencegahan penghapusan Super Admin aktif terakhir (HTTP 403)
+DELETE {{baseUrl}}/api/v1/admin/users/{{sampleUserId}}
 Authorization: Bearer {{accessToken}}

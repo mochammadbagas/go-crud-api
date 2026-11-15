@@ -12,6 +12,7 @@ Dokumen ini adalah **cetak biru (_blueprint_) arsitektur resmi** dari **Go REST 
 | **HTTP Router**            | `github.com/go-chi/chi/v5`             | Ringan, idiomatik `net/http`, kompatibel penuh dengan `http.Handler`               |
 | **Identitas (ID)**         | `github.com/oklog/ulid/v2`             | ULID 26-karakter (`CHAR(26)`), aman dari URL enumeration, terurut kronologis       |
 | **Autentikasi**            | `github.com/golang-jwt/jwt/v5`         | Access Token stateless HS256 + Refresh Token Rotation (RTR)                        |
+| **Otorisasi (RBAC)**       | RBAC Middleware + Wildcard Bypass      | Multi-role, pola `resource.action`, Super Admin wildcard (`*`), safeguard proteksi |
 | **Pemulihan & Verifikasi** | One-time token SHA-256 hash            | Token acak 32-byte (TTL 15m/1h/24h) untuk reset password, verifikasi & ganti email |
 | **Pluggable Mailer**       | Adapter Pattern (`internal/mailer`)    | `LogMailer` untuk dev lokal (terminal) & `ResendMailer` untuk production           |
 | **Password Hashing**       | `github.com/alexedwards/argon2id`      | Standar hashing kredensial modern (RFC 9106)                                       |
@@ -35,9 +36,13 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │       └── main.go                     # Composition root: bootstrap, wiring DI, background worker, graceful shutdown
 ├── db/
 │   ├── embed.go                        # Export migrations FS via //go:embed migrations/*.sql
-│   ├── migrations/                     # File migrasi SQL berurutan (000001_init_schema.up.sql & .down.sql)
+│   ├── migrations/                     # File migrasi SQL berurutan (000001_init_schema.* & 000002_rbac_and_admin.*)
 │   └── queries/                        # File .sql mentah sebagai sumber generator sqlc
 │       ├── auth_tokens.sql             # Query untuk tabel auth_tokens (verifikasi & reset)
+│       ├── roles.sql                   # Query master roles
+│       ├── permissions.sql             # Query master permissions
+│       ├── role_permissions.sql        # Query pivot relasi role-permission
+│       ├── user_roles.sql              # Query pivot multi-role & permissions per user
 │       └── <domain>.sql
 ├── docs/
 │   ├── ref/
@@ -52,10 +57,12 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │   ├── database/
 │   │   ├── database.go                 # Init koneksi DB, pool settings, ping, panggil migrate & seeder
 │   │   ├── migrate.go                  # Runner golang-migrate (+ dukungan flag -fresh untuk reset dev)
-│   │   └── seeder.go                   # Idempotent initial data seeder dengan ULID
+│   │   └── seeder.go                   # Idempotent initial data seeder dengan ULID, default roles & admin
 │   ├── handlers/
 │   │   ├── auth_handler.go             # Handler login, register, refresh (RTR), logout, forgot/reset password, email verification
 │   │   ├── user_handler.go             # Handler profil, avatar, username, status akun, email change
+│   │   ├── role_handler.go             # Handler CRUD master roles, permissions, & sync role-permissions
+│   │   ├── admin_user_handler.go       # Handler admin user management (search, filter, status, multi-role)
 │   │   ├── admin_*_handler.go          # Handler endpoint terproteksi khusus role admin
 │   │   ├── public_*_handler.go         # Handler endpoint publik
 │   │   └── handlers_test.go            # Integration-style HTTP tests via httptest + in-memory repo
@@ -65,27 +72,33 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │   │   ├── resend_mailer.go            # Driver production plug-and-play via Resend REST API
 │   │   └── factory.go                  # Factory konstruktor memilih driver berdasarkan config
 │   ├── middleware/
-│   │   ├── auth.go                     # JWTAuthMiddleware, RequireRole, & helper context
+│   │   ├── auth.go                     # JWTAuthMiddleware, RequireRole, RequireRoles, RequirePermission (Wildcard *)
 │   │   └── cors.go                     # Konfigurasi middleware CORS
 │   ├── models/
 │   │   ├── auth.go                     # DTO autentikasi, TokenResponse, RegisterInput, RefreshToken
 │   │   ├── auth_token.go               # Entitas AuthToken & DTOs Forgot/Reset/Verify/ChangeEmail
 │   │   ├── user.go                     # Entitas User, UserProfile, UserWithProfile, DTOs
+│   │   ├── role.go                     # Entitas Role, Permission, & DTOs RBAC / Admin User
 │   │   └── <entity>.go                 # Domain struct, Input DTO, & metode Validate()
 │   ├── repository/
 │   │   ├── sqlc/                       # Hasil generate otomatis dari `sqlc generate` (jangan edit manual)
 │   │   ├── auth_token_repository.go    # Interface & implementasi penyimpanan token sementara
+│   │   ├── role_repository.go          # Interface & implementasi CRUD role & role-permissions
+│   │   ├── permission_repository.go    # Interface & implementasi master permission
+│   │   ├── user_repository.go          # Interface & implementasi user, multi-role, query admin dinamis
 │   │   └── <entity>_repository.go      # Interface repository, sentinel error, wrapper sqlc & dynamic query
 │   ├── routes/
 │   │   └── routes.go                   # Registrasi global middleware, health check, static files, & sub-routes
 │   ├── service/
 │   │   ├── auth_service.go             # Logika autentikasi, RTR, Reuse Detection, Argon2id, Forgot/Reset/Verify
 │   │   ├── user_service.go             # Logika pengelolaan profil, avatar, username, email change request/confirm
+│   │   ├── rbac_service.go             # Logika CRUD role, permissions, proteksi system roles
+│   │   ├── admin_user_service.go       # Logika user management & critical safeguard Super Admin terakhir
 │   │   ├── <domain>_service.go         # Domain service lainnya (posts, categories, markdown)
 │   │   └── *_test.go                   # Unit test business logic dengan mock repository
 │   └── utils/
 │       ├── ulid.go                     # Generator & validator ULID 26-karakter
-│       ├── jwt.go                      # Generate/Validate JWT access token & SHA-256 token hashing
+│       ├── jwt.go                      # Generate/Validate JWT access token (roles claims) & SHA-256 token hashing
 │       ├── pagination.go               # Paginasi helper
 │       └── response.go                 # Helper JSON() & Error() standar
 ├── .air.toml                           # Konfigurasi live-reload Air
@@ -110,13 +123,13 @@ Proyek menggunakan **Layered Architecture** dengan **Dependency Inversion Princi
 HTTP Request
      │
      ▼
-[ routes + middleware ]     ──► JWT Bearer Auth / Role Guard / Rate Limiter
+[ routes + middleware ]     ──► JWT Bearer Auth / Role Guard / Permission Guard (Wildcard Bypass) / Rate Limiter
      │
      ▼
 [ internal/handlers ]       ──► Validasi DTO input, mapping HTTP status, hybrid delivery (Cookie + JSON)
      │ (via Service Interface)
      ▼
-[ internal/service ]        ──► Business rules, password hash Argon2id, token family, reuse detection
+[ internal/service ]        ──► Business rules, password hash Argon2id, token family, RBAC & Super Admin Safeguard
      │ (via Repository Interface)               │ (via Mailer Interface)
      ▼                                          ▼
 [ internal/repository ]                         [ internal/mailer ]
@@ -159,6 +172,14 @@ HTTP Request
 8. **Upload File Aman**:
    - Validasi format dan **magic bytes** konten aktual via `http.DetectContentType`.
    - Menggunakan stream rewind (`io.SeekStart`) sebelum menyalin konten.
+9. **Granular Role-Based Access Control (RBAC)**:
+   - Pola izin terstandarisasi dengan format `resource.action` (contoh: `users.read`, `roles.create`, `posts.update`).
+   - Tabel pivot `user_roles` dan `role_permissions` mendukung satu pengguna memiliki banyak peran (_multi-role_).
+   - **Super Admin Wildcard Bypass (`*`)**: Pengguna dengan role `super_admin` otomatis diloloskan oleh `PermissionMiddleware` tanpa perlu pengecekan izin ke database per request.
+   - Access Token (JWT) menyematkan klaim array `roles: []string` untuk verifikasi cepat di sisi client maupun middleware.
+10. **Admin User Management & Critical Safeguard**:
+    - Pengelolaan pengguna komprehensif bagi administrator: pencarian kata kunci, filter status (`active`, `inactive`, `pending_verification`, `suspended`), filter role, dan pagination.
+    - **Super Admin Safeguard**: Perlindungan mutlak di level service yang mencegah penonaktifan (`inactive`/`suspended`), penghapusan, atau pencabutan role `super_admin` dari Super Admin aktif terakhir (selalu mengembalikan HTTP 403 Forbidden).
 
 ---
 

@@ -47,16 +47,20 @@ func main() {
 	authTokenRepo := repository.NewAuthTokenRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 	postRepo := repository.NewPostRepository(db)
+	roleRepo := repository.NewRoleRepository(db)
+	permRepo := repository.NewPermissionRepository(db)
 
 	// 6. Initialize Mailer (Pluggable: LogMailer for Dev / ResendMailer for Prod)
 	mailSvc := mailer.New(cfg)
 
 	// 7. Initialize Services (Business Logic Layer)
 	markdownSvc := service.NewMarkdownService()
-	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg)
+	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
 	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(categoryRepo)
 	postSvc := service.NewPostService(postRepo, categoryRepo, markdownSvc)
+	rbacSvc := service.NewRBACService(roleRepo, permRepo)
+	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
 
 	// 8. Initialize HTTP Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
@@ -66,6 +70,8 @@ func main() {
 	adminUploadHandler := handlers.NewAdminUploadHandler(cfg)
 	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
 	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
+	roleHandler := handlers.NewRoleHandler(rbacSvc)
+	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc)
 
 	// 9. Setup Chi HTTP Router
 	router := routes.Setup(
@@ -77,6 +83,9 @@ func main() {
 		adminUploadHandler,
 		publicPostHandler,
 		publicCategoryHandler,
+		roleHandler,
+		adminUserHandler,
+		userRepo,
 	)
 
 	// 10. Start Background Periodic Expired Tokens Cleanup (Every 24 hours)

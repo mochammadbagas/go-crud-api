@@ -45,5 +45,14 @@ UPDATE users
 SET email = ?, email_verified_at = ?, updated_at = ?
 WHERE id = ?;
 
+-- name: UpdateUserByAdmin :exec
+UPDATE users
+SET username = ?, email = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteUser :exec
+DELETE FROM users
+WHERE id = ?;
+
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;

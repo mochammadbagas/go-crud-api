@@ -17,6 +17,9 @@ type mockUserRepo struct {
 	usersByID       map[string]*models.User
 	usersByEmail    map[string]*models.User
 	usersByUsername map[string]*models.User
+	userRoles       map[string][]string
+	userRoleIDs     map[string][]string
+	userPerms       map[string][]string
 }
 
 func newMockUserRepo() *mockUserRepo {
@@ -24,6 +27,9 @@ func newMockUserRepo() *mockUserRepo {
 		usersByID:       make(map[string]*models.User),
 		usersByEmail:    make(map[string]*models.User),
 		usersByUsername: make(map[string]*models.User),
+		userRoles:       make(map[string][]string),
+		userRoleIDs:     make(map[string][]string),
+		userPerms:       make(map[string][]string),
 	}
 }
 
@@ -108,6 +114,141 @@ func (r *mockUserRepo) UpdateEmail(ctx context.Context, id string, newEmail stri
 
 func (r *mockUserRepo) Count(ctx context.Context) (int64, error) {
 	return int64(len(r.usersByID)), nil
+}
+
+func (r *mockUserRepo) Delete(ctx context.Context, id string) error {
+	if u, ok := r.usersByID[id]; ok {
+		delete(r.usersByID, id)
+		delete(r.usersByEmail, u.Email)
+		delete(r.usersByUsername, u.Username)
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *mockUserRepo) UpdateByAdmin(ctx context.Context, id string, username, email string) error {
+	if u, ok := r.usersByID[id]; ok {
+		delete(r.usersByUsername, u.Username)
+		delete(r.usersByEmail, u.Email)
+		u.Username = username
+		u.Email = email
+		r.usersByUsername[username] = u
+		r.usersByEmail[email] = u
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *mockUserRepo) ListAdmin(ctx context.Context, filter models.AdminUserFilter) ([]*models.UserWithProfile, int64, error) {
+	var list []*models.UserWithProfile
+	for _, u := range r.usersByID {
+		roles := r.userRoles[u.ID]
+		if len(roles) == 0 {
+			roles = []string{u.Role}
+		}
+		list = append(list, &models.UserWithProfile{
+			ID:              u.ID,
+			Username:        u.Username,
+			Email:           u.Email,
+			Role:            u.Role,
+			Roles:           roles,
+			Status:          u.Status,
+			EmailVerifiedAt: u.EmailVerifiedAt,
+			CreatedAt:       u.CreatedAt,
+			UpdatedAt:       u.UpdatedAt,
+		})
+	}
+	return list, int64(len(list)), nil
+}
+
+func (r *mockUserRepo) GetUserRoles(ctx context.Context, userID string) ([]*models.Role, error) {
+	roleNames := r.userRoles[userID]
+	var res []*models.Role
+	for _, rn := range roleNames {
+		res = append(res, &models.Role{ID: rn, Name: rn, DisplayName: rn})
+	}
+	return res, nil
+}
+
+func (r *mockUserRepo) GetUserRoleNames(ctx context.Context, userID string) ([]string, error) {
+	if roles, ok := r.userRoles[userID]; ok && len(roles) > 0 {
+		return roles, nil
+	}
+	if u, ok := r.usersByID[userID]; ok {
+		return []string{u.Role}, nil
+	}
+	return []string{}, nil
+}
+
+func (r *mockUserRepo) AssignRole(ctx context.Context, userID, roleID string) error {
+	r.userRoleIDs[userID] = append(r.userRoleIDs[userID], roleID)
+	r.userRoles[userID] = append(r.userRoles[userID], roleID)
+	return nil
+}
+
+func (r *mockUserRepo) RemoveRole(ctx context.Context, userID, roleID string) error {
+	return nil
+}
+
+func (r *mockUserRepo) SetRoles(ctx context.Context, userID string, roleIDs []string) error {
+	r.userRoleIDs[userID] = roleIDs
+	r.userRoles[userID] = roleIDs
+	return nil
+}
+
+func (r *mockUserRepo) CountActiveSuperAdmins(ctx context.Context) (int64, error) {
+	var count int64
+	for _, u := range r.usersByID {
+		if u.Status == models.StatusActive {
+			roles := r.userRoles[u.ID]
+			isSuper := (u.Role == models.RoleSuperAdmin)
+			for _, r := range roles {
+				if r == models.RoleSuperAdmin {
+					isSuper = true
+				}
+			}
+			if isSuper {
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (r *mockUserRepo) CountActiveSuperAdminsExcluding(ctx context.Context, userID string) (int64, error) {
+	var count int64
+	for _, u := range r.usersByID {
+		if u.ID != userID && u.Status == models.StatusActive {
+			roles := r.userRoles[u.ID]
+			isSuper := (u.Role == models.RoleSuperAdmin)
+			for _, r := range roles {
+				if r == models.RoleSuperAdmin {
+					isSuper = true
+				}
+			}
+			if isSuper {
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (r *mockUserRepo) GetUserPermissions(ctx context.Context, userID string) ([]string, error) {
+	return r.userPerms[userID], nil
+}
+
+func (r *mockUserRepo) CheckUserHasRole(ctx context.Context, userID, roleName string) (bool, error) {
+	roles := r.userRoles[userID]
+	for _, r := range roles {
+		if r == roleName {
+			return true, nil
+		}
+	}
+	if u, ok := r.usersByID[userID]; ok && u.Role == roleName {
+		return true, nil
+	}
+	return false, nil
 }
 
 // mockAuthTokenRepo implements repository.AuthTokenRepository in-memory

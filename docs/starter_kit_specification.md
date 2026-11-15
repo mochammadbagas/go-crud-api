@@ -3,7 +3,7 @@
 **Project:** Go REST API Starter Kit  
 **Author:** Mochammad Bagas  
 **Document Type:** Architecture & Technical Specification  
-**Version:** 2.1 (Security Expansion: Password Reset, Email Verification & Pluggable Mailer)  
+**Version:** 2.2 (Granular RBAC, Permission Middleware & Admin User Management - Completed)  
 **Date:** November 2026
 
 ---
@@ -18,6 +18,8 @@ Starter kit ini berfokus pada fondasi backend yang tangguh, aman, modular, dan b
 - **Autentikasi Modern (JWT + Refresh Token Rotation)**: Menggunakan Access Token stateless dan Refresh Token stateful dengan mekanisme _Refresh Token Rotation (RTR)_ dan _Reuse Detection (Token Family)_ sesuai standar RFC 6749 & OWASP.
 - **Delivery Token Hybrid**: Mendukung konsumsi client Web/SPA (via _HTTP-only Cookie_) maupun Mobile/Postman (via _JSON Response Body_).
 - **Password Hashing Argon2id**: Standar keamanan tertinggi terkini (RFC 9106).
+- **Otorisasi Granular (RBAC & Permissions)**: Pendekatan _Role-Based Access Control_ dengan dukungan _multi-role_ per user, pola izin `resource.action`, _Super Admin wildcard bypass_, dan proteksi mutlak terhadap Super Admin terakhir.
+- **Admin User Management**: Modul manajemen pengguna komprehensif bagi administrator (pencarian, filter status, filter role, pagination, mutasi role, dan pembekuan akun).
 - **User & Profile Management**: Pengelolaan data akun, profil personal, avatar, dan alur pembaruan email dengan verifikasi.
 - **Pemulihan Akun & Verifikasi Email (Driver-based Mailer)**:
   - **Forgot & Reset Password**: Pemulihan kata sandi dengan token acak aman (hash SHA-256) dan mitigasi _anti user-enumeration_.
@@ -41,15 +43,19 @@ Seluruh entitas menggunakan **ULID** sebagai Primary Key dan Foreign Key dengan 
 
 ### 2.2. Pemetaan Tipe Data Tabel
 
-| Tabel            | Kolom               | Tipe Data  | Keterangan                                 |
-| :--------------- | :------------------ | :--------- | :----------------------------------------- |
-| `users`          | `id`                | `CHAR(26)` | Primary Key                                |
-| `user_profiles`  | `user_id`           | `CHAR(26)` | PK & FK -> `users(id)`                     |
-| `refresh_tokens` | `id`, `user_id`     | `CHAR(26)` | PK & FK -> `users(id)`                     |
-| `auth_tokens`    | `id`, `user_id`     | `CHAR(26)` | PK & FK -> `users(id)` (Token Reset/Verif) |
-| `categories`     | `id`                | `CHAR(26)` | Primary Key                                |
-| `posts`          | `id`, `category_id` | `CHAR(26)` | PK & FK -> `categories(id)`                |
-| `post_views`     | `id`, `post_id`     | `CHAR(26)` | PK & FK -> `posts(id)`                     |
+| Tabel              | Kolom                      | Tipe Data  | Keterangan                                 |
+| :----------------- | :------------------------- | :--------- | :----------------------------------------- |
+| `users`            | `id`                       | `CHAR(26)` | Primary Key                                |
+| `user_profiles`    | `user_id`                  | `CHAR(26)` | PK & FK -> `users(id)`                     |
+| `refresh_tokens`   | `id`, `user_id`            | `CHAR(26)` | PK & FK -> `users(id)`                     |
+| `auth_tokens`      | `id`, `user_id`            | `CHAR(26)` | PK & FK -> `users(id)` (Token Reset/Verif) |
+| `roles`            | `id`                       | `CHAR(26)` | Primary Key Master Role                    |
+| `permissions`      | `id`                       | `CHAR(26)` | Primary Key Master Permission              |
+| `role_permissions` | `role_id`, `permission_id` | `CHAR(26)` | Composite PK & FKs Relasi Role-Permission  |
+| `user_roles`       | `user_id`, `role_id`       | `CHAR(26)` | Composite PK & FKs Relasi User-Role        |
+| `categories`       | `id`                       | `CHAR(26)` | Primary Key                                |
+| `posts`            | `id`, `category_id`        | `CHAR(26)` | PK & FK -> `categories(id)`                |
+| `post_views`       | `id`, `post_id`            | `CHAR(26)` | PK & FK -> `posts(id)`                     |
 
 ---
 
@@ -63,8 +69,8 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
-    status ENUM('active', 'pending_verification', 'suspended') NOT NULL DEFAULT 'active',
+    role ENUM('admin', 'user') NOT NULL DEFAULT 'user', -- Transisi: dimigrasikan ke tabel asosiasi user_roles
+    status ENUM('active', 'inactive', 'pending_verification', 'suspended') NOT NULL DEFAULT 'active',
     email_verified_at DATETIME NULL,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
@@ -135,7 +141,68 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 ```
 
-### 3.5. Tabel Konten (`categories`, `posts`, `post_views`)
+### 3.5. Tabel `roles` (Master Role RBAC)
+
+```sql
+CREATE TABLE IF NOT EXISTS roles (
+    id CHAR(26) NOT NULL,
+    name VARCHAR(50) NOT NULL,               -- Identifier unik: 'super_admin', 'admin', 'user'
+    display_name VARCHAR(100) NOT NULL,      -- Nama tampilan: 'Super Administrator'
+    description TEXT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_roles_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+### 3.6. Tabel `permissions` (Master Permission RBAC)
+
+Format izin menggunakan konvensi baku `resource.action`:
+
+```sql
+CREATE TABLE IF NOT EXISTS permissions (
+    id CHAR(26) NOT NULL,
+    name VARCHAR(100) NOT NULL,              -- Identifier unik: 'users.read', 'roles.create'
+    description TEXT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_permissions_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+### 3.7. Tabel `role_permissions` (Relasi Many-to-Many Role & Permission)
+
+```sql
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id CHAR(26) NOT NULL,
+    permission_id CHAR(26) NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
+    CONSTRAINT fk_role_permissions_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    CONSTRAINT fk_role_permissions_permission FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+    INDEX idx_rp_permission_id (permission_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+### 3.8. Tabel `user_roles` (Relasi Many-to-Many User & Role / Multi-Role)
+
+Mendukung satu pengguna memiliki lebih dari satu role secara dinamis:
+
+```sql
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id CHAR(26) NOT NULL,
+    role_id CHAR(26) NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (user_id, role_id),
+    CONSTRAINT fk_user_roles_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_roles_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    INDEX idx_ur_role_id (role_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+### 3.9. Tabel Konten (`categories`, `posts`, `post_views`)
 
 ```sql
 CREATE TABLE IF NOT EXISTS categories (
@@ -265,6 +332,64 @@ type Mailer interface {
 5. Pengguna mengonfirmasi melalui `POST /api/v1/users/email/confirm-change` dengan token.
 6. Server memvalidasi token, mengupdate `users.email = payload`, dan menandai `email_verified_at = NOW()`.
 
+### 4.7. Arsitektur Role-Based Access Control (RBAC) & Authorization
+
+Sistem menggunakan pendekatan **Role-Based Access Control (RBAC)** granular berbasis izin aksi:
+
+#### A. Konvensi Penamaan Permission
+
+Setiap izin menggunakan format standar industri:
+$$\text{resource.action}$$
+
+Contoh matriks izin bawaan:
+
+- **Pengguna**: `users.read`, `users.create`, `users.update`, `users.delete`
+- **Role**: `roles.read`, `roles.create`, `roles.update`, `roles.delete`
+- **Permission**: `permissions.read`, `permissions.create`, `permissions.update`, `permissions.delete`
+- **Konten**: `posts.create`, `posts.update`, `posts.delete`, `categories.manage`
+
+#### B. Default Roles & Matrix Izin
+
+1. **`super_admin` (Super Administrator)**:
+   - Memiliki hak akses absolut terhadap seluruh resource.
+   - **Wildcard Bypass (`*`)**: Middleware authorization langsung meloloskan pengguna dengan role `super_admin` tanpa perlu mengecek relasi database.
+2. **`admin` (Administrator)**:
+   - Mengelola operasional pengguna, konten, dan konfigurasi sesuai hak izin yang ditetapkan di tabel `role_permissions`.
+3. **`user` (Pengguna Reguler)**:
+   - Pengguna standar aplikasi dengan akses baca konten publik dan pengelolaan profil diri sendiri.
+
+#### C. Strategi Authorization Middleware & JWT Claims
+
+Untuk mencegah _bloating_ pada ukuran header HTTP (mencegah error _HTTP 431 Request Header Fields Too Large_ akibat puluhan izin), arsitektur menerapkan pemisahan:
+
+1. **Access Token (JWT Claims)**: Hanya menyimpan daftar nama role pengguna (misal: `roles: ["admin", "editor"]`).
+2. **`RoleMiddleware(roles ...string)`**: Memeriksa apakah salah satu role pengguna cocok dengan parameter yang diizinkan langsung dari claims token JWT (O(1), tanpa query DB).
+3. **`PermissionMiddleware(permission string)`**:
+   - Jika role pengguna adalah `super_admin`, request **langsung diizinkan (_bypass_)**.
+   - Untuk role lainnya, middleware memeriksa apakah permission ada dalam himpunan izin yang dimiliki pengguna via _JOIN query_ terindeks antara `user_roles` $\rightarrow$ `role_permissions` $\rightarrow$ `permissions`.
+
+### 4.8. Admin User Management & Safeguard Super Admin Terakhir
+
+Modul administratif khusus untuk mengelola seluruh pengguna sistem:
+
+#### A. Fitur Administratif Pengguna
+
+- **List & Search**: Menampilkan seluruh pengguna dengan fitur pencarian teks (`username`, `email`, `full_name`).
+- **Filter**: Filter berdasarkan `status` (`active`, `inactive`, `pending_verification`, `suspended`) dan `role`.
+- **Pagination**: Paginasi standar dengan query `page` dan `limit`.
+- **Manajemen Akun**: Update profil, perubahan status akun secara instan, dan penetapan/pencabutan multi-role.
+
+#### B. Proteksi Mutlak Terhadap Super Admin Terakhir (_Critical Safeguard_)
+
+Sistem menerapkan proteksi ketat di Service Layer (`internal/service/admin_user_service.go`):
+
+1. Saat admin mencoba **menghapus pengguna (`DELETE`)**, **menonaktifkan akun (`inactive` atau `suspended`)**, atau **mencabut role `super_admin`**:
+2. Sistem mengecek apakah pengguna target memiliki role `super_admin`.
+3. Jika ya, sistem menghitung jumlah Super Admin aktif yang tersisa:
+   $$\text{COUNT(*) WHERE role = 'super_admin' AND status = 'active' AND id } \ne \text{ target\_id}$$
+4. Jika sisa Super Admin aktif adalah `0`, sistem **wajib membatalkan transaksi** dan merespons `400 Bad Request`:  
+   `"Tidak dapat menghapus, menonaktifkan, atau mencabut role Super Admin terakhir dalam sistem."`
+
 ---
 
 ## 5. Rincian Endpoint API
@@ -298,7 +423,37 @@ type Mailer interface {
 
 ### 5.3. Content Management (`/api/v1/posts` & `/api/v1/categories`)
 
-- CRUD postingan dan kategori tetap dipertahankan dengan ID berbasis ULID.
+- CRUD postingan dan kategori tetap dipertahankan dengan ID berbasis ULID dan otorisasi permission `posts.*` dan `categories.*`.
+
+### 5.4. Role & Permission Management (`/api/v1/admin/roles` & `/permissions`)
+
+_Diproteksi oleh `PermissionMiddleware` (`roles._`dan`permissions._`)._
+
+| Method   | Endpoint                               | Permission           | Deskripsi                                       |
+| :------- | :------------------------------------- | :------------------- | :---------------------------------------------- |
+| `GET`    | `/api/v1/admin/roles`                  | `roles.read`         | Menampilkan seluruh daftar role.                |
+| `POST`   | `/api/v1/admin/roles`                  | `roles.create`       | Membuat role baru.                              |
+| `GET`    | `/api/v1/admin/roles/{id}`             | `roles.read`         | Melihat detail role beserta daftar izinnya.     |
+| `PUT`    | `/api/v1/admin/roles/{id}`             | `roles.update`       | Memperbarui nama/deskripsi role.                |
+| `DELETE` | `/api/v1/admin/roles/{id}`             | `roles.delete`       | Menghapus role (role `super_admin` diproteksi). |
+| `PUT`    | `/api/v1/admin/roles/{id}/permissions` | `roles.update`       | Menetapkan/mensinkronisasi daftar izin ke role. |
+| `GET`    | `/api/v1/admin/permissions`            | `permissions.read`   | Menampilkan seluruh daftar permission master.   |
+| `POST`   | `/api/v1/admin/permissions`            | `permissions.create` | Menambahkan master permission baru.             |
+| `PUT`    | `/api/v1/admin/permissions/{id}`       | `permissions.update` | Memperbarui deskripsi permission.               |
+| `DELETE` | `/api/v1/admin/permissions/{id}`       | `permissions.delete` | Menghapus permission master.                    |
+
+### 5.5. Admin User Management (`/api/v1/admin/users`)
+
+_Diproteksi oleh `PermissionMiddleware` (`users._`).\*
+
+| Method   | Endpoint                          | Permission     | Deskripsi                                                 |
+| :------- | :-------------------------------- | :------------- | :-------------------------------------------------------- |
+| `GET`    | `/api/v1/admin/users`             | `users.read`   | Daftar pengguna (Search, Filter Status, Role, Pagination) |
+| `GET`    | `/api/v1/admin/users/{id}`        | `users.read`   | Detail akun pengguna, profil, dan roles.                  |
+| `PUT`    | `/api/v1/admin/users/{id}`        | `users.update` | Memperbarui informasi akun (username, email, profil).     |
+| `PUT`    | `/api/v1/admin/users/{id}/status` | `users.update` | Mengubah status (`active`/`inactive`/`suspended`).        |
+| `PUT`    | `/api/v1/admin/users/{id}/roles`  | `users.update` | Menetapkan/mengubah daftar role pengguna (Multi-role).    |
+| `DELETE` | `/api/v1/admin/users/{id}`        | `users.delete` | Menghapus pengguna (Dilindungi safeguard Super Admin).    |
 
 ---
 
@@ -306,11 +461,13 @@ type Mailer interface {
 
 ```mermaid
 flowchart TD
-    Phase1["Fase 1: Database Migration & SQLC\n- Buat tabel auth_tokens (ULID, SHA-256 hash)\n- Buat queries auth_tokens.sql & sqlc generate"]
-    Phase2["Fase 2: Mailer Subsystem\n- Interface Mailer di internal/mailer\n- LogMailer (console outbox box)\n- ResendMailer (REST API Resend)"]
-    Phase3["Fase 3: Service Layer Implementation\n- ForgotPassword & ResetPassword\n- VerifyEmail & ResendVerification\n- RequestEmailChange & ConfirmEmailChange"]
-    Phase4["Fase 4: Handlers & Routes Wiring\n- AuthHandler (4 endpoints baru)\n- UserHandler (2 endpoints email baru)\n- Pendaftaran router Chi"]
-    Phase5["Fase 5: Testing & Documentation\n- Unit test mailer, token hashing, & service\n- Update Postman Collection & api.http"]
+    Phase1["Fase 1: Database Migration & SQLC (Selesai v2.1)"]
+    Phase2["Fase 2: Mailer Subsystem (Selesai v2.1)"]
+    Phase3["Fase 3: Service Layer Email & Recovery (Selesai v2.1)"]
+    Phase4["Fase 4: Handlers & Routes Wiring (Selesai v2.1)"]
+    Phase5["Fase 5: Testing & Documentation (Selesai v2.1)"]
 
-    Phase1 --> Phase2 --> Phase3 --> Phase4 --> Phase5
+    Phase6["Fase 6: RBAC & Admin User Management (Selesai v2.2)\n- Migration tabel roles, permissions, role_permissions, user_roles\n- Permission & Role Middleware dengan Super Admin Wildcard\n- Service logic dengan safeguard Super Admin terakhir\n- Endpoints Admin Roles, Permissions, & Admin Users"]
+
+    Phase1 --> Phase2 --> Phase3 --> Phase4 --> Phase5 --> Phase6
 ```

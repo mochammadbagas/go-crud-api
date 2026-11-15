@@ -35,6 +35,21 @@
 			"key": "sampleToken",
 			"value": "",
 			"type": "string"
+		},
+		{
+			"key": "sampleRoleId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "samplePermissionId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "sampleUserId",
+			"value": "",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -928,6 +943,481 @@
 							]
 						},
 						"description": "Mengambil postingan terpublikasi dalam kategori tertentu."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "5. RBAC Management",
+			"description": "Endpoint pengelolaan Role dan Granular Permission RBAC.",
+			"item": [
+				{
+					"name": "5.1 Daftar Seluruh Role",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/roles",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "roles"]
+						},
+						"description": "Melihat daftar seluruh role sistem."
+					},
+					"response": []
+				},
+				{
+					"name": "5.2 Detail Role Berdasarkan ULID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}"]
+						},
+						"description": "Melihat detail role beserta permissions yang terikat."
+					},
+					"response": []
+				},
+				{
+					"name": "5.3 Buat Role Baru",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"editor\",\n  \"display_name\": \"Content Editor\",\n  \"description\": \"Dapat mengelola postingan dan melihat daftar user\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/roles",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "roles"]
+						},
+						"description": "Membuat role kustom baru."
+					},
+					"response": []
+				},
+				{
+					"name": "5.4 Perbarui Role",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"display_name\": \"Senior Content Editor\",\n  \"description\": \"Akses editor tingkat senior\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}"]
+						},
+						"description": "Memperbarui nama tampilan dan deskripsi role."
+					},
+					"response": []
+				},
+				{
+					"name": "5.5 Tetapkan Permissions ke Role",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"permission_ids\": [\n    \"{{samplePermissionId}}\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}/permissions",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}", "permissions"]
+						},
+						"description": "Melakukan sinkronisasi permissions yang dimiliki oleh sebuah role."
+					},
+					"response": []
+				},
+				{
+					"name": "5.6 Hapus Role",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}"]
+						},
+						"description": "Menghapus role kustom (Role sistem super_admin, admin, user diproteksi)."
+					},
+					"response": []
+				},
+				{
+					"name": "5.7 Daftar Seluruh Permission",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/permissions",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "permissions"]
+						},
+						"description": "Melihat master daftar permission sistem."
+					},
+					"response": []
+				},
+				{
+					"name": "5.8 Buat Permission Baru",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"reports.export\",\n  \"description\": \"Mengunduh dan mengekspor laporan sistem\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/permissions",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "permissions"]
+						},
+						"description": "Membuat permission granular baru dengan format resource.action."
+					},
+					"response": []
+				},
+				{
+					"name": "5.9 Perbarui Permission",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Mengunduh file laporan spreadsheet dan PDF\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/permissions/{{samplePermissionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "permissions", "{{samplePermissionId}}"]
+						},
+						"description": "Memperbarui deskripsi permission."
+					},
+					"response": []
+				},
+				{
+					"name": "5.10 Hapus Permission",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/permissions/{{samplePermissionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "permissions", "{{samplePermissionId}}"]
+						},
+						"description": "Menghapus permission dari master sistem."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "6. Admin User Management",
+			"description": "Endpoint pengelolaan pengguna oleh administrator (Search, Filter, Status, Multi-Role, Safeguard).",
+			"item": [
+				{
+					"name": "6.1 Daftar Seluruh Pengguna (Search, Filter, Pagination)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users?page=1&limit=10&search=&status=active&role=",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "10" },
+								{ "key": "search", "value": "" },
+								{ "key": "status", "value": "active" },
+								{ "key": "role", "value": "" }
+							]
+						},
+						"description": "Mengambil daftar seluruh pengguna dengan filter status, role, pencarian kata kunci, dan pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "6.2 Detail Pengguna Lengkap",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users", "{{sampleUserId}}"]
+						},
+						"description": "Melihat detail profil lengkap dan daftar roles yang dimiliki seorang pengguna."
+					},
+					"response": []
+				},
+				{
+					"name": "6.3 Perbarui Informasi Pengguna oleh Admin",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"bagas_updated\",\n  \"email\": \"bagas.new@example.com\",\n  \"full_name\": \"Mochammad Bagas Triadi\",\n  \"bio\": \"Software Engineer & Backend Enthusiast\",\n  \"phone_number\": \"+6281234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users", "{{sampleUserId}}"]
+						},
+						"description": "Memperbarui username, email, dan biodata profil pengguna."
+					},
+					"response": []
+				},
+				{
+					"name": "6.4 Ubah Status Akun Pengguna",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"suspended\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users", "{{sampleUserId}}", "status"]
+						},
+						"description": "Mengubah status akun (active, inactive, pending_verification, suspended). Memiliki safeguard proteksi Super Admin aktif terakhir."
+					},
+					"response": []
+				},
+				{
+					"name": "6.5 Tetapkan Multi-Role ke Pengguna",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role_ids\": [\n    \"{{sampleRoleId}}\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}/roles",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users", "{{sampleUserId}}", "roles"]
+						},
+						"description": "Menetapkan array role IDs ke user. Memiliki safeguard proteksi pencabutan Super Admin aktif terakhir."
+					},
+					"response": []
+				},
+				{
+					"name": "6.6 Hapus Akun Pengguna",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users", "{{sampleUserId}}"]
+						},
+						"description": "Menghapus akun pengguna. Memiliki safeguard proteksi penghapusan Super Admin aktif terakhir."
 					},
 					"response": []
 				}

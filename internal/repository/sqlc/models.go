@@ -143,8 +143,9 @@ func (ns NullPostsType) Value() (driver.Value, error) {
 type UsersRole string
 
 const (
-	UsersRoleAdmin UsersRole = "admin"
-	UsersRoleUser  UsersRole = "user"
+	UsersRoleSuperAdmin UsersRole = "super_admin"
+	UsersRoleAdmin      UsersRole = "admin"
+	UsersRoleUser       UsersRole = "user"
 )
 
 func (e *UsersRole) Scan(src interface{}) error {
@@ -186,6 +187,7 @@ type UsersStatus string
 
 const (
 	UsersStatusActive              UsersStatus = "active"
+	UsersStatusInactive            UsersStatus = "inactive"
 	UsersStatusPendingVerification UsersStatus = "pending_verification"
 	UsersStatusSuspended           UsersStatus = "suspended"
 )
@@ -244,6 +246,14 @@ type Categories struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type Permissions struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
 type PostViews struct {
 	ID        string    `json:"id"`
 	PostID    string    `json:"post_id"`
@@ -282,6 +292,21 @@ type RefreshTokens struct {
 	IpAddress   sql.NullString `json:"ip_address"`
 }
 
+type RolePermissions struct {
+	RoleID       string    `json:"role_id"`
+	PermissionID string    `json:"permission_id"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Roles struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	DisplayName string         `json:"display_name"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
 type UserProfiles struct {
 	UserID      string         `json:"user_id"`
 	FullName    string         `json:"full_name"`
@@ -292,14 +317,20 @@ type UserProfiles struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+type UserRoles struct {
+	UserID    string    `json:"user_id"`
+	RoleID    string    `json:"role_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type Users struct {
 	ID              string       `json:"id"`
 	Username        string       `json:"username"`
 	Email           string       `json:"email"`
 	PasswordHash    string       `json:"password_hash"`
-	Role            UsersRole    `json:"role"`
-	Status          UsersStatus  `json:"status"`
 	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
 	CreatedAt       time.Time    `json:"created_at"`
 	UpdatedAt       time.Time    `json:"updated_at"`
+	Role            UsersRole    `json:"role"`
+	Status          UsersStatus  `json:"status"`
 }

@@ -17,21 +17,46 @@ var (
 
 // JWTClaims represents custom claims inside the JWT Access Token.
 type JWTClaims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	UserID   string   `json:"user_id"`
+	Username string   `json:"username"`
+	Email    string   `json:"email"`
+	Role     string   `json:"role"`
+	Roles    []string `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
 
+// HasRole checks if the user possesses the specified role.
+func (c *JWTClaims) HasRole(role string) bool {
+	if c.Role == role {
+		return true
+	}
+	for _, r := range c.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// IsSuperAdmin checks if the user possesses the super_admin role.
+func (c *JWTClaims) IsSuperAdmin() bool {
+	return c.HasRole("super_admin")
+}
+
 // GenerateAccessToken creates a signed JWT Access Token.
-func GenerateAccessToken(secret string, ttl time.Duration, userID, username, email, role string) (string, error) {
+func GenerateAccessToken(secret string, ttl time.Duration, userID, username, email, role string, roles ...string) (string, error) {
 	now := time.Now().UTC()
+	userRoles := roles
+	if len(userRoles) == 0 && role != "" {
+		userRoles = []string{role}
+	}
+
 	claims := JWTClaims{
 		UserID:   userID,
 		Username: username,
 		Email:    email,
 		Role:     role,
+		Roles:    userRoles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),

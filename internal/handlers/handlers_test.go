@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,9 @@ type testUserRepo struct {
 	usersByID       map[string]*models.User
 	usersByEmail    map[string]*models.User
 	usersByUsername map[string]*models.User
+	userRoles       map[string][]string
+	userRoleIDs     map[string][]string
+	userPerms       map[string][]string
 }
 
 func newTestUserRepo() *testUserRepo {
@@ -33,6 +37,9 @@ func newTestUserRepo() *testUserRepo {
 		usersByID:       make(map[string]*models.User),
 		usersByEmail:    make(map[string]*models.User),
 		usersByUsername: make(map[string]*models.User),
+		userRoles:       make(map[string][]string),
+		userRoleIDs:     make(map[string][]string),
+		userPerms:       make(map[string][]string),
 	}
 }
 
@@ -108,6 +115,291 @@ func (r *testUserRepo) UpdateEmail(ctx context.Context, id string, newEmail stri
 }
 func (r *testUserRepo) Count(ctx context.Context) (int64, error) {
 	return int64(len(r.usersByID)), nil
+}
+
+func (r *testUserRepo) Delete(ctx context.Context, id string) error {
+	if u, ok := r.usersByID[id]; ok {
+		delete(r.usersByID, id)
+		delete(r.usersByEmail, u.Email)
+		delete(r.usersByUsername, u.Username)
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *testUserRepo) UpdateByAdmin(ctx context.Context, id string, username, email string) error {
+	if u, ok := r.usersByID[id]; ok {
+		delete(r.usersByUsername, u.Username)
+		delete(r.usersByEmail, u.Email)
+		u.Username = username
+		u.Email = email
+		r.usersByUsername[username] = u
+		r.usersByEmail[email] = u
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *testUserRepo) ListAdmin(ctx context.Context, filter models.AdminUserFilter) ([]*models.UserWithProfile, int64, error) {
+	var list []*models.UserWithProfile
+	for _, u := range r.usersByID {
+		roles := r.userRoles[u.ID]
+		if len(roles) == 0 {
+			roles = []string{u.Role}
+		}
+		list = append(list, &models.UserWithProfile{
+			ID:              u.ID,
+			Username:        u.Username,
+			Email:           u.Email,
+			Role:            u.Role,
+			Roles:           roles,
+			Status:          u.Status,
+			EmailVerifiedAt: u.EmailVerifiedAt,
+			CreatedAt:       u.CreatedAt,
+			UpdatedAt:       u.UpdatedAt,
+		})
+	}
+	return list, int64(len(list)), nil
+}
+
+func (r *testUserRepo) GetUserRoles(ctx context.Context, userID string) ([]*models.Role, error) {
+	roleNames := r.userRoles[userID]
+	var res []*models.Role
+	for _, rn := range roleNames {
+		res = append(res, &models.Role{ID: rn, Name: rn, DisplayName: rn})
+	}
+	return res, nil
+}
+
+func (r *testUserRepo) GetUserRoleNames(ctx context.Context, userID string) ([]string, error) {
+	if roles, ok := r.userRoles[userID]; ok && len(roles) > 0 {
+		return roles, nil
+	}
+	if u, ok := r.usersByID[userID]; ok {
+		return []string{u.Role}, nil
+	}
+	return []string{}, nil
+}
+
+func (r *testUserRepo) AssignRole(ctx context.Context, userID, roleID string) error {
+	r.userRoleIDs[userID] = append(r.userRoleIDs[userID], roleID)
+	r.userRoles[userID] = append(r.userRoles[userID], roleID)
+	return nil
+}
+
+func (r *testUserRepo) RemoveRole(ctx context.Context, userID, roleID string) error {
+	return nil
+}
+
+func (r *testUserRepo) SetRoles(ctx context.Context, userID string, roleIDs []string) error {
+	r.userRoleIDs[userID] = roleIDs
+	r.userRoles[userID] = roleIDs
+	return nil
+}
+
+func (r *testUserRepo) CountActiveSuperAdmins(ctx context.Context) (int64, error) {
+	var count int64
+	for _, u := range r.usersByID {
+		if u.Status == models.StatusActive {
+			roles := r.userRoles[u.ID]
+			isSuper := (u.Role == models.RoleSuperAdmin)
+			for _, r := range roles {
+				if r == models.RoleSuperAdmin {
+					isSuper = true
+				}
+			}
+			if isSuper {
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (r *testUserRepo) CountActiveSuperAdminsExcluding(ctx context.Context, userID string) (int64, error) {
+	var count int64
+	for _, u := range r.usersByID {
+		if u.ID != userID && u.Status == models.StatusActive {
+			roles := r.userRoles[u.ID]
+			isSuper := (u.Role == models.RoleSuperAdmin)
+			for _, r := range roles {
+				if r == models.RoleSuperAdmin {
+					isSuper = true
+				}
+			}
+			if isSuper {
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (r *testUserRepo) GetUserPermissions(ctx context.Context, userID string) ([]string, error) {
+	if perms, ok := r.userPerms[userID]; ok {
+		return perms, nil
+	}
+	// For testing admin user, return all permissions
+	return []string{
+		"users.read", "users.create", "users.update", "users.delete",
+		"roles.read", "roles.create", "roles.update", "roles.delete",
+		"permissions.read", "permissions.create", "permissions.update", "permissions.delete",
+		"posts.read", "posts.create", "posts.update", "posts.delete",
+		"categories.manage",
+	}, nil
+}
+
+func (r *testUserRepo) CheckUserHasRole(ctx context.Context, userID, roleName string) (bool, error) {
+	roles := r.userRoles[userID]
+	for _, r := range roles {
+		if r == roleName {
+			return true, nil
+		}
+	}
+	if u, ok := r.usersByID[userID]; ok && u.Role == roleName {
+		return true, nil
+	}
+	return false, nil
+}
+
+type testRoleRepo struct {
+	roles   map[string]*models.Role
+	byName  map[string]*models.Role
+	permIDs map[string][]string
+}
+
+func newTestRoleRepo() *testRoleRepo {
+	return &testRoleRepo{
+		roles:   make(map[string]*models.Role),
+		byName:  make(map[string]*models.Role),
+		permIDs: make(map[string][]string),
+	}
+}
+
+func (r *testRoleRepo) Create(ctx context.Context, role *models.Role) error {
+	if role.ID == "" {
+		role.ID = utils.NewULID()
+	}
+	r.roles[role.ID] = role
+	r.byName[role.Name] = role
+	return nil
+}
+
+func (r *testRoleRepo) GetByID(ctx context.Context, id string) (*models.Role, error) {
+	if role, ok := r.roles[id]; ok {
+		return role, nil
+	}
+	return nil, repository.ErrNotFound
+}
+
+func (r *testRoleRepo) GetByName(ctx context.Context, name string) (*models.Role, error) {
+	if role, ok := r.byName[name]; ok {
+		return role, nil
+	}
+	return nil, repository.ErrNotFound
+}
+
+func (r *testRoleRepo) List(ctx context.Context) ([]*models.Role, error) {
+	var list []*models.Role
+	for _, role := range r.roles {
+		list = append(list, role)
+	}
+	return list, nil
+}
+
+func (r *testRoleRepo) Update(ctx context.Context, id string, displayName string, description *string) error {
+	if role, ok := r.roles[id]; ok {
+		role.DisplayName = displayName
+		role.Description = description
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *testRoleRepo) Delete(ctx context.Context, id string) error {
+	if role, ok := r.roles[id]; ok {
+		delete(r.byName, role.Name)
+		delete(r.roles, id)
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *testRoleRepo) AssignPermissions(ctx context.Context, roleID string, permissionIDs []string) error {
+	r.permIDs[roleID] = permissionIDs
+	return nil
+}
+
+func (r *testRoleRepo) GetPermissionsByRoleID(ctx context.Context, roleID string) ([]*models.Permission, error) {
+	return []*models.Permission{}, nil
+}
+
+func (r *testRoleRepo) Count(ctx context.Context) (int64, error) {
+	return int64(len(r.roles)), nil
+}
+
+type testPermRepo struct {
+	perms  map[string]*models.Permission
+	byName map[string]*models.Permission
+}
+
+func newTestPermRepo() *testPermRepo {
+	return &testPermRepo{
+		perms:  make(map[string]*models.Permission),
+		byName: make(map[string]*models.Permission),
+	}
+}
+
+func (r *testPermRepo) Create(ctx context.Context, perm *models.Permission) error {
+	if perm.ID == "" {
+		perm.ID = utils.NewULID()
+	}
+	r.perms[perm.ID] = perm
+	r.byName[perm.Name] = perm
+	return nil
+}
+
+func (r *testPermRepo) GetByID(ctx context.Context, id string) (*models.Permission, error) {
+	if p, ok := r.perms[id]; ok {
+		return p, nil
+	}
+	return nil, repository.ErrNotFound
+}
+
+func (r *testPermRepo) GetByName(ctx context.Context, name string) (*models.Permission, error) {
+	if p, ok := r.byName[name]; ok {
+		return p, nil
+	}
+	return nil, repository.ErrNotFound
+}
+
+func (r *testPermRepo) List(ctx context.Context) ([]*models.Permission, error) {
+	var list []*models.Permission
+	for _, p := range r.perms {
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+func (r *testPermRepo) Update(ctx context.Context, id string, description *string) error {
+	if p, ok := r.perms[id]; ok {
+		p.Description = description
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *testPermRepo) Delete(ctx context.Context, id string) error {
+	if p, ok := r.perms[id]; ok {
+		delete(r.byName, p.Name)
+		delete(r.perms, id)
+		return nil
+	}
+	return repository.ErrNotFound
+}
+
+func (r *testPermRepo) Count(ctx context.Context) (int64, error) {
+	return int64(len(r.perms)), nil
 }
 
 type testAuthTokenRepo struct {
@@ -411,7 +703,7 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 		Username:     "admin",
 		Email:        "admin@test.com",
 		PasswordHash: hashedPassword,
-		Role:         models.RoleAdmin,
+		Role:         models.RoleSuperAdmin,
 		Status:       models.StatusActive,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
@@ -419,6 +711,7 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 
 	userRepo := newTestUserRepo()
 	_ = userRepo.Create(context.Background(), adminUser)
+	_ = userRepo.AssignRole(context.Background(), adminID, models.RoleSuperAdmin)
 
 	profileRepo := newTestProfileRepo()
 	_ = profileRepo.Create(context.Background(), &models.UserProfile{
@@ -430,6 +723,8 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	authTokenRepo := newTestAuthTokenRepo()
 	catRepo := newTestCategoryRepo()
 	postRepo := newTestPostRepo()
+	roleRepo := newTestRoleRepo()
+	permRepo := newTestPermRepo()
 
 	cfg := &config.Config{
 		Port:           "8080",
@@ -445,10 +740,12 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 
 	mailSvc := mailer.NewLogMailer()
 	markdownSvc := service.NewMarkdownService()
-	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg)
+	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
 	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(catRepo)
 	postSvc := service.NewPostService(postRepo, catRepo, markdownSvc)
+	rbacSvc := service.NewRBACService(roleRepo, permRepo)
+	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
 
 	now := time.Now().UTC()
 	_ = postRepo.Create(context.Background(), &models.Post{
@@ -479,6 +776,8 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	adminUploadHandler := handlers.NewAdminUploadHandler(cfg)
 	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
 	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
+	roleHandler := handlers.NewRoleHandler(rbacSvc)
+	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc)
 
 	router := routes.Setup(
 		cfg,
@@ -489,10 +788,13 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 		adminUploadHandler,
 		publicPostHandler,
 		publicCategoryHandler,
+		roleHandler,
+		adminUserHandler,
+		userRepo,
 	)
 
-	// Pre-generate an admin JWT token
-	adminToken, err := utils.GenerateAccessToken(cfg.JWTSecret, cfg.JWTAccessTTL, adminID, "admin", "admin@test.com", models.RoleAdmin)
+	// Pre-generate an admin JWT token with super_admin role for testing
+	adminToken, err := utils.GenerateAccessToken(cfg.JWTSecret, cfg.JWTAccessTTL, adminID, "admin", "admin@test.com", models.RoleSuperAdmin, models.RoleSuperAdmin, models.RoleAdmin)
 	if err != nil {
 		t.Fatalf("failed to generate admin token: %v", err)
 	}
@@ -752,5 +1054,136 @@ func TestEmailVerificationAndChangeEndpoints(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for confirm email change with bogus token, got %d", rec.Code)
+	}
+}
+
+func TestRBACEndpoints(t *testing.T) {
+	router, adminToken, _ := setupTestServer(t)
+
+	// 1. GET /api/v1/admin/roles without auth -> 401
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/roles", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth, got %d", rec.Code)
+	}
+
+	// 2. GET /api/v1/admin/roles with adminToken -> 200
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/roles", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 3. POST /api/v1/admin/roles -> 201
+	rolePayload := `{"name":"moderator","display_name":"Moderator Konten"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/roles", bytes.NewBufferString(rolePayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected 201 for create role, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var createdRole models.Role
+	_ = json.Unmarshal(rec.Body.Bytes(), &createdRole)
+
+	// 4. GET /api/v1/admin/permissions -> 200
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/permissions", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for list permissions, got %d", rec.Code)
+	}
+
+	// 5. POST /api/v1/admin/permissions -> 201
+	permPayload := `{"name":"audit.view","description":"Melihat log audit"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/permissions", bytes.NewBufferString(permPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected 201 for create permission, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var createdPerm models.Permission
+	_ = json.Unmarshal(rec.Body.Bytes(), &createdPerm)
+
+	// 6. PUT /api/v1/admin/roles/{id}/permissions -> 200
+	assignPayload := fmt.Sprintf(`{"permission_ids":["%s"]}`, createdPerm.ID)
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/roles/"+createdRole.ID+"/permissions", bytes.NewBufferString(assignPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for assign permissions, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAdminUserEndpoints(t *testing.T) {
+	router, adminToken, _ := setupTestServer(t)
+
+	// 1. GET /api/v1/admin/users without auth -> 401
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth, got %d", rec.Code)
+	}
+
+	// 2. GET /api/v1/admin/users with adminToken -> 200
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for list admin users, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var paginatedResp utils.PaginatedResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &paginatedResp)
+	usersBytes, _ := json.Marshal(paginatedResp.Data)
+	var usersList []*models.UserWithProfile
+	_ = json.Unmarshal(usersBytes, &usersList)
+
+	if len(usersList) == 0 {
+		t.Fatal("expected at least one user in list")
+	}
+
+	adminUserID := usersList[0].ID
+
+	// 3. GET /api/v1/admin/users/{id} -> 200
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/"+adminUserID, nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for user detail, got %d", rec.Code)
+	}
+
+	// 4. PUT /api/v1/admin/users/{id}/status to inactive on last active super admin -> 403 Forbidden!
+	statusPayload := `{"status":"inactive"}`
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/users/"+adminUserID+"/status", bytes.NewBufferString(statusPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for deactivating last super admin, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 5. DELETE /api/v1/admin/users/{id} on last active super admin -> 403 Forbidden!
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/"+adminUserID, nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for deleting last super admin, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

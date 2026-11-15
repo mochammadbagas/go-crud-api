@@ -12,6 +12,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
 	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
+	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,9 @@ func Setup(
 	adminUploadHandler *handlers.AdminUploadHandler,
 	publicPostHandler *handlers.PublicPostHandler,
 	publicCategoryHandler *handlers.PublicCategoryHandler,
+	roleHandler *handlers.RoleHandler,
+	adminUserHandler *handlers.AdminUserHandler,
+	userRepo repository.UserRepository,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -128,23 +132,46 @@ func Setup(
 		// ---------------------------------------------------------------------
 		v1.Route("/admin", func(admin chi.Router) {
 			admin.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
-			admin.Use(middleware.RequireRole(models.RoleAdmin))
+			admin.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleSuperAdmin))
 
 			// Posts CRUD
-			admin.Get("/posts", adminPostHandler.List)
-			admin.Post("/posts", adminPostHandler.Create)
-			admin.Get("/posts/{id}", adminPostHandler.Get)
-			admin.Put("/posts/{id}", adminPostHandler.Update)
-			admin.Delete("/posts/{id}", adminPostHandler.Delete)
+			admin.With(middleware.RequirePermission("posts.read", userRepo)).Get("/posts", adminPostHandler.List)
+			admin.With(middleware.RequirePermission("posts.create", userRepo)).Post("/posts", adminPostHandler.Create)
+			admin.With(middleware.RequirePermission("posts.read", userRepo)).Get("/posts/{id}", adminPostHandler.Get)
+			admin.With(middleware.RequirePermission("posts.update", userRepo)).Put("/posts/{id}", adminPostHandler.Update)
+			admin.With(middleware.RequirePermission("posts.delete", userRepo)).Delete("/posts/{id}", adminPostHandler.Delete)
 
 			// Categories CRUD
-			admin.Get("/categories", adminCategoryHandler.List)
-			admin.Post("/categories", adminCategoryHandler.Create)
-			admin.Put("/categories/{id}", adminCategoryHandler.Update)
-			admin.Delete("/categories/{id}", adminCategoryHandler.Delete)
+			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Get("/categories", adminCategoryHandler.List)
+			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Post("/categories", adminCategoryHandler.Create)
+			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Put("/categories/{id}", adminCategoryHandler.Update)
+			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Delete("/categories/{id}", adminCategoryHandler.Delete)
 
 			// General file/image upload
 			admin.Post("/upload", adminUploadHandler.Upload)
+
+			// Roles CRUD & Permissions assignment
+			admin.With(middleware.RequirePermission("roles.read", userRepo)).Get("/roles", roleHandler.ListRoles)
+			admin.With(middleware.RequirePermission("roles.create", userRepo)).Post("/roles", roleHandler.CreateRole)
+			admin.With(middleware.RequirePermission("roles.read", userRepo)).Get("/roles/{id}", roleHandler.GetRole)
+			admin.With(middleware.RequirePermission("roles.update", userRepo)).Put("/roles/{id}", roleHandler.UpdateRole)
+			admin.With(middleware.RequirePermission("roles.delete", userRepo)).Delete("/roles/{id}", roleHandler.DeleteRole)
+			admin.With(middleware.RequirePermission("roles.update", userRepo)).Put("/roles/{id}/permissions", roleHandler.AssignPermissions)
+
+			// Permissions CRUD
+			admin.With(middleware.RequirePermission("permissions.read", userRepo)).Get("/permissions", roleHandler.ListPermissions)
+			admin.With(middleware.RequirePermission("permissions.create", userRepo)).Post("/permissions", roleHandler.CreatePermission)
+			admin.With(middleware.RequirePermission("permissions.read", userRepo)).Get("/permissions/{id}", roleHandler.GetPermission)
+			admin.With(middleware.RequirePermission("permissions.update", userRepo)).Put("/permissions/{id}", roleHandler.UpdatePermission)
+			admin.With(middleware.RequirePermission("permissions.delete", userRepo)).Delete("/permissions/{id}", roleHandler.DeletePermission)
+
+			// Admin Users Management
+			admin.With(middleware.RequirePermission("users.read", userRepo)).Get("/users", adminUserHandler.ListUsers)
+			admin.With(middleware.RequirePermission("users.read", userRepo)).Get("/users/{id}", adminUserHandler.GetUser)
+			admin.With(middleware.RequirePermission("users.update", userRepo)).Put("/users/{id}", adminUserHandler.UpdateUser)
+			admin.With(middleware.RequirePermission("users.update", userRepo)).Put("/users/{id}/status", adminUserHandler.UpdateStatus)
+			admin.With(middleware.RequirePermission("users.update", userRepo)).Put("/users/{id}/roles", adminUserHandler.AssignRoles)
+			admin.With(middleware.RequirePermission("users.delete", userRepo)).Delete("/users/{id}", adminUserHandler.DeleteUser)
 		})
 	})
 

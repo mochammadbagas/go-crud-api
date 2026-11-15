@@ -54,6 +54,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users
+WHERE id = ?
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, id)
+	return err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, username, email, password_hash, role, status, email_verified_at, created_at, updated_at
 FROM users
@@ -61,9 +71,21 @@ WHERE email = ?
 LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (Users, error) {
+type GetUserByEmailRow struct {
+	ID              string       `json:"id"`
+	Username        string       `json:"username"`
+	Email           string       `json:"email"`
+	PasswordHash    string       `json:"password_hash"`
+	Role            UsersRole    `json:"role"`
+	Status          UsersStatus  `json:"status"`
+	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
-	var i Users
+	var i GetUserByEmailRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -85,9 +107,21 @@ WHERE id = ?
 LIMIT 1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id string) (Users, error) {
+type GetUserByIDRow struct {
+	ID              string       `json:"id"`
+	Username        string       `json:"username"`
+	Email           string       `json:"email"`
+	PasswordHash    string       `json:"password_hash"`
+	Role            UsersRole    `json:"role"`
+	Status          UsersStatus  `json:"status"`
+	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id string) (GetUserByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByID, id)
-	var i Users
+	var i GetUserByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -109,9 +143,21 @@ WHERE username = ?
 LIMIT 1
 `
 
-func (q *Queries) GetUserByUsername(ctx context.Context, username string) (Users, error) {
+type GetUserByUsernameRow struct {
+	ID              string       `json:"id"`
+	Username        string       `json:"username"`
+	Email           string       `json:"email"`
+	PasswordHash    string       `json:"password_hash"`
+	Role            UsersRole    `json:"role"`
+	Status          UsersStatus  `json:"status"`
+	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByUsername, username)
-	var i Users
+	var i GetUserByUsernameRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -157,6 +203,29 @@ type UpdateStatusParams struct {
 
 func (q *Queries) UpdateStatus(ctx context.Context, arg UpdateStatusParams) error {
 	_, err := q.db.ExecContext(ctx, updateStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const updateUserByAdmin = `-- name: UpdateUserByAdmin :exec
+UPDATE users
+SET username = ?, email = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateUserByAdminParams struct {
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+}
+
+func (q *Queries) UpdateUserByAdmin(ctx context.Context, arg UpdateUserByAdminParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserByAdmin,
+		arg.Username,
+		arg.Email,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	return err
 }
 

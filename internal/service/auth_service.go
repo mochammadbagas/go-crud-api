@@ -47,6 +47,7 @@ type AuthService struct {
 	profileRepo      repository.UserProfileRepository
 	refreshTokenRepo repository.RefreshTokenRepository
 	authTokenRepo    repository.AuthTokenRepository
+	roleRepo         repository.RoleRepository
 	mailer           mailer.Mailer
 	cfg              *config.Config
 }
@@ -58,12 +59,18 @@ func NewAuthService(
 	authTokenRepo repository.AuthTokenRepository,
 	mail mailer.Mailer,
 	cfg *config.Config,
+	roleRepo ...repository.RoleRepository,
 ) *AuthService {
+	var rRepo repository.RoleRepository
+	if len(roleRepo) > 0 {
+		rRepo = roleRepo[0]
+	}
 	return &AuthService{
 		userRepo:         userRepo,
 		profileRepo:      profileRepo,
 		refreshTokenRepo: refreshTokenRepo,
 		authTokenRepo:    authTokenRepo,
+		roleRepo:         rRepo,
 		mailer:           mail,
 		cfg:              cfg,
 	}
@@ -129,7 +136,18 @@ func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) 
 		UpdatedAt: user.UpdatedAt,
 	})
 
-	// 6. Send initial email verification in background
+	// 6. Assign default role 'user'
+	if s.roleRepo != nil {
+		if defaultRole, err := s.roleRepo.GetByName(ctx, models.RoleUser); err == nil && defaultRole != nil {
+			_ = s.userRepo.AssignRole(ctx, user.ID, defaultRole.ID)
+			user.Roles = []string{defaultRole.Name}
+		}
+	}
+	if len(user.Roles) == 0 {
+		user.Roles = []string{user.Role}
+	}
+
+	// 7. Send initial email verification in background
 	go func() {
 		_ = s.SendVerification(context.Background(), user.ID)
 	}()
@@ -169,6 +187,7 @@ func (s *AuthService) Login(ctx context.Context, input models.LoginInput, userAg
 		user.Username,
 		user.Email,
 		user.Role,
+		user.Roles...,
 	)
 	if err != nil {
 		return nil, err
@@ -301,6 +320,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 		user.Username,
 		user.Email,
 		user.Role,
+		user.Roles...,
 	)
 	if err != nil {
 		return nil, err

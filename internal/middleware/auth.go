@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
@@ -43,15 +44,79 @@ func JWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 	}
 }
 
-// RequireRole ensures that the authenticated user possesses the required role (e.g. "admin").
+// RequireRole ensures that the authenticated user possesses the required role (with Super Admin wildcard bypass).
 func RequireRole(role string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetClaimsFromContext(r.Context())
-			if claims == nil || claims.Role != role {
+			if claims == nil || (!claims.HasRole(role) && !claims.IsSuperAdmin()) {
 				utils.Error(w, http.StatusForbidden, "forbidden: Anda tidak memiliki hak akses untuk resource ini")
 				return
 			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireRoles ensures that the authenticated user possesses at least one of the specified roles (with Super Admin wildcard bypass).
+func RequireRoles(roles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := GetClaimsFromContext(r.Context())
+			if claims == nil {
+				utils.Error(w, http.StatusForbidden, "forbidden: Anda tidak memiliki hak akses untuk resource ini")
+				return
+			}
+			if claims.IsSuperAdmin() {
+				next.ServeHTTP(w, r)
+				return
+			}
+			for _, requiredRole := range roles {
+				if claims.HasRole(requiredRole) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			utils.Error(w, http.StatusForbidden, "forbidden: Anda tidak memiliki hak akses untuk resource ini")
+		})
+	}
+}
+
+// RequirePermission ensures that the authenticated user possesses the specific permission (with Super Admin wildcard bypass).
+func RequirePermission(permission string, userRepo repository.UserRepository) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := GetClaimsFromContext(r.Context())
+			if claims == nil {
+				utils.Error(w, http.StatusForbidden, "forbidden: Anda tidak memiliki hak akses untuk resource ini")
+				return
+			}
+
+			// Super Admin wildcard bypass
+			if claims.IsSuperAdmin() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			perms, err := userRepo.GetUserPermissions(r.Context(), claims.UserID)
+			if err != nil {
+				utils.Error(w, http.StatusForbidden, "forbidden: gagal memverifikasi permission")
+				return
+			}
+
+			hasPerm := false
+			for _, p := range perms {
+				if p == permission || p == "*" {
+					hasPerm = true
+					break
+				}
+			}
+
+			if !hasPerm {
+				utils.Error(w, http.StatusForbidden, "forbidden: Anda tidak memiliki hak akses untuk resource ini")
+				return
+			}
+
 			next.ServeHTTP(w, r)
 		})
 	}

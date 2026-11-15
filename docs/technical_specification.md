@@ -1,16 +1,16 @@
 # Content Management System — Technical Specification
 
 **Project:** Go REST API Starter Kit  
-**Module:** Core Auth, Account Recovery, Pluggable Mailer, User Management, & Content Modules (Blog, Article & Journal)  
-**Technology:** Go (Golang), MySQL 8.0+, ULID, JWT HS256, Pluggable Mailer (Log & Resend)  
+**Module:** Core Auth, Account Recovery, Pluggable Mailer, Granular RBAC, Admin User Management, & Content Modules  
+**Technology:** Go (Golang), MySQL 8.0+, ULID, JWT HS256, Pluggable Mailer (Log & Resend), RBAC Middleware  
 **Document Type:** Technical Requirements & Schema Specification  
-**Version:** 2.1 (Starter Kit Upgrade: Email Verification & Password Reset)
+**Version:** 2.2 (Completed: Granular RBAC & Admin User Management)
 
 ---
 
 ## 1. Overview
 
-Sistem backend RESTful API modular yang menggabungkan sistem autentikasi modern (JWT + Refresh Token Rotation), pemulihan akun & verifikasi email dengan arsitektur _pluggable mailer_ (LogMailer & Resend), manajemen profil pengguna, dan modul konten publikasi terstruktur (Blog, Article, dan Journal) menggunakan identitas berbasis **ULID (Crockford Base32 26-karakter)**.
+Sistem backend RESTful API modular yang menggabungkan sistem autentikasi modern (JWT + Refresh Token Rotation), pemulihan akun & verifikasi email dengan arsitektur _pluggable mailer_ (LogMailer & Resend), otorisasi berbasis hak akses (_Role-Based Access Control_ - RBAC) dengan format izin `resource.action`, modul manajemen pengguna administrator, dan modul konten publikasi terstruktur (Blog, Article, dan Journal) menggunakan identitas berbasis **ULID (Crockford Base32 26-karakter)**.
 
 Sistem konten mendukung tiga jenis publikasi:
 
@@ -33,6 +33,12 @@ Seluruh konten disimpan dalam satu tabel utama `posts` dan dibedakan berdasarkan
   - **Email Verification**: Verifikasi otomatis pendaftaran akun dan pengiriman ulang (_resend verification_).
   - **Email Change Verification**: Penggantian alamat email dengan verifikasi password lama dan konfirmasi token di email baru.
 - Menyediakan arsitektur **Pluggable Mailer** berbasis driver: `LogMailer` untuk development lokal 100% tanpa konfigurasi/kredensial, dan `ResendMailer` untuk production siap pakai.
+- Menyediakan otorisasi granular **Role-Based Access Control (RBAC)**:
+  - Format izin standar `resource.action` (contoh: `users.read`, `roles.manage`).
+  - Dukungan multi-role per pengguna (_user can have multiple roles_).
+  - _Super Admin Wildcard Bypass (`_`)\* pada permission middleware.
+  - Proteksi sistem terhadap penghapusan/penonaktifan Super Admin terakhir.
+- Menyediakan modul **Admin User Management** (pencarian, filter status, filter role, pagination, mutasi role, dan pembekuan akun).
 - Menyediakan modul **User Management** (profil personal, avatar upload/delete, ganti username, dan status akun).
 - Menyediakan sistem publikasi konten yang sederhana dan terstruktur (kategori, tags JSON, SEO fallback, dan status draft/published).
 - Memastikan seluruh query database type-safe menggunakan **SQLC**.
@@ -45,17 +51,17 @@ Database menggunakan MySQL 8.0+ dengan storage engine InnoDB dan character set `
 
 ### 3.1. `users`
 
-| Column              | Data Type                                         | Constraints                | Description                        |
-| :------------------ | :------------------------------------------------ | :------------------------- | :--------------------------------- |
-| `id`                | CHAR(26)                                          | PK                         | Primary identifier (ULID)          |
-| `username`          | VARCHAR(50)                                       | UNIQUE, NOT NULL           | Nama unik pengguna (3-30 karakter) |
-| `email`             | VARCHAR(255)                                      | UNIQUE, NOT NULL           | Alamat email login                 |
-| `password_hash`     | VARCHAR(255)                                      | NOT NULL                   | Hash password Argon2id             |
-| `role`              | ENUM('admin','user')                              | NOT NULL, DEFAULT 'user'   | Role otorisasi                     |
-| `status`            | ENUM('active','pending_verification','suspended') | NOT NULL, DEFAULT 'active' | Status aktif akun                  |
-| `email_verified_at` | DATETIME                                          | NULLABLE                   | Waktu verifikasi email             |
-| `created_at`        | DATETIME                                          | NOT NULL                   | Waktu dibuat                       |
-| `updated_at`        | DATETIME                                          | NOT NULL                   | Waktu diperbarui                   |
+| Column              | Data Type                                                    | Constraints                | Description                                |
+| :------------------ | :----------------------------------------------------------- | :------------------------- | :----------------------------------------- |
+| `id`                | CHAR(26)                                                     | PK                         | Primary identifier (ULID)                  |
+| `username`          | VARCHAR(50)                                                  | UNIQUE, NOT NULL           | Nama unik pengguna (3-30 karakter)         |
+| `email`             | VARCHAR(255)                                                 | UNIQUE, NOT NULL           | Alamat email login                         |
+| `password_hash`     | VARCHAR(255)                                                 | NOT NULL                   | Hash password Argon2id                     |
+| `role`              | ENUM('admin','user')                                         | NOT NULL, DEFAULT 'user'   | Kolom transisi (dimigrasi ke `user_roles`) |
+| `status`            | ENUM('active','inactive','pending_verification','suspended') | NOT NULL, DEFAULT 'active' | Status aktif akun pengguna                 |
+| `email_verified_at` | DATETIME                                                     | NULLABLE                   | Waktu verifikasi email                     |
+| `created_at`        | DATETIME                                                     | NOT NULL                   | Waktu dibuat                               |
+| `updated_at`        | DATETIME                                                     | NOT NULL                   | Waktu diperbarui                           |
 
 ### 3.2. `user_profiles`
 
@@ -96,7 +102,44 @@ Database menggunakan MySQL 8.0+ dengan storage engine InnoDB dan character set `
 | `expires_at` | DATETIME                                                     | INDEX, NOT NULL            | Waktu kedaluwarsa token                        |
 | `created_at` | DATETIME                                                     | NOT NULL                   | Waktu dibuat                                   |
 
-### 3.5. `posts`
+### 3.5. `roles` (Master Role RBAC)
+
+| Column         | Data Type    | Constraints      | Description                                    |
+| :------------- | :----------- | :--------------- | :--------------------------------------------- |
+| `id`           | CHAR(26)     | PK               | Primary identifier (ULID)                      |
+| `name`         | VARCHAR(50)  | UNIQUE, NOT NULL | Nama unik role: `super_admin`, `admin`, `user` |
+| `display_name` | VARCHAR(100) | NOT NULL         | Label tampilan role: 'Super Administrator'     |
+| `description`  | TEXT         | NULLABLE         | Deskripsi tugas dan wewenang role              |
+| `created_at`   | DATETIME     | NOT NULL         | Waktu dibuat                                   |
+| `updated_at`   | DATETIME     | NOT NULL         | Waktu diperbarui                               |
+
+### 3.6. `permissions` (Master Permission RBAC)
+
+| Column        | Data Type    | Constraints      | Description                            |
+| :------------ | :----------- | :--------------- | :------------------------------------- |
+| `id`          | CHAR(26)     | PK               | Primary identifier (ULID)              |
+| `name`        | VARCHAR(100) | UNIQUE, NOT NULL | Format `resource.action`: `users.read` |
+| `description` | TEXT         | NULLABLE         | Penjelasan fungsional izin             |
+| `created_at`  | DATETIME     | NOT NULL         | Waktu dibuat                           |
+| `updated_at`  | DATETIME     | NOT NULL         | Waktu diperbarui                       |
+
+### 3.7. `role_permissions` (Pivot Role & Permission)
+
+| Column          | Data Type | Constraints                          | Description                 |
+| :-------------- | :-------- | :----------------------------------- | :-------------------------- |
+| `role_id`       | CHAR(26)  | Composite PK, FK -> `roles.id`       | Referensi master role       |
+| `permission_id` | CHAR(26)  | Composite PK, FK -> `permissions.id` | Referensi master permission |
+| `created_at`    | DATETIME  | NOT NULL                             | Waktu penetapan izin        |
+
+### 3.8. `user_roles` (Pivot User & Role / Multi-Role)
+
+| Column       | Data Type | Constraints                    | Description             |
+| :----------- | :-------- | :----------------------------- | :---------------------- |
+| `user_id`    | CHAR(26)  | Composite PK, FK -> `users.id` | Referensi akun pengguna |
+| `role_id`    | CHAR(26)  | Composite PK, FK -> `roles.id` | Referensi master role   |
+| `created_at` | DATETIME  | NOT NULL                       | Waktu penetapan role    |
+
+### 3.9. `posts`
 
 | Column             | Data Type                        | Constraints                      | Description               |
 | :----------------- | :------------------------------- | :------------------------------- | :------------------------ |
@@ -117,7 +160,7 @@ Database menggunakan MySQL 8.0+ dengan storage engine InnoDB dan character set `
 | `created_at`       | DATETIME                         | NOT NULL                         | Tanggal dibuat            |
 | `updated_at`       | DATETIME                         | NOT NULL                         | Tanggal diperbarui        |
 
-### 3.6. `categories`
+### 3.10. `categories`
 
 | Column       | Data Type    | Constraints      | Description               |
 | :----------- | :----------- | :--------------- | :------------------------ |
@@ -127,7 +170,7 @@ Database menggunakan MySQL 8.0+ dengan storage engine InnoDB dan character set `
 | `created_at` | DATETIME     | NOT NULL         | Tanggal dibuat            |
 | `updated_at` | DATETIME     | NOT NULL         | Tanggal diperbarui        |
 
-### 3.7. `post_views`
+### 3.11. `post_views`
 
 | Column       | Data Type       | Constraints                        | Description               |
 | :----------- | :-------------- | :--------------------------------- | :------------------------ |
@@ -163,15 +206,37 @@ Database menggunakan MySQL 8.0+ dengan storage engine InnoDB dan character set `
 - `POST /api/v1/users/email/request-change` (Protected Bearer, Validasi Password Lama & Send Verification to New Email)
 - `GET` & `POST /api/v1/users/email/confirm-change` (Public, Query Param `?token=` atau JSON Body, Update Email & Mark Verified)
 
-### 4.3. Admin Management (`/api/v1/admin`)
+### 4.3. Role & Permission Management (`/api/v1/admin/roles` & `/permissions`)
 
-- `GET /api/v1/admin/posts` & `POST /api/v1/admin/posts`
-- `GET /api/v1/admin/posts/{id}` & `PUT /api/v1/admin/posts/{id}` & `DELETE /api/v1/admin/posts/{id}`
-- `GET /api/v1/admin/categories` & `POST /api/v1/admin/categories`
-- `PUT /api/v1/admin/categories/{id}` & `DELETE /api/v1/admin/categories/{id}`
+- `GET /api/v1/admin/roles` (`roles.read`)
+- `POST /api/v1/admin/roles` (`roles.create`)
+- `GET /api/v1/admin/roles/{id}` (`roles.read`)
+- `PUT /api/v1/admin/roles/{id}` (`roles.update`)
+- `DELETE /api/v1/admin/roles/{id}` (`roles.delete`, Super Admin role dilindungi)
+- `PUT /api/v1/admin/roles/{id}/permissions` (`roles.update`, Sinkronisasi daftar izin role)
+- `GET /api/v1/admin/permissions` (`permissions.read`)
+- `POST /api/v1/admin/permissions` (`permissions.create`)
+- `PUT /api/v1/admin/permissions/{id}` (`permissions.update`)
+- `DELETE /api/v1/admin/permissions/{id}` (`permissions.delete`)
+
+### 4.4. Admin User Management (`/api/v1/admin/users`)
+
+- `GET /api/v1/admin/users` (`users.read`, Search, Filter Status & Role, Pagination)
+- `GET /api/v1/admin/users/{id}` (`users.read`, Detail Akun, Profil, Roles)
+- `PUT /api/v1/admin/users/{id}` (`users.update`, Perbarui Informasi User)
+- `PUT /api/v1/admin/users/{id}/status` (`users.update`, Ubah status `active`/`inactive`/`suspended`)
+- `PUT /api/v1/admin/users/{id}/roles` (`users.update`, Tetapkan multi-role)
+- `DELETE /api/v1/admin/users/{id}` (`users.delete`, Dilindungi safeguard Super Admin terakhir)
+
+### 4.5. Admin Content Management (`/api/v1/admin/posts` & `/categories`)
+
+- `GET /api/v1/admin/posts` & `POST /api/v1/admin/posts` (`posts.create`)
+- `GET /api/v1/admin/posts/{id}` & `PUT /api/v1/admin/posts/{id}` & `DELETE /api/v1/admin/posts/{id}` (`posts.update` / `delete`)
+- `GET /api/v1/admin/categories` & `POST /api/v1/admin/categories` (`categories.manage`)
+- `PUT /api/v1/admin/categories/{id}` & `DELETE /api/v1/admin/categories/{id}` (`categories.manage`)
 - `POST /api/v1/admin/upload` (Upload Cover Image)
 
-### 4.4. Public Content (`/api/v1/posts` & `/api/v1/categories`)
+### 4.6. Public Content (`/api/v1/posts` & `/api/v1/categories`)
 
 - `GET /api/v1/posts` (Filter: `type`, `tag`, `featured`, `page`, `limit`)
 - `GET /api/v1/posts/{slug}` (Detail post published & increment views)

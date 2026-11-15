@@ -20,6 +20,15 @@ Template backend RESTful API modular, tangguh, dan siap pakai (_production-ready
   - **Email Change Verification**: Penggantian email akun dengan autentikasi password saat ini, verifikasi dikirim ke email tujuan baru, dan otomatis terverifikasi setelah tautan diklik.
 - **User & Profile Management**: Pengelolaan data akun (ganti username, status verifikasi) dan profil personal (nama lengkap, bio, telepon, upload & hapus avatar dengan validasi _magic bytes_).
 - **Password Hashing Standar Tertinggi**: Menggunakan **Argon2id** (RFC 9106 / rekomendasi OWASP) untuk keamanan kredensial maksimal.
+- **Granular Role-Based Access Control (RBAC)**:
+  - Multi-role support (`super_admin`, `admin`, `user`, custom roles).
+  - Format permission granular `resource.action` (contoh: `users.read`, `roles.create`, `posts.update`).
+  - Wildcard bypass (`*`) otomatis untuk `super_admin`.
+  - Middleware otorisasi backend: `RoleMiddleware`, `RequireRoles`, dan `PermissionMiddleware`.
+- **Admin User Management & Critical Safeguard**:
+  - Pengelolaan seluruh akun pengguna (pencarian kata kunci, filter role, filter status `active`, `inactive`, `pending_verification`, `suspended`, pagination).
+  - Penetapan multi-role dan pembaruan informasi profil.
+  - **Super Admin Safeguard**: Perlindungan mutlak mencegah penghapusan, penonaktifan (`inactive`/`suspended`), atau pencabutan role dari Super Admin aktif terakhir (mengembalikan HTTP 403 Forbidden).
 - **Proteksi Brute-Force**: Dilengkapi rate limiter `10 request/menit per IP` pada endpoint registrasi, login, forgot password, dan reset password.
 - **Background Periodic Worker**: Membersihkan refresh token dan auth token kedaluwarsa secara otomatis setiap 24 jam.
 - **Modul CRUD Referensi**: Modul `posts` dan `categories` lengkap sebagai cetak biru (_blueprint_) pembuatan fitur CRUD di masa mendatang.
@@ -78,14 +87,20 @@ Database MySQL 8.0+
 │   ├── embed.go                        # Embed asset migrasi SQL ke binary Go
 │   ├── migrations/                     # File migrasi DDL golang-migrate (UP/DOWN)
 │   │   ├── 000001_init_schema.up.sql
-│   │   └── 000001_init_schema.down.sql
+│   │   ├── 000001_init_schema.down.sql
+│   │   ├── 000002_rbac_and_admin.up.sql
+│   │   └── 000002_rbac_and_admin.down.sql
 │   └── queries/                        # Query SQL mentah untuk sqlc generator
 │       ├── auth_tokens.sql
 │       ├── categories.sql
+│       ├── permissions.sql
 │       ├── post_views.sql
 │       ├── posts.sql
 │       ├── refresh_tokens.sql
+│       ├── role_permissions.sql
+│       ├── roles.sql
 │       ├── user_profiles.sql
+│       ├── user_roles.sql
 │       └── users.sql
 ├── docs/
 │   ├── ref/
@@ -97,14 +112,14 @@ Database MySQL 8.0+
 ├── internal/                           # Paket privat (hanya bisa diimpor modul ini)
 │   ├── config/                         # Loader konfigurasi dari .env / OS env
 │   ├── database/                       # MySQL pool, migrate runner, & idempotent seeder
-│   ├── handlers/                       # HTTP Handlers (Auth, Users, Admin, Public)
+│   ├── handlers/                       # HTTP Handlers (Auth, Users, Admin, Public, Roles, Admin Users)
 │   ├── mailer/                         # Pluggable Mailer (LogMailer & ResendMailer)
-│   ├── middleware/                     # JWT Auth, Role Guard, CORS middleware
+│   ├── middleware/                     # JWT Auth, Role Guard, Permission Guard, CORS middleware
 │   ├── models/                         # Domain entities, input DTOs, & payload validators
 │   ├── repository/                     # Repository interfaces & sqlc wrappers
 │   │   └── sqlc/                       # Kode Go hasil generate otomatis sqlc
 │   ├── routes/                         # Pendaftaran rute Chi & static file uploads
-│   ├── service/                        # Business logic layer & interfaces
+│   ├── service/                        # Business logic layer (Auth, User, RBAC, AdminUser, Content)
 │   └── utils/                          # ULID, JWT, HashToken, JSON response helpers
 ├── .air.toml                           # Konfigurasi live-reload Air
 ├── .env.example                        # Template environment variables
@@ -123,9 +138,13 @@ Semua entitas menggunakan tipe `CHAR(26)` untuk Primary Key dan Foreign Key:
 2. **`user_profiles`**: Profil personal (`user_id` PK & FK, `full_name`, `bio`, `phone_number`, `avatar_url`, `created_at`, `updated_at`).
 3. **`refresh_tokens`**: Stateful session tracker (`id`, `user_id`, `token_hash`, `token_family`, `is_revoked`, `expires_at`, `user_agent`, `ip_address`).
 4. **`auth_tokens`**: Token sementara untuk verifikasi email, reset password, dan ubah email (`id`, `user_id`, `token_hash`, `token_type`, `payload`, `is_used`, `expires_at`, `created_at`).
-5. **`categories`**: Modul referensi kategori konten (`id`, `name`, `slug`).
-6. **`posts`**: Modul referensi konten artikel/blog (`id`, `type`, `title`, `slug`, `content`, `category_id`, `tags`, `status`, `published_at`).
-7. **`post_views`**: Modul statistik views (`id`, `post_id`, `views`).
+5. **`roles`**: Master peran pengguna RBAC (`id`, `name`, `display_name`, `description`). Default: `super_admin`, `admin`, `user`.
+6. **`permissions`**: Master izin/hak akses granular sistem dengan pola `resource.action` (`id`, `name`, `description`).
+7. **`role_permissions`**: Pivot relasi many-to-many role ke permissions (`role_id`, `permission_id`).
+8. **`user_roles`**: Pivot relasi many-to-many user ke roles / dukungan multi-role (`user_id`, `role_id`).
+9. **`categories`**: Modul referensi kategori konten (`id`, `name`, `slug`).
+10. **`posts`**: Modul referensi konten artikel/blog (`id`, `type`, `title`, `slug`, `content`, `category_id`, `tags`, `status`, `published_at`).
+11. **`post_views`**: Modul statistik views (`id`, `post_id`, `views`).
 
 ---
 
@@ -160,17 +179,42 @@ Semua entitas menggunakan tipe `CHAR(26)` untuk Primary Key dan Foreign Key:
 
 ### 5.3. Admin & Content Management (`/api/v1/admin`)
 
-_Hanya dapat diakses oleh akun dengan `role = 'admin'`._
+_Dapat diakses oleh akun dengan role `admin` atau `super_admin` sesuai permission terdaftar._
 
-| Method                   | Endpoint                        | Deskripsi                                                |
-| :----------------------- | :------------------------------ | :------------------------------------------------------- |
-| `GET` / `POST`           | `/api/v1/admin/posts`           | List seluruh post (draft & published) / Tambah post baru |
-| `GET` / `PUT` / `DELETE` | `/api/v1/admin/posts/{id}`      | Detail / Perbarui / Hapus post berdasarkan ULID          |
-| `GET` / `POST`           | `/api/v1/admin/categories`      | List seluruh kategori / Tambah kategori baru             |
-| `PUT` / `DELETE`         | `/api/v1/admin/categories/{id}` | Perbarui / Hapus kategori berdasarkan ULID               |
-| `POST`                   | `/api/v1/admin/upload`          | Upload file gambar umum ke direktori lokal               |
+| Method                   | Endpoint                        | Permission Required  | Deskripsi                                                |
+| :----------------------- | :------------------------------ | :------------------- | :------------------------------------------------------- |
+| `GET` / `POST`           | `/api/v1/admin/posts`           | `posts.read/create`  | List seluruh post (draft & published) / Tambah post baru |
+| `GET` / `PUT` / `DELETE` | `/api/v1/admin/posts/{id}`      | `posts.read/upd/del` | Detail / Perbarui / Hapus post berdasarkan ULID          |
+| `GET` / `POST`           | `/api/v1/admin/categories`      | `categories.manage`  | List seluruh kategori / Tambah kategori baru             |
+| `PUT` / `DELETE`         | `/api/v1/admin/categories/{id}` | `categories.manage`  | Perbarui / Hapus kategori berdasarkan ULID               |
+| `POST`                   | `/api/v1/admin/upload`          | Admin                | Upload file gambar umum ke direktori lokal               |
 
-### 5.4. Public Content (`/api/v1/posts` & `/api/v1/categories`)
+### 5.4. RBAC Management (`/api/v1/admin/roles` & `/api/v1/admin/permissions`)
+
+_Super Admin memiliki akses wildcard bypass (`*`) otomatis untuk seluruh endpoint._
+
+| Method                   | Endpoint                               | Permission Required  | Deskripsi                                           |
+| :----------------------- | :------------------------------------- | :------------------- | :-------------------------------------------------- |
+| `GET` / `POST`           | `/api/v1/admin/roles`                  | `roles.read/create`  | Melihat daftar role / Membuat role baru             |
+| `GET` / `PUT` / `DELETE` | `/api/v1/admin/roles/{id}`             | `roles.read/upd/del` | Detail / Perbarui / Hapus role kustom               |
+| `PUT`                    | `/api/v1/admin/roles/{id}/permissions` | `roles.update`       | Sinkronisasi permission yang dimiliki role          |
+| `GET` / `POST`           | `/api/v1/admin/permissions`            | `permissions.r/c`    | Melihat daftar permission / Membuat permission baru |
+| `GET` / `PUT` / `DELETE` | `/api/v1/admin/permissions/{id}`       | `permissions.r/u/d`  | Detail / Perbarui / Hapus permission                |
+
+### 5.5. Admin User Management (`/api/v1/admin/users`)
+
+_Dilengkapi **Super Admin Safeguard**: mencegah penghapusan, penonaktifan, atau demosi Super Admin aktif terakhir._
+
+| Method   | Endpoint                          | Permission Required | Deskripsi                                                                        |
+| :------- | :-------------------------------- | :------------------ | :------------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/admin/users`             | `users.read`        | Daftar seluruh pengguna (filter: search, status, role, pagination)               |
+| `GET`    | `/api/v1/admin/users/{id}`        | `users.read`        | Detail lengkap pengguna (biodata profil dan multi-role)                          |
+| `PUT`    | `/api/v1/admin/users/{id}`        | `users.update`      | Perbarui informasi pengguna (username, email, biodata profil)                    |
+| `PUT`    | `/api/v1/admin/users/{id}/status` | `users.update`      | Mengubah status akun (`active`, `inactive`, `pending_verification`, `suspended`) |
+| `PUT`    | `/api/v1/admin/users/{id}/roles`  | `users.update`      | Menetapkan multi-role ke pengguna                                                |
+| `DELETE` | `/api/v1/admin/users/{id}`        | `users.delete`      | Menghapus pengguna dari sistem                                                   |
+
+### 5.6. Public Content (`/api/v1/posts` & `/api/v1/categories`)
 
 Endpoint publik read-only tanpa autentikasi:
 

@@ -8,13 +8,15 @@ import (
 
 // Allowed user roles
 const (
-	RoleAdmin = "admin"
-	RoleUser  = "user"
+	RoleSuperAdmin = "super_admin"
+	RoleAdmin      = "admin"
+	RoleUser       = "user"
 )
 
 // Allowed user account statuses
 const (
 	StatusActive              = "active"
+	StatusInactive            = "inactive"
 	StatusPendingVerification = "pending_verification"
 	StatusSuspended           = "suspended"
 )
@@ -26,6 +28,7 @@ type User struct {
 	Email           string     `json:"email"`
 	PasswordHash    string     `json:"-"`
 	Role            string     `json:"role"`
+	Roles           []string   `json:"roles,omitempty"`
 	Status          string     `json:"status"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
@@ -49,6 +52,7 @@ type UserWithProfile struct {
 	Username        string     `json:"username"`
 	Email           string     `json:"email"`
 	Role            string     `json:"role"`
+	Roles           []string   `json:"roles,omitempty"`
 	Status          string     `json:"status"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
