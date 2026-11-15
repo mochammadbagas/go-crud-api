@@ -1,28 +1,31 @@
 package handlers
 
 import (
-	"crypto/rand"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
+	"github.com/mochammadbagas/go-crud-api/internal/storage"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 type AdminUploadHandler struct {
-	cfg *config.Config
+	cfg     *config.Config
+	storage storage.Storage
 }
 
-func NewAdminUploadHandler(cfg *config.Config) *AdminUploadHandler {
-	return &AdminUploadHandler{cfg: cfg}
+func NewAdminUploadHandler(cfg *config.Config, store storage.Storage) *AdminUploadHandler {
+	return &AdminUploadHandler{
+		cfg:     cfg,
+		storage: store,
+	}
 }
 
-// Upload handles POST /api/v1/admin/upload for storing cover images locally
+// Upload handles POST /api/v1/admin/upload for storing cover images via pluggable storage (Local/R2/S3)
 func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// 10 MB max memory
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
@@ -77,33 +80,16 @@ func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create upload directory if it does not exist
-	if err := os.MkdirAll(h.cfg.UploadDir, 0755); err != nil {
-		utils.Error(w, http.StatusInternalServerError, "gagal menyiapkan direktori penyimpanan")
-		return
-	}
+	// Rename nama file keseluruhan menggunakan ULID murni (tidak menyisakan nama file asal demi keamanan & keunikan)
+	uniqueName := fmt.Sprintf("%s%s", utils.NewULID(), ext)
 
-	// Generate safe, unique filename
-	randomBytes := make([]byte, 8)
-	_, _ = rand.Read(randomBytes)
-	uniqueName := fmt.Sprintf("%x_%s%s", randomBytes, utils.GenerateSlug(strings.TrimSuffix(header.Filename, ext)), ext)
-	dstPath := filepath.Join(h.cfg.UploadDir, uniqueName)
-
-	dst, err := os.Create(dstPath)
+	fileURL, err := h.storage.Upload(r.Context(), file, uniqueName, mimeType)
 	if err != nil {
-		slog.Error("gagal membuat file upload", slog.String("path", dstPath), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menyimpan file ke disk")
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		slog.Error("gagal menyalin konten file upload", slog.String("path", dstPath), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menyalin isi file")
+		slog.Error("gagal menyimpan file upload", slog.String("filename", uniqueName), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "gagal menyimpan file")
 		return
 	}
 
-	fileURL := "/uploads/" + uniqueName
 	utils.JSON(w, http.StatusCreated, map[string]string{
 		"url":      fileURL,
 		"filename": uniqueName,

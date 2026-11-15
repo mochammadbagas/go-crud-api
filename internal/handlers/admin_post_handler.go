@@ -9,6 +9,7 @@ import (
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
+	"github.com/mochammadbagas/go-crud-api/internal/storage"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -16,10 +17,14 @@ import (
 
 type AdminPostHandler struct {
 	postSvc service.PostServiceInterface
+	storage storage.Storage
 }
 
-func NewAdminPostHandler(postSvc service.PostServiceInterface) *AdminPostHandler {
-	return &AdminPostHandler{postSvc: postSvc}
+func NewAdminPostHandler(postSvc service.PostServiceInterface, store storage.Storage) *AdminPostHandler {
+	return &AdminPostHandler{
+		postSvc: postSvc,
+		storage: store,
+	}
 }
 
 // List handles GET /api/v1/admin/posts
@@ -131,6 +136,12 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Deteksi cover image lama jika ada sebelum update
+	var oldCoverURL string
+	if existingPost, err := h.postSvc.GetByID(r.Context(), id); err == nil && existingPost != nil && existingPost.CoverImage != nil {
+		oldCoverURL = *existingPost.CoverImage
+	}
+
 	post, err := h.postSvc.Update(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
@@ -149,6 +160,19 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-cleanup: Hapus cover image lama dari storage jika diganti atau dikosongkan
+	if oldCoverURL != "" {
+		newCoverURL := ""
+		if post != nil && post.CoverImage != nil {
+			newCoverURL = *post.CoverImage
+		}
+		if newCoverURL != oldCoverURL {
+			if delErr := h.storage.Delete(r.Context(), oldCoverURL); delErr != nil {
+				slog.Warn("Gagal menghapus cover image lama dari storage saat update post", slog.String("old_cover", oldCoverURL), slog.Any("error", delErr))
+			}
+		}
+	}
+
 	utils.JSON(w, http.StatusOK, post)
 }
 
@@ -160,6 +184,12 @@ func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ambil post untuk mendapatkan URL cover image sebelum dihapus
+	var coverImageURL string
+	if post, err := h.postSvc.GetByID(r.Context(), id); err == nil && post != nil && post.CoverImage != nil {
+		coverImageURL = *post.CoverImage
+	}
+
 	if err := h.postSvc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
 			utils.Error(w, http.StatusNotFound, err.Error())
@@ -168,6 +198,13 @@ func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		slog.Error("gagal menghapus konten", slog.String("id", id), slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "gagal menghapus konten")
 		return
+	}
+
+	// Auto-cleanup: Hapus file cover image dari storage jika database berhasil dihapus
+	if coverImageURL != "" {
+		if delErr := h.storage.Delete(r.Context(), coverImageURL); delErr != nil {
+			slog.Warn("Gagal menghapus cover image dari storage saat hapus post", slog.String("cover_image", coverImageURL), slog.Any("error", delErr))
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)

@@ -4,13 +4,13 @@
 **Module:** Core Auth, Account Recovery, Pluggable Mailer, Granular RBAC, Admin User Management, & Content Modules  
 **Technology:** Go (Golang), MySQL 8.0+, ULID, JWT HS256, Pluggable Mailer (Log & Resend), RBAC Middleware  
 **Document Type:** Technical Requirements & Schema Specification  
-**Version:** 2.2 (Completed: Granular RBAC & Admin User Management)
+**Version:** 2.3 (Completed: Pluggable Storage Local & Cloudflare R2 / AWS S3)
 
 ---
 
 ## 1. Overview
 
-Sistem backend RESTful API modular yang menggabungkan sistem autentikasi modern (JWT + Refresh Token Rotation), pemulihan akun & verifikasi email dengan arsitektur _pluggable mailer_ (LogMailer & Resend), otorisasi berbasis hak akses (_Role-Based Access Control_ - RBAC) dengan format izin `resource.action`, modul manajemen pengguna administrator, dan modul konten publikasi terstruktur (Blog, Article, dan Journal) menggunakan identitas berbasis **ULID (Crockford Base32 26-karakter)**.
+Sistem backend RESTful API modular yang menggabungkan sistem autentikasi modern (JWT + Refresh Token Rotation), pemulihan akun & verifikasi email dengan arsitektur _pluggable mailer_ (LogMailer & Resend), arsitektur _pluggable storage_ (LocalStorage & Cloudflare R2 / AWS S3), otorisasi berbasis hak akses (_Role-Based Access Control_ - RBAC) dengan format izin `resource.action`, modul manajemen pengguna administrator, dan modul konten publikasi terstruktur (Blog, Article, dan Journal) menggunakan identitas berbasis **ULID (Crockford Base32 26-karakter)**.
 
 Sistem konten mendukung tiga jenis publikasi:
 
@@ -33,6 +33,7 @@ Seluruh konten disimpan dalam satu tabel utama `posts` dan dibedakan berdasarkan
   - **Email Verification**: Verifikasi otomatis pendaftaran akun dan pengiriman ulang (_resend verification_).
   - **Email Change Verification**: Penggantian alamat email dengan verifikasi password lama dan konfirmasi token di email baru.
 - Menyediakan arsitektur **Pluggable Mailer** berbasis driver: `LogMailer` untuk development lokal 100% tanpa konfigurasi/kredensial, dan `ResendMailer` untuk production siap pakai.
+- Menyediakan arsitektur **Pluggable Storage** berbasis driver: `LocalStorage` untuk development lokal (folder `./uploads`) dan `S3Storage` untuk Cloudflare R2 / AWS S3 / MinIO siap pakai, lengkap dengan penamaan file baru 100% menggunakan ULID murni (`CHAR(26)`) serta **mekanisme Auto-Cleanup** (otomatis membersihkan file lama dari storage saat pergantian avatar, penghapusan avatar, update/delete cover artikel, dan penghapusan pengguna).
 - Menyediakan otorisasi granular **Role-Based Access Control (RBAC)**:
   - Format izin standar `resource.action` (contoh: `users.read`, `roles.manage`).
   - Dukungan multi-role per pengguna (_user can have multiple roles_).

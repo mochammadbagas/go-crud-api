@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/routes"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
+	"github.com/mochammadbagas/go-crud-api/internal/storage"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/alexedwards/argon2id"
@@ -769,15 +771,19 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 		UpdatedAt: now,
 	})
 
+	tempUploadDir := t.TempDir()
+	cfg.UploadDir = tempUploadDir
+	testStorage := storage.NewLocalStorage(tempUploadDir)
+
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
-	userHandler := handlers.NewUserHandler(userSvc, cfg)
-	adminPostHandler := handlers.NewAdminPostHandler(postSvc)
+	userHandler := handlers.NewUserHandler(userSvc, cfg, testStorage)
+	adminPostHandler := handlers.NewAdminPostHandler(postSvc, testStorage)
 	adminCategoryHandler := handlers.NewAdminCategoryHandler(categorySvc)
-	adminUploadHandler := handlers.NewAdminUploadHandler(cfg)
+	adminUploadHandler := handlers.NewAdminUploadHandler(cfg, testStorage)
 	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
 	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
 	roleHandler := handlers.NewRoleHandler(rbacSvc)
-	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc)
+	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc, testStorage)
 
 	router := routes.Setup(
 		cfg,
@@ -980,6 +986,148 @@ func TestUploadEndpoints(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Errorf("expected 201 for admin upload, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	var uploadResp map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &uploadResp); err != nil {
+		t.Fatalf("failed to decode upload response: %v", err)
+	}
+
+	// Verify that filename is completely renamed without preserving original filename
+	if strings.Contains(uploadResp["filename"], "test") {
+		t.Errorf("uploaded filename should be completely renamed and not contain 'test': %s", uploadResp["filename"])
+	}
+
+	// Test user avatar upload with complete renaming
+	avatarBody := &bytes.Buffer{}
+	avatarWriter := multipart.NewWriter(avatarBody)
+	avatarPart, _ := avatarWriter.CreateFormFile("avatar", "my-personal-avatar.png")
+	_, _ = avatarPart.Write(pngHeader)
+	_, _ = avatarPart.Write(make([]byte, 50))
+	avatarWriter.Close()
+
+	avatarReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/avatar", avatarBody)
+	avatarReq.Header.Set("Content-Type", avatarWriter.FormDataContentType())
+	avatarReq.Header.Set("Authorization", "Bearer "+adminToken)
+	avatarRec := httptest.NewRecorder()
+	router.ServeHTTP(avatarRec, avatarReq)
+	if avatarRec.Code != http.StatusOK {
+		t.Errorf("expected 200 for user avatar upload, got %d (%s)", avatarRec.Code, avatarRec.Body.String())
+	}
+
+	var avatarResp map[string]string
+	_ = json.Unmarshal(avatarRec.Body.Bytes(), &avatarResp)
+	avatar1URL := avatarResp["avatar_url"]
+	if strings.Contains(avatar1URL, "personal") {
+		t.Errorf("avatar url should be completely renamed without preserving original filename: %s", avatar1URL)
+	}
+
+	// 1. Verify avatar 1 is accessible
+	checkReq1 := httptest.NewRequest(http.MethodGet, avatar1URL, nil)
+	checkRec1 := httptest.NewRecorder()
+	router.ServeHTTP(checkRec1, checkReq1)
+	if checkRec1.Code != http.StatusOK {
+		t.Fatalf("expected 200 for newly uploaded avatar1, got %d", checkRec1.Code)
+	}
+
+	// 2. Upload avatar 2 (replacing avatar 1)
+	avatarBody2 := &bytes.Buffer{}
+	avatarWriter2 := multipart.NewWriter(avatarBody2)
+	avatarPart2, _ := avatarWriter2.CreateFormFile("avatar", "new-avatar.png")
+	_, _ = avatarPart2.Write(pngHeader)
+	_, _ = avatarPart2.Write(make([]byte, 60))
+	avatarWriter2.Close()
+
+	avatarReq2 := httptest.NewRequest(http.MethodPost, "/api/v1/users/avatar", avatarBody2)
+	avatarReq2.Header.Set("Content-Type", avatarWriter2.FormDataContentType())
+	avatarReq2.Header.Set("Authorization", "Bearer "+adminToken)
+	avatarRec2 := httptest.NewRecorder()
+	router.ServeHTTP(avatarRec2, avatarReq2)
+	if avatarRec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for user avatar replacement, got %d", avatarRec2.Code)
+	}
+
+	var avatarResp2 map[string]string
+	_ = json.Unmarshal(avatarRec2.Body.Bytes(), &avatarResp2)
+	avatar2URL := avatarResp2["avatar_url"]
+
+	// Auto-cleanup check: avatar 1 should now be deleted from storage (404)
+	checkReq1Again := httptest.NewRequest(http.MethodGet, avatar1URL, nil)
+	checkRec1Again := httptest.NewRecorder()
+	router.ServeHTTP(checkRec1Again, checkReq1Again)
+	if checkRec1Again.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for old avatar1 after replacement (auto-cleanup), got %d", checkRec1Again.Code)
+	}
+
+	// Avatar 2 should exist (200)
+	checkReq2 := httptest.NewRequest(http.MethodGet, avatar2URL, nil)
+	checkRec2 := httptest.NewRecorder()
+	router.ServeHTTP(checkRec2, checkReq2)
+	if checkRec2.Code != http.StatusOK {
+		t.Errorf("expected 200 for avatar2, got %d", checkRec2.Code)
+	}
+
+	// 3. Delete avatar via DELETE /api/v1/users/avatar
+	delAvatarReq := httptest.NewRequest(http.MethodDelete, "/api/v1/users/avatar", nil)
+	delAvatarReq.Header.Set("Authorization", "Bearer "+adminToken)
+	delAvatarRec := httptest.NewRecorder()
+	router.ServeHTTP(delAvatarRec, delAvatarReq)
+	if delAvatarRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for DELETE avatar, got %d", delAvatarRec.Code)
+	}
+
+	// Auto-cleanup check: avatar 2 should now be deleted from storage (404)
+	checkReq2Again := httptest.NewRequest(http.MethodGet, avatar2URL, nil)
+	checkRec2Again := httptest.NewRecorder()
+	router.ServeHTTP(checkRec2Again, checkReq2Again)
+	if checkRec2Again.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for avatar2 after DELETE (auto-cleanup), got %d", checkRec2Again.Code)
+	}
+
+	// 4. Test Post Cover Image Auto-cleanup on Delete Post
+	coverImageURL := uploadResp["url"]
+	createPostPayload := fmt.Sprintf(`{
+		"type": "article",
+		"title": "Post With Cover",
+		"slug": "post-with-cover",
+		"content": "Article body content",
+		"cover_image": "%s",
+		"status": "published"
+	}`, coverImageURL)
+	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/posts", bytes.NewBufferString(createPostPayload))
+	postReq.Header.Set("Content-Type", "application/json")
+	postReq.Header.Set("Authorization", "Bearer "+adminToken)
+	postRec := httptest.NewRecorder()
+	router.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for create post, got %d (%s)", postRec.Code, postRec.Body.String())
+	}
+	var createdPost models.Post
+	_ = json.Unmarshal(postRec.Body.Bytes(), &createdPost)
+
+	// Verify cover image exists before post deletion
+	coverReq := httptest.NewRequest(http.MethodGet, coverImageURL, nil)
+	coverRec := httptest.NewRecorder()
+	router.ServeHTTP(coverRec, coverReq)
+	if coverRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for post cover image, got %d", coverRec.Code)
+	}
+
+	// Delete post -> cover image should be auto-cleaned up
+	delPostReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/posts/"+createdPost.ID, nil)
+	delPostReq.Header.Set("Authorization", "Bearer "+adminToken)
+	delPostRec := httptest.NewRecorder()
+	router.ServeHTTP(delPostRec, delPostReq)
+	if delPostRec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for delete post, got %d", delPostRec.Code)
+	}
+
+	// Auto-cleanup check: cover image must be deleted from storage (404)
+	coverReqAfterDel := httptest.NewRequest(http.MethodGet, coverImageURL, nil)
+	coverRecAfterDel := httptest.NewRecorder()
+	router.ServeHTTP(coverRecAfterDel, coverReqAfterDel)
+	if coverRecAfterDel.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for post cover image after delete post (auto-cleanup), got %d", coverRecAfterDel.Code)
 	}
 }
 

@@ -6,22 +6,23 @@ Dokumen ini adalah **cetak biru (_blueprint_) arsitektur resmi** dari **Go REST 
 
 ## 1. Tech Stack & Dependensi Inti
 
-| Komponen                   | Pilihan Standar                        | Catatan Penggunaan                                                                 |
-| :------------------------- | :------------------------------------- | :--------------------------------------------------------------------------------- |
-| **Bahasa**                 | Go `1.25+`                             | Menggunakan pustaka standar modern (`log/slog`, `embed`, `net/http`)               |
-| **HTTP Router**            | `github.com/go-chi/chi/v5`             | Ringan, idiomatik `net/http`, kompatibel penuh dengan `http.Handler`               |
-| **Identitas (ID)**         | `github.com/oklog/ulid/v2`             | ULID 26-karakter (`CHAR(26)`), aman dari URL enumeration, terurut kronologis       |
-| **Autentikasi**            | `github.com/golang-jwt/jwt/v5`         | Access Token stateless HS256 + Refresh Token Rotation (RTR)                        |
-| **Otorisasi (RBAC)**       | RBAC Middleware + Wildcard Bypass      | Multi-role, pola `resource.action`, Super Admin wildcard (`*`), safeguard proteksi |
-| **Pemulihan & Verifikasi** | One-time token SHA-256 hash            | Token acak 32-byte (TTL 15m/1h/24h) untuk reset password, verifikasi & ganti email |
-| **Pluggable Mailer**       | Adapter Pattern (`internal/mailer`)    | `LogMailer` untuk dev lokal (terminal) & `ResendMailer` untuk production           |
-| **Password Hashing**       | `github.com/alexedwards/argon2id`      | Standar hashing kredensial modern (RFC 9106)                                       |
-| **Rate Limiter**           | `github.com/go-chi/httprate`           | Proteksi endpoint sensitif (login/register/forgot) berbasis IP (10 req/menit)      |
-| **CORS**                   | `github.com/go-chi/cors`               | Konfigurasi origin via environment variable                                        |
-| **Database Driver**        | `database/sql` + `go-sql-driver/mysql` | Kontrol penuh atas connection pool & transaksi                                     |
-| **SQL Codegen**            | `sqlc` (`sqlc.yaml`)                   | Type-safe Go code dari query SQL murni tanpa overhead ORM                          |
-| **Migrasi DB**             | `github.com/golang-migrate/migrate/v4` | File SQL di-embed ke binary via `//go:embed` dengan dukungan flag `-fresh`         |
-| **Live Reload**            | Air (`.air.toml`)                      | Auto-rebuild saat development                                                      |
+| Komponen                   | Pilihan Standar                        | Catatan Penggunaan                                                                       |
+| :------------------------- | :------------------------------------- | :--------------------------------------------------------------------------------------- |
+| **Bahasa**                 | Go `1.25+`                             | Menggunakan pustaka standar modern (`log/slog`, `embed`, `net/http`)                     |
+| **HTTP Router**            | `github.com/go-chi/chi/v5`             | Ringan, idiomatik `net/http`, kompatibel penuh dengan `http.Handler`                     |
+| **Identitas (ID)**         | `github.com/oklog/ulid/v2`             | ULID 26-karakter (`CHAR(26)`), aman dari URL enumeration, terurut kronologis             |
+| **Autentikasi**            | `github.com/golang-jwt/jwt/v5`         | Access Token stateless HS256 + Refresh Token Rotation (RTR)                              |
+| **Otorisasi (RBAC)**       | RBAC Middleware + Wildcard Bypass      | Multi-role, pola `resource.action`, Super Admin wildcard (`*`), safeguard proteksi       |
+| **Pemulihan & Verifikasi** | One-time token SHA-256 hash            | Token acak 32-byte (TTL 15m/1h/24h) untuk reset password, verifikasi & ganti email       |
+| **Pluggable Mailer**       | Adapter Pattern (`internal/mailer`)    | `LogMailer` untuk dev lokal (terminal) & `ResendMailer` untuk production                 |
+| **Pluggable Storage**      | Adapter Pattern (`internal/storage`)   | `LocalStorage` (dev lokal) & `S3Storage` (Cloudflare R2 / AWS S3 / MinIO via AWS SDK v2) |
+| **Password Hashing**       | `github.com/alexedwards/argon2id`      | Standar hashing kredensial modern (RFC 9106)                                             |
+| **Rate Limiter**           | `github.com/go-chi/httprate`           | Proteksi endpoint sensitif (login/register/forgot) berbasis IP (10 req/menit)            |
+| **CORS**                   | `github.com/go-chi/cors`               | Konfigurasi origin via environment variable                                              |
+| **Database Driver**        | `database/sql` + `go-sql-driver/mysql` | Kontrol penuh atas connection pool & transaksi                                           |
+| **SQL Codegen**            | `sqlc` (`sqlc.yaml`)                   | Type-safe Go code dari query SQL murni tanpa overhead ORM                                |
+| **Migrasi DB**             | `github.com/golang-migrate/migrate/v4` | File SQL di-embed ke binary via `//go:embed` dengan dukungan flag `-fresh`               |
+| **Live Reload**            | Air (`.air.toml`)                      | Auto-rebuild saat development                                                            |
 
 ---
 
@@ -96,6 +97,12 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │   │   ├── admin_user_service.go       # Logika user management & critical safeguard Super Admin terakhir
 │   │   ├── <domain>_service.go         # Domain service lainnya (posts, categories, markdown)
 │   │   └── *_test.go                   # Unit test business logic dengan mock repository
+│   ├── storage/
+│   │   ├── storage.go                  # Interface Storage abstraksi penyimpanan file (Upload & Delete)
+│   │   ├── local.go                    # Driver lokal dev (simpan ke ./uploads dengan path traversal guard)
+│   │   ├── s3.go                       # Driver cloud S3/R2 via AWS SDK v2 (kompatibel penuh Cloudflare R2 & AWS S3)
+│   │   ├── factory.go                  # Factory konstruktor memilih driver dengan fallback aman ke LocalStorage
+│   │   └── storage_test.go             # Unit test driver local & factory fallback
 │   └── utils/
 │       ├── ulid.go                     # Generator & validator ULID 26-karakter
 │       ├── jwt.go                      # Generate/Validate JWT access token (roles claims) & SHA-256 token hashing

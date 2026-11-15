@@ -52,8 +52,12 @@ func Setup(
 
 	// Static file server for local image/avatar uploads
 	_ = os.MkdirAll(cfg.UploadDir, 0755)
-	workDir, _ := os.Getwd()
-	filesDir := http.Dir(filepath.Join(workDir, cfg.UploadDir))
+	uploadPath := cfg.UploadDir
+	if !filepath.IsAbs(uploadPath) {
+		workDir, _ := os.Getwd()
+		uploadPath = filepath.Join(workDir, uploadPath)
+	}
+	filesDir := http.Dir(uploadPath)
 	fileServer(r, "/uploads", filesDir)
 
 	// SEO / URL Structure aliases

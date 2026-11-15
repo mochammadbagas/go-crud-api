@@ -1,14 +1,12 @@
 package handlers
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,18 +14,21 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
+	"github.com/mochammadbagas/go-crud-api/internal/storage"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 type UserHandler struct {
 	userSvc service.UserServiceInterface
 	cfg     *config.Config
+	storage storage.Storage
 }
 
-func NewUserHandler(userSvc service.UserServiceInterface, cfg *config.Config) *UserHandler {
+func NewUserHandler(userSvc service.UserServiceInterface, cfg *config.Config, store storage.Storage) *UserHandler {
 	return &UserHandler{
 		userSvc: userSvc,
 		cfg:     cfg,
+		storage: store,
 	}
 }
 
@@ -133,36 +134,39 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusInternalServerError, "gagal memproses stream file")
 			return
 		}
-	}
-
-	if err := os.MkdirAll(h.cfg.UploadDir, 0755); err != nil {
-		utils.Error(w, http.StatusInternalServerError, "gagal menyiapkan direktori penyimpanan")
+	} else {
+		utils.Error(w, http.StatusInternalServerError, "stream file tidak mendukung seek")
 		return
 	}
 
-	randomBytes := make([]byte, 8)
-	_, _ = rand.Read(randomBytes)
-	uniqueName := fmt.Sprintf("avatar_%s_%x%s", userID, randomBytes, ext)
-	dstPath := filepath.Join(h.cfg.UploadDir, uniqueName)
+	// Deteksi avatar lama jika ada sebelum mengunggah avatar baru
+	var oldAvatarURL string
+	if profile, err := h.userSvc.GetProfile(r.Context(), userID); err == nil && profile != nil && profile.AvatarURL != nil {
+		oldAvatarURL = *profile.AvatarURL
+	}
 
-	dst, err := os.Create(dstPath)
+	// Rename nama file keseluruhan menggunakan ULID murni (tidak menyisakan nama file asal)
+	uniqueName := fmt.Sprintf("avatar_%s%s", utils.NewULID(), ext)
+
+	avatarURL, err := h.storage.Upload(r.Context(), file, uniqueName, mimeType)
 	if err != nil {
-		slog.Error("gagal membuat file avatar", slog.String("path", dstPath), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menyimpan avatar ke disk")
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		slog.Error("gagal menyalin konten avatar", slog.String("path", dstPath), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menyalin avatar")
+		slog.Error("gagal menyimpan avatar pengguna", slog.String("filename", uniqueName), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "gagal menyimpan avatar")
 		return
 	}
 
-	avatarURL := "/uploads/" + uniqueName
 	if err := h.userSvc.UpdateAvatar(r.Context(), userID, avatarURL); err != nil {
+		// Rollback file yang baru diunggah jika database gagal update
+		_ = h.storage.Delete(r.Context(), avatarURL)
 		utils.Error(w, http.StatusInternalServerError, "gagal memperbarui avatar pengguna")
 		return
+	}
+
+	// Auto-cleanup: Hapus avatar lama dari storage agar tidak menjadi orphaned file
+	if oldAvatarURL != "" && oldAvatarURL != avatarURL {
+		if delErr := h.storage.Delete(r.Context(), oldAvatarURL); delErr != nil {
+			slog.Warn("Gagal menghapus avatar lama dari storage saat pembaruan", slog.String("old_avatar", oldAvatarURL), slog.Any("error", delErr))
+		}
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
@@ -179,9 +183,22 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ambil profil saat ini untuk mendapatkan URL avatar yang akan dihapus dari storage
+	var currentAvatarURL string
+	if profile, err := h.userSvc.GetProfile(r.Context(), userID); err == nil && profile != nil && profile.AvatarURL != nil {
+		currentAvatarURL = *profile.AvatarURL
+	}
+
 	if err := h.userSvc.DeleteAvatar(r.Context(), userID); err != nil {
 		utils.Error(w, http.StatusInternalServerError, "gagal menghapus avatar")
 		return
+	}
+
+	// Auto-cleanup: Hapus file fisik avatar dari storage jika database berhasil direset
+	if currentAvatarURL != "" {
+		if delErr := h.storage.Delete(r.Context(), currentAvatarURL); delErr != nil {
+			slog.Warn("Gagal menghapus avatar dari storage saat penghapusan", slog.String("avatar_url", currentAvatarURL), slog.Any("error", delErr))
+		}
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{

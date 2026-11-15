@@ -18,6 +18,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/routes"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
+	"github.com/mochammadbagas/go-crud-api/internal/storage"
 )
 
 func main() {
@@ -53,7 +54,10 @@ func main() {
 	// 6. Initialize Mailer (Pluggable: LogMailer for Dev / ResendMailer for Prod)
 	mailSvc := mailer.New(cfg)
 
-	// 7. Initialize Services (Business Logic Layer)
+	// 7. Initialize Storage (Pluggable: LocalStorage for Dev / S3 or Cloudflare R2 for Prod)
+	storageSvc := storage.New(cfg)
+
+	// 8. Initialize Services (Business Logic Layer)
 	markdownSvc := service.NewMarkdownService()
 	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
 	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
@@ -62,18 +66,18 @@ func main() {
 	rbacSvc := service.NewRBACService(roleRepo, permRepo)
 	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
 
-	// 8. Initialize HTTP Handlers
+	// 9. Initialize HTTP Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
-	userHandler := handlers.NewUserHandler(userSvc, cfg)
-	adminPostHandler := handlers.NewAdminPostHandler(postSvc)
+	userHandler := handlers.NewUserHandler(userSvc, cfg, storageSvc)
+	adminPostHandler := handlers.NewAdminPostHandler(postSvc, storageSvc)
 	adminCategoryHandler := handlers.NewAdminCategoryHandler(categorySvc)
-	adminUploadHandler := handlers.NewAdminUploadHandler(cfg)
+	adminUploadHandler := handlers.NewAdminUploadHandler(cfg, storageSvc)
 	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
 	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
 	roleHandler := handlers.NewRoleHandler(rbacSvc)
-	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc)
+	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc, storageSvc)
 
-	// 9. Setup Chi HTTP Router
+	// 10. Setup Chi HTTP Router
 	router := routes.Setup(
 		cfg,
 		authHandler,

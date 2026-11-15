@@ -3,7 +3,7 @@
 **Project:** Go REST API Starter Kit  
 **Author:** Mochammad Bagas  
 **Document Type:** Architecture & Technical Specification  
-**Version:** 2.2 (Granular RBAC, Permission Middleware & Admin User Management - Completed)  
+**Version:** 2.3 (Pluggable Storage: Local & Cloudflare R2 / AWS S3 - Completed)  
 **Date:** November 2026
 
 ---
@@ -21,6 +21,7 @@ Starter kit ini berfokus pada fondasi backend yang tangguh, aman, modular, dan b
 - **Otorisasi Granular (RBAC & Permissions)**: Pendekatan _Role-Based Access Control_ dengan dukungan _multi-role_ per user, pola izin `resource.action`, _Super Admin wildcard bypass_, dan proteksi mutlak terhadap Super Admin terakhir.
 - **Admin User Management**: Modul manajemen pengguna komprehensif bagi administrator (pencarian, filter status, filter role, pagination, mutasi role, dan pembekuan akun).
 - **User & Profile Management**: Pengelolaan data akun, profil personal, avatar, dan alur pembaruan email dengan verifikasi.
+- **Pluggable File Storage (LocalStorage & Cloudflare R2 / AWS S3)**: Abstraksi penyimpanan media (`internal/storage`) yang mendukung penyimpanan lokal disk (dev) dan object storage Cloudflare R2 / AWS S3 / MinIO (prod). Dilengkapi penggantian nama file total menggunakan **ULID murni** (`CHAR(26)`) dan **mekanisme Auto-Cleanup** otomatis (menghapus file lama dari storage saat user mengganti avatar, menghapus avatar, mengganti/menghapus cover image postingan, maupun saat akun pengguna dihapus).
 - **Pemulihan Akun & Verifikasi Email (Driver-based Mailer)**:
   - **Forgot & Reset Password**: Pemulihan kata sandi dengan token acak aman (hash SHA-256) dan mitigasi _anti user-enumeration_.
   - **Email Verification**: Verifikasi alamat email akun baru dan dukungan pengiriman ulang (_resend verification_).

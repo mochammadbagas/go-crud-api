@@ -13,6 +13,13 @@ Template backend RESTful API modular, tangguh, dan siap pakai (_production-ready
   - **Reuse Detection (Token Family)**: Mendeteksi indikasi pembajakan sesi saat token lama yang sudah dirotasi dicoba digunakan kembali, otomatis mencabut seluruh sesi terkait.
 - **Delivery Token Hybrid**: Mendukung konsumsi client Web/SPA via **HTTP-only Cookie** (`SameSite=Lax`, `Path=/api/v1/auth`) maupun Mobile/Postman via **JSON Response Body** & Header `Authorization: Bearer <token>`.
 - **Pluggable Mailer Architecture (LogMailer & Resend)**: Arsitektur email berbasis driver/interface. Di lingkungan lokal/pengembangan, secara default menggunakan `LogMailer` yang mencetak outbox email langsung ke konsol terminal tanpa butuh akun atau jaringan eksternal. Di lingkungan production, langsung siap _plug-and-play_ dengan layanan transactional email modern (Resend) hanya dengan mengatur konfigurasi di `.env`.
+- **Pluggable File Storage (LocalStorage & Cloudflare R2 / AWS S3)**:
+  - Arsitektur penyimpanan file berbasis interface adapter (`internal/storage`).
+  - **Mode Lokal (Dev)**: Menyimpan file langsung ke direktori `./uploads` dan diserve statis oleh Chi router.
+  - **Mode Cloud (Prod)**: Terintegrasi dengan **Cloudflare R2** (bebas egress fee) dan AWS S3 / MinIO via AWS SDK for Go v2.
+  - **Full File Renaming**: Seluruh nama file yang diunggah otomatis diganti total menggunakan identitas **ULID murni** (`CHAR(26)`) tanpa menyisakan jejak nama file asli dari client, mencegah *path traversal* dan kebocoran informasi.
+  - **Auto-Cleanup**: Otomatis menghapus file fisik lama dari storage (R2/Local) saat pengguna mengganti avatar, menghapus avatar, mengganti/menghapus cover artikel, maupun saat akun pengguna dihapus oleh admin, mencegah penumpukan file yatim (*orphaned files*).
+  - **Graceful Fallback**: Otomatis *fallback* ke `LocalStorage` dengan log peringatan jika driver R2/S3 diaktifkan namun kredensial belum terisi lengkap.
 - **Alur Pemulihan & Verifikasi Akun Lengkap**:
   - **Forgot Password**: Permintaan reset password dengan proteksi ketat anti user-enumeration (respons 200 konstan).
   - **Reset Password**: Validasi token SHA-256 15 menit, pembaruan password hash Argon2id, dan otomatis mencabut seluruh sesi refresh token aktif pengguna.
@@ -49,6 +56,7 @@ Template backend RESTful API modular, tangguh, dan siap pakai (_production-ready
 | **Password Hashing**   | Argon2id (`github.com/alexedwards/argon2id`) | Standar keamanan kredensial modern terkini                               |
 | **Rate Limiter**       | `github.com/go-chi/httprate`                 | Proteksi IP-based pada endpoint sensitif                                 |
 | **Pluggable Mailer**   | Adapter Pattern (`internal/mailer`)          | `LogMailer` untuk dev lokal (terminal) & `ResendMailer` untuk production |
+| **Pluggable Storage**  | Adapter Pattern (`internal/storage`)         | `LocalStorage` untuk dev lokal & Cloudflare R2 / AWS S3 via AWS SDK Go v2|
 | **CORS**               | `github.com/go-chi/cors`                     | Cross-Origin Resource Sharing terkonfigurasi via `.env`                  |
 | **Database**           | MySQL 8.0+                                   | InnoDB, collation `utf8mb4_0900_ai_ci`                                   |
 | **SQL Generator**      | `sqlc` (`sqlc.yaml`)                         | Compile query SQL murni menjadi kode Go type-safe                        |
@@ -120,6 +128,7 @@ Database MySQL 8.0+
 │   │   └── sqlc/                       # Kode Go hasil generate otomatis sqlc
 │   ├── routes/                         # Pendaftaran rute Chi & static file uploads
 │   ├── service/                        # Business logic layer (Auth, User, RBAC, AdminUser, Content)
+│   ├── storage/                        # Pluggable Storage (LocalStorage & Cloudflare R2 / AWS S3)
 │   └── utils/                          # ULID, JWT, HashToken, JSON response helpers
 ├── .air.toml                           # Konfigurasi live-reload Air
 ├── .env.example                        # Template environment variables
@@ -336,9 +345,39 @@ Ketika Anda siap beralih dari pengujian lokal (`LogMailer`) ke pengiriman email 
 5. **Jalankan Ulang Aplikasi**:
    Mulai ulang server Go (`go run cmd/server/main.go` atau `docker compose up -d`). Seluruh alur verifikasi email pendaftaran, permintaan reset kata sandi, dan konfirmasi ubah email akan terkirim secara otomatis ke inbox pengguna via Resend REST API!
 
+### 7. Panduan Menghubungkan Cloudflare R2 / S3 Storage
+
+Starter kit ini mendukung **Cloudflare R2** (layanan object storage S3-compatible tanpa biaya egress data) serta AWS S3 dan MinIO:
+
+1. **Buat Bucket di Cloudflare R2**:
+   - Masuk ke dashboard Cloudflare $\rightarrow$ menu **R2**.
+   - Klik **Create bucket**, tentukan nama bucket (misal: `go-crud-media`).
+2. **Dapatkan Kredensial API R2**:
+   - Di halaman utama R2, klik **Manage R2 API Tokens** $\rightarrow$ **Create API Token**.
+   - Pilih permissions **Object Read & Write**, pilih bucket Anda, lalu klik **Create API Token**.
+   - Salin **Access Key ID**, **Secret Access Key**, dan **Endpoint URL** (berformat: `https://<account_id>.r2.cloudflarestorage.com`).
+3. **Konfigurasi Akses Publik (URL Gambar)**:
+   - Di dashboard bucket R2 Anda, buka tab **Settings** $\rightarrow$ **Public Access**.
+   - Aktifkan **Custom Domain** (misal: `https://media.domainanda.com`) atau aktifkan **R2.dev subdomain** (misal: `https://pub-xxxxxx.r2.dev`).
+4. **Konfigurasi File `.env`**:
+   ```ini
+   # Ubah driver storage ke 'r2' atau 's3'
+   STORAGE_DRIVER=r2
+
+   S3_BUCKET=go-crud-media
+   S3_REGION=auto
+   S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
+   S3_ACCESS_KEY_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   S3_SECRET_ACCESS_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   # URL publik tempat gambar dapat diakses oleh client / browser
+   S3_PUBLIC_URL=https://pub-xxxxxx.r2.dev
+   ```
+5. **Jalankan Aplikasi**:
+   Ketika user atau admin mengunggah avatar maupun gambar artikel, file akan otomatis di-rename total menggunakan **ULID** dan disimpan langsung ke Cloudflare R2 bucket. Response API akan langsung mengembalikan URL publik Cloudflare R2 Anda!
+
 ---
 
-## 7. Pengujian API
+## 8. Pengujian API
 
 - **Postman**: Impor file [postman_collection.json](docs/postman_collection.json). Koleksi ini sudah dilengkapi script otomatis untuk menyimpan `accessToken` dan `refreshToken` ke Postman Environment variable.
 - **VS Code REST Client**: Buka file [api.http](api.http) untuk mengeksekusi request langsung dari editor Anda.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
+	"github.com/mochammadbagas/go-crud-api/internal/storage"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -16,10 +17,14 @@ import (
 
 type AdminUserHandler struct {
 	adminUserSvc service.AdminUserServiceInterface
+	storage      storage.Storage
 }
 
-func NewAdminUserHandler(adminUserSvc service.AdminUserServiceInterface) *AdminUserHandler {
-	return &AdminUserHandler{adminUserSvc: adminUserSvc}
+func NewAdminUserHandler(adminUserSvc service.AdminUserServiceInterface, store storage.Storage) *AdminUserHandler {
+	return &AdminUserHandler{
+		adminUserSvc: adminUserSvc,
+		storage:      store,
+	}
 }
 
 // ListUsers handles GET /api/v1/admin/users
@@ -150,6 +155,13 @@ func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
 // DeleteUser handles DELETE /api/v1/admin/users/{id}
 func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	// Deteksi avatar pengguna sebelum akun dihapus dari database
+	var avatarURL string
+	if detail, err := h.adminUserSvc.GetUserDetail(r.Context(), id); err == nil && detail != nil && detail.AvatarURL != nil {
+		avatarURL = *detail.AvatarURL
+	}
+
 	err := h.adminUserSvc.DeleteUser(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
@@ -163,6 +175,13 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		slog.Error("gagal menghapus pengguna", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "gagal menghapus pengguna")
 		return
+	}
+
+	// Auto-cleanup: Hapus avatar pengguna dari storage
+	if avatarURL != "" {
+		if delErr := h.storage.Delete(r.Context(), avatarURL); delErr != nil {
+			slog.Warn("Gagal menghapus avatar pengguna dari storage saat penghapusan akun", slog.String("avatar_url", avatarURL), slog.Any("error", delErr))
+		}
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{

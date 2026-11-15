@@ -28,10 +28,17 @@ type Config struct {
 	JWTSecret      string
 	JWTAccessTTL   time.Duration
 	JWTRefreshTTL  time.Duration
-	MailerDriver   string
-	ResendAPIKey   string
-	MailFrom       string
-	FrontendURL    string
+	MailerDriver      string
+	ResendAPIKey      string
+	MailFrom          string
+	FrontendURL       string
+	StorageDriver     string
+	S3Bucket          string
+	S3Region          string
+	S3Endpoint        string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	S3PublicURL       string
 }
 
 // Load loads configuration from environment variables or .env file.
@@ -78,10 +85,17 @@ func Load() *Config {
 		JWTSecret:      getEnv("JWT_SECRET", "super-secret-starter-kit-jwt-key-change-in-production"),
 		JWTAccessTTL:   time.Duration(accessTTLMin) * time.Minute,
 		JWTRefreshTTL:  time.Duration(refreshTTLDays) * 24 * time.Hour,
-		MailerDriver:   strings.ToLower(strings.TrimSpace(getEnv("MAILER_DRIVER", "log"))),
-		ResendAPIKey:   getEnv("RESEND_API_KEY", ""),
-		MailFrom:       getEnv("MAIL_FROM", "Go Starter Kit <no-reply@localhost>"),
-		FrontendURL:    strings.TrimRight(getEnv("FRONTEND_URL", "http://localhost:3000"), "/"),
+		MailerDriver:      strings.ToLower(strings.TrimSpace(getEnv("MAILER_DRIVER", "log"))),
+		ResendAPIKey:      getEnv("RESEND_API_KEY", ""),
+		MailFrom:          getEnv("MAIL_FROM", "Go Starter Kit <no-reply@localhost>"),
+		FrontendURL:       strings.TrimRight(getEnv("FRONTEND_URL", "http://localhost:3000"), "/"),
+		StorageDriver:     strings.ToLower(strings.TrimSpace(getEnv("STORAGE_DRIVER", "local"))),
+		S3Bucket:          getEnv("S3_BUCKET", ""),
+		S3Region:          getEnv("S3_REGION", "auto"),
+		S3Endpoint:        getEnv("S3_ENDPOINT", ""),
+		S3AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
+		S3SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
+		S3PublicURL:       strings.TrimRight(getEnv("S3_PUBLIC_URL", ""), "/"),
 	}
 }
 
