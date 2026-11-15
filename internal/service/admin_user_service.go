@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	ErrCannotDeleteLastSuperAdmin     = errors.New("tidak dapat menghapus Super Admin aktif terakhir")
-	ErrCannotDeactivateLastSuperAdmin = errors.New("tidak dapat menonaktifkan Super Admin aktif terakhir")
-	ErrCannotDemoteLastSuperAdmin     = errors.New("tidak dapat mencabut role Super Admin dari Super Admin aktif terakhir")
+	ErrCannotDeleteLastSuperAdmin     = errors.New("cannot delete the last active Super Admin")
+	ErrCannotDeactivateLastSuperAdmin = errors.New("cannot deactivate the last active Super Admin")
+	ErrCannotDemoteLastSuperAdmin     = errors.New("cannot revoke Super Admin role from the last active Super Admin")
 )
 
 type AdminUserServiceInterface interface {

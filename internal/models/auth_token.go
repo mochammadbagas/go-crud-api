@@ -1,10 +1,11 @@
 package models
 
 import (
-	"errors"
 	"net/mail"
 	"strings"
 	"time"
+
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 // Allowed auth token types
@@ -32,12 +33,17 @@ type ForgotPasswordInput struct {
 }
 
 func (i *ForgotPasswordInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		return errors.New("email wajib diisi")
+		v.Add("email", "email is required")
+	} else if _, err := mail.ParseAddress(i.Email); err != nil {
+		v.Add("email", "invalid email format")
 	}
-	if _, err := mail.ParseAddress(i.Email); err != nil {
-		return errors.New("format email tidak valid")
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -49,12 +55,20 @@ type ResetPasswordInput struct {
 }
 
 func (i *ResetPasswordInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Token = strings.TrimSpace(i.Token)
 	if i.Token == "" {
-		return errors.New("token reset password wajib disertakan")
+		v.Add("token", "password reset token is required")
 	}
-	if len(i.NewPassword) < 8 {
-		return errors.New("password baru minimal 8 karakter")
+	if i.NewPassword == "" {
+		v.Add("new_password", "new password is required")
+	} else if len(i.NewPassword) < 8 {
+		v.Add("new_password", "new password must be at least 8 characters long")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -65,9 +79,15 @@ type VerifyEmailInput struct {
 }
 
 func (i *VerifyEmailInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Token = strings.TrimSpace(i.Token)
 	if i.Token == "" {
-		return errors.New("token verifikasi wajib disertakan")
+		v.Add("token", "verification token is required")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -78,12 +98,17 @@ type ResendVerificationInput struct {
 }
 
 func (i *ResendVerificationInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		return errors.New("email wajib diisi")
+		v.Add("email", "email is required")
+	} else if _, err := mail.ParseAddress(i.Email); err != nil {
+		v.Add("email", "invalid email format")
 	}
-	if _, err := mail.ParseAddress(i.Email); err != nil {
-		return errors.New("format email tidak valid")
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -95,15 +120,21 @@ type RequestEmailChangeInput struct {
 }
 
 func (i *RequestEmailChangeInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.NewEmail = strings.ToLower(strings.TrimSpace(i.NewEmail))
 	if i.NewEmail == "" {
-		return errors.New("email baru wajib diisi")
+		v.Add("new_email", "new email is required")
+	} else if _, err := mail.ParseAddress(i.NewEmail); err != nil {
+		v.Add("new_email", "invalid new email format")
 	}
-	if _, err := mail.ParseAddress(i.NewEmail); err != nil {
-		return errors.New("format email baru tidak valid")
-	}
+
 	if strings.TrimSpace(i.Password) == "" {
-		return errors.New("password saat ini wajib diisi untuk konfirmasi keamanan")
+		v.Add("password", "current password is required for security confirmation")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -114,9 +145,15 @@ type ConfirmEmailChangeInput struct {
 }
 
 func (i *ConfirmEmailChangeInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Token = strings.TrimSpace(i.Token)
 	if i.Token == "" {
-		return errors.New("token konfirmasi wajib disertakan")
+		v.Add("token", "confirmation token is required")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }

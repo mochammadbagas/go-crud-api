@@ -42,8 +42,8 @@ func (h *AdminUserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, total, err := h.adminUserSvc.ListUsers(r.Context(), filter)
 	if err != nil {
-		slog.Error("gagal mengambil daftar pengguna admin", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar pengguna")
+		slog.Error("failed to fetch admin users", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch users")
 		return
 	}
 
@@ -63,8 +63,8 @@ func (h *AdminUserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal mengambil detail pengguna", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil detail pengguna")
+		slog.Error("failed to get user detail", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to get user detail")
 		return
 	}
 	utils.JSON(w, http.StatusOK, user)
@@ -75,7 +75,7 @@ func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.AdminUpdateUserInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -101,7 +101,7 @@ func (h *AdminUserHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	var input models.UpdateUserStatusInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *AdminUserHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) 
 			utils.Error(w, http.StatusForbidden, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.AssignRolesInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusForbidden, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -172,19 +172,19 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusForbidden, err.Error())
 			return
 		}
-		slog.Error("gagal menghapus pengguna", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menghapus pengguna")
+		slog.Error("failed to delete user", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
 
 	// Auto-cleanup: Hapus avatar pengguna dari storage
 	if avatarURL != "" {
 		if delErr := h.storage.Delete(r.Context(), avatarURL); delErr != nil {
-			slog.Warn("Gagal menghapus avatar pengguna dari storage saat penghapusan akun", slog.String("avatar_url", avatarURL), slog.Any("error", delErr))
+			slog.Warn("Failed to delete user avatar from storage during account removal", slog.String("avatar_url", avatarURL), slog.Any("error", delErr))
 		}
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "pengguna berhasil dihapus",
+		"message": "user deleted successfully",
 	})
 }

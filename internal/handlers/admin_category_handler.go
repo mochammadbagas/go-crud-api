@@ -26,8 +26,8 @@ func NewAdminCategoryHandler(categorySvc service.CategoryServiceInterface) *Admi
 func (h *AdminCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.categorySvc.List(r.Context())
 	if err != nil {
-		slog.Error("gagal mengambil daftar kategori", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar kategori")
+		slog.Error("failed to fetch categories", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch categories")
 		return
 	}
 	utils.JSON(w, http.StatusOK, categories)
@@ -37,7 +37,7 @@ func (h *AdminCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *AdminCategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input models.CategoryInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *AdminCategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -58,13 +58,13 @@ func (h *AdminCategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *AdminCategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if !utils.IsValidULID(id) {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
+		utils.Error(w, http.StatusBadRequest, "invalid id, must be a 26-character ULID")
 		return
 	}
 
 	var input models.CategoryInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *AdminCategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *AdminCategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *AdminCategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if !utils.IsValidULID(id) {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
+		utils.Error(w, http.StatusBadRequest, "invalid id, must be a 26-character ULID")
 		return
 	}
 
@@ -98,8 +98,8 @@ func (h *AdminCategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal menghapus kategori", slog.String("id", id), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menghapus kategori")
+		slog.Error("failed to delete category", slog.String("id", id), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to delete category")
 		return
 	}
 

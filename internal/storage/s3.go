@@ -43,7 +43,7 @@ func NewS3Storage(ctx context.Context, cfg S3Config) (Storage, error) {
 		awsConfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, "")),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("gagal memuat konfigurasi AWS/R2 SDK: %w", err)
+		return nil, fmt.Errorf("failed to load AWS/R2 SDK config: %w", err)
 	}
 
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
@@ -74,7 +74,7 @@ func (s *s3Storage) Upload(ctx context.Context, file io.Reader, filename string,
 	}
 
 	if _, err := s.client.PutObject(ctx, input); err != nil {
-		return "", fmt.Errorf("gagal mengunggah file ke S3/R2: %w", err)
+		return "", fmt.Errorf("failed to upload file to S3/R2: %w", err)
 	}
 
 	// 1. If explicit public URL or custom CDN domain is configured (e.g. Cloudflare R2 custom domain or pub-*.r2.dev)
@@ -114,7 +114,7 @@ func (s *s3Storage) Delete(ctx context.Context, fileURLOrKey string) error {
 	}
 
 	if _, err := s.client.DeleteObject(ctx, input); err != nil {
-		return fmt.Errorf("gagal menghapus file dari S3/R2: %w", err)
+		return fmt.Errorf("failed to delete file from S3/R2: %w", err)
 	}
 
 	return nil

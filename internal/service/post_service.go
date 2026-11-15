@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrPostNotFound   = errors.New("konten tidak ditemukan")
-	ErrPostSlugExists = errors.New("slug konten sudah digunakan")
+	ErrPostNotFound   = errors.New("post not found")
+	ErrPostSlugExists = errors.New("post slug is already in use")
 )
 
 // PostServiceInterface defines business actions for post management and retrieval.

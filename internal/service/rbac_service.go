@@ -9,11 +9,11 @@ import (
 )
 
 var (
-	ErrRoleNotFound           = errors.New("role tidak ditemukan")
-	ErrRoleNameExists         = errors.New("nama role sudah digunakan")
-	ErrCannotDeleteSystemRole = errors.New("role sistem tidak dapat dihapus")
-	ErrPermissionNotFound     = errors.New("permission tidak ditemukan")
-	ErrPermissionNameExists   = errors.New("nama permission sudah digunakan")
+	ErrRoleNotFound           = errors.New("role not found")
+	ErrRoleNameExists         = errors.New("role name is already in use")
+	ErrCannotDeleteSystemRole = errors.New("system roles cannot be deleted")
+	ErrPermissionNotFound     = errors.New("permission not found")
+	ErrPermissionNameExists   = errors.New("permission name is already in use")
 )
 
 type RBACServiceInterface interface {

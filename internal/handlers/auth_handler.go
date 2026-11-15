@@ -31,7 +31,7 @@ func NewAuthHandler(authSvc service.AuthServiceInterface, cfg *config.Config) *A
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var input models.RegisterInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -41,12 +41,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	utils.JSON(w, http.StatusCreated, map[string]interface{}{
-		"message": "registrasi berhasil",
+		"message": "registration successful",
 		"user": map[string]interface{}{
 			"id":         user.ID,
 			"username":   user.Username,
@@ -62,7 +62,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var input models.LoginInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusForbidden, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	rawToken := h.extractRefreshToken(r)
 	if rawToken == "" {
-		utils.Error(w, http.StatusBadRequest, "refresh token tidak ditemukan pada cookie maupun body request")
+		utils.Error(w, http.StatusBadRequest, "refresh token not found in cookie or request body")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, service.ErrTokenExpired) || errors.Is(err, service.ErrUnauthorized) {
 			h.clearRefreshTokenCookie(w)
-			utils.Error(w, http.StatusUnauthorized, "refresh token tidak valid atau telah kedaluwarsa")
+			utils.Error(w, http.StatusUnauthorized, "refresh token is invalid or expired")
 			return
 		}
 		if errors.Is(err, service.ErrUserNotActive) {
@@ -137,7 +137,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.clearRefreshTokenCookie(w)
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "berhasil logout",
+		"message": "logged out successfully",
 	})
 }
 
@@ -151,12 +151,12 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	var input models.ChangePasswordInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
 	if err := h.authSvc.ChangePassword(r.Context(), userID, input); err != nil {
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -164,7 +164,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	h.clearRefreshTokenCookie(w)
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "password berhasil diubah, seluruh sesi lain telah dicabut. Silakan login kembali.",
+		"message": "password changed successfully, all other sessions have been revoked. Please log in again.",
 	})
 }
 
@@ -172,18 +172,18 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var input models.ForgotPasswordInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
 	if err := h.authSvc.ForgotPassword(r.Context(), input); err != nil {
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	// Always return anti-enumeration message
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "Jika alamat email terdaftar di sistem kami, instruksi pemulihan kata sandi telah dikirim.",
+		"message": "If your email is registered in our system, password reset instructions have been sent.",
 	})
 }
 
@@ -191,7 +191,7 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var input models.ResetPasswordInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -200,14 +200,14 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	h.clearRefreshTokenCookie(w)
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "kata sandi berhasil diatur ulang. Silakan masuk menggunakan kata sandi baru Anda.",
+		"message": "password has been reset successfully. Please log in with your new password.",
 	})
 }
 
@@ -221,7 +221,7 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(token) == "" {
-		utils.Error(w, http.StatusBadRequest, "token verifikasi email wajib disertakan")
+		utils.Error(w, http.StatusBadRequest, "email verification token is required")
 		return
 	}
 
@@ -230,12 +230,12 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "alamat email berhasil diverifikasi. Akun Anda kini aktif penuh.",
+		"message": "email address verified successfully. Your account is now active.",
 	})
 }
 
@@ -243,7 +243,7 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 	var input models.ResendVerificationInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -252,12 +252,12 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 			utils.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "Jika alamat email terdaftar dan belum diverifikasi, tautan verifikasi baru telah dikirim.",
+		"message": "If your email is registered and unverified, a new verification link has been sent.",
 	})
 }
 

@@ -1,11 +1,12 @@
 package models
 
 import (
-	"errors"
 	"net/mail"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 var (
@@ -30,21 +31,33 @@ type RegisterInput struct {
 
 // Validate checks registration business rules.
 func (i *RegisterInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Username = strings.TrimSpace(i.Username)
-	if !usernameRegex.MatchString(i.Username) {
-		return errors.New("username harus 3-30 karakter alfanumerik, garis bawah (_), atau strip (-)")
+	if i.Username == "" {
+		v.Add("username", "username is required")
+	} else if !usernameRegex.MatchString(i.Username) {
+		v.Add("username", "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
 	}
 
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
-	if _, err := mail.ParseAddress(i.Email); err != nil {
-		return errors.New("format email tidak valid")
+	if i.Email == "" {
+		v.Add("email", "email is required")
+	} else if _, err := mail.ParseAddress(i.Email); err != nil {
+		v.Add("email", "invalid email format")
 	}
 
-	if len(i.Password) < 8 {
-		return errors.New("password minimal 8 karakter")
+	if i.Password == "" {
+		v.Add("password", "password is required")
+	} else if len(i.Password) < 8 {
+		v.Add("password", "password must be at least 8 characters long")
 	}
 
 	i.FullName = strings.TrimSpace(i.FullName)
+
+	if v.HasErrors() {
+		return v
+	}
 	return nil
 }
 
@@ -56,12 +69,18 @@ type LoginInput struct {
 
 // Validate validates the login payload.
 func (i *LoginInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		return errors.New("email wajib diisi")
+		v.Add("email", "email is required")
 	}
 	if strings.TrimSpace(i.Password) == "" {
-		return errors.New("password wajib diisi")
+		v.Add("password", "password is required")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -73,9 +92,15 @@ type RefreshTokenInput struct {
 
 // Validate validates the refresh token input.
 func (i *RefreshTokenInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.RefreshToken = strings.TrimSpace(i.RefreshToken)
 	if i.RefreshToken == "" {
-		return errors.New("refresh_token wajib disertakan")
+		v.Add("refresh_token", "refresh_token is required")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -88,14 +113,20 @@ type ChangePasswordInput struct {
 
 // Validate validates the change password payload.
 func (i *ChangePasswordInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	if strings.TrimSpace(i.OldPassword) == "" {
-		return errors.New("password lama wajib diisi")
+		v.Add("old_password", "old password is required")
 	}
 	if len(i.NewPassword) < 8 {
-		return errors.New("password baru minimal 8 karakter")
+		v.Add("new_password", "new password must be at least 8 characters long")
 	}
-	if i.OldPassword == i.NewPassword {
-		return errors.New("password baru tidak boleh sama dengan password lama")
+	if i.OldPassword != "" && i.OldPassword == i.NewPassword {
+		v.Add("new_password", "new password cannot be the same as old password")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }

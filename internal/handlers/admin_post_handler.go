@@ -63,8 +63,8 @@ func (h *AdminPostHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	posts, total, err := h.postSvc.ListAdmin(r.Context(), filter)
 	if err != nil {
-		slog.Error("gagal mengambil daftar konten admin", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar konten")
+		slog.Error("failed to fetch admin posts", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *AdminPostHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *AdminPostHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input models.CreatePostInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *AdminPostHandler) Create(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *AdminPostHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *AdminPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if !utils.IsValidULID(id) {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
+		utils.Error(w, http.StatusBadRequest, "invalid id, must be a 26-character ULID")
 		return
 	}
 
@@ -114,8 +114,8 @@ func (h *AdminPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal mengambil konten admin", slog.String("id", id), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil konten")
+		slog.Error("failed to get admin post", slog.String("id", id), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to get post")
 		return
 	}
 
@@ -126,13 +126,13 @@ func (h *AdminPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if !utils.IsValidULID(id) {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
+		utils.Error(w, http.StatusBadRequest, "invalid id, must be a 26-character ULID")
 		return
 	}
 
 	var input models.UpdatePostInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		if newCoverURL != oldCoverURL {
 			if delErr := h.storage.Delete(r.Context(), oldCoverURL); delErr != nil {
-				slog.Warn("Gagal menghapus cover image lama dari storage saat update post", slog.String("old_cover", oldCoverURL), slog.Any("error", delErr))
+				slog.Warn("Failed to delete old cover image from storage during post update", slog.String("old_cover", oldCoverURL), slog.Any("error", delErr))
 			}
 		}
 	}
@@ -180,7 +180,7 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if !utils.IsValidULID(id) {
-		utils.Error(w, http.StatusBadRequest, "id tidak valid, harus 26 karakter ULID")
+		utils.Error(w, http.StatusBadRequest, "invalid id, must be a 26-character ULID")
 		return
 	}
 
@@ -195,8 +195,8 @@ func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal menghapus konten", slog.String("id", id), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menghapus konten")
+		slog.Error("failed to delete post", slog.String("id", id), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to delete post")
 		return
 	}
 

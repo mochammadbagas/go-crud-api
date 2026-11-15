@@ -29,7 +29,7 @@ func NewAdminUploadHandler(cfg *config.Config, store storage.Storage) *AdminUplo
 func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// 10 MB max memory
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		utils.Error(w, http.StatusBadRequest, "file terlalu besar atau format multipart tidak valid")
+		utils.Error(w, http.StatusBadRequest, "file is too large or invalid multipart format")
 		return
 	}
 
@@ -38,14 +38,14 @@ func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		file, header, err = r.FormFile("file")
 	}
 	if err != nil {
-		utils.Error(w, http.StatusBadRequest, "file gambar wajib disertakan (field 'image' atau 'file')")
+		utils.Error(w, http.StatusBadRequest, "image file is required (field 'image' or 'file')")
 		return
 	}
 	defer file.Close()
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif" {
-		utils.Error(w, http.StatusBadRequest, "format file tidak didukung, gunakan JPG, PNG, WEBP, atau GIF")
+		utils.Error(w, http.StatusBadRequest, "unsupported file format, please use JPG, PNG, WEBP, or GIF")
 		return
 	}
 
@@ -53,7 +53,7 @@ func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 512)
 	n, err := file.Read(buf)
 	if err != nil && err != io.EOF {
-		utils.Error(w, http.StatusBadRequest, "gagal membaca header file gambar")
+		utils.Error(w, http.StatusBadRequest, "failed to read image file header")
 		return
 	}
 
@@ -65,18 +65,18 @@ func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		"image/gif":  true,
 	}
 	if !allowedMIMEs[mimeType] {
-		utils.Error(w, http.StatusBadRequest, "tipe file tidak valid, hanya file gambar asli yang diizinkan")
+		utils.Error(w, http.StatusBadRequest, "invalid file type, only authentic image files are allowed")
 		return
 	}
 
 	// Rewind file pointer after reading magic bytes
 	if seeker, ok := file.(io.Seeker); ok {
 		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
-			utils.Error(w, http.StatusInternalServerError, "gagal memproses stream file")
+			utils.Error(w, http.StatusInternalServerError, "failed to process file stream")
 			return
 		}
 	} else {
-		utils.Error(w, http.StatusInternalServerError, "stream file tidak mendukung seek")
+		utils.Error(w, http.StatusInternalServerError, "file stream does not support seek")
 		return
 	}
 
@@ -85,8 +85,8 @@ func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	fileURL, err := h.storage.Upload(r.Context(), file, uniqueName, mimeType)
 	if err != nil {
-		slog.Error("gagal menyimpan file upload", slog.String("filename", uniqueName), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menyimpan file")
+		slog.Error("failed to save uploaded file", slog.String("filename", uniqueName), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to save file")
 		return
 	}
 

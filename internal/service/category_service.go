@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	ErrCategoryNotFound   = errors.New("kategori tidak ditemukan")
-	ErrCategorySlugExists = errors.New("slug kategori sudah digunakan")
+	ErrCategoryNotFound   = errors.New("category not found")
+	ErrCategorySlugExists = errors.New("category slug is already in use")
 )
 
 // CategoryServiceInterface defines business actions for category management and retrieval.

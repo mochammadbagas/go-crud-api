@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	ErrUserNotFound = errors.New("pengguna tidak ditemukan")
+	ErrUserNotFound = errors.New("user not found")
 )
 
 type UserServiceInterface interface {
@@ -146,13 +146,13 @@ func (s *UserService) RequestEmailChange(ctx context.Context, userID string, inp
 	}
 
 	if user.Email == input.NewEmail {
-		return errors.New("email baru tidak boleh sama dengan email saat ini")
+		return errors.New("new email cannot be the same as current email")
 	}
 
 	// Verify current password for sensitive email change operation
 	match, err := argon2id.ComparePasswordAndHash(input.Password, user.PasswordHash)
 	if err != nil || !match {
-		return errors.New("password konfirmasi salah")
+		return errors.New("incorrect confirmation password")
 	}
 
 	// Ensure new email is not already taken by another user
@@ -224,7 +224,7 @@ func (s *UserService) ConfirmEmailChange(ctx context.Context, input models.Confi
 	}
 
 	if storedToken.Payload == nil || *storedToken.Payload == "" {
-		return errors.New("data email baru tidak valid pada token")
+		return errors.New("invalid new email payload in token")
 	}
 
 	newEmail := *storedToken.Payload

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 // Allowed post types
@@ -80,19 +82,23 @@ type CreatePostInput struct {
 
 // Validate validates CreatePostInput business rules.
 func (i *CreatePostInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Type = strings.ToLower(strings.TrimSpace(i.Type))
-	if i.Type != TypeBlog && i.Type != TypeArticle && i.Type != TypeJournal {
-		return errors.New("type harus salah satu dari: blog, article, journal")
+	if i.Type == "" {
+		v.Add("type", "type is required")
+	} else if i.Type != TypeBlog && i.Type != TypeArticle && i.Type != TypeJournal {
+		v.Add("type", "type must be one of: blog, article, journal")
 	}
 
 	i.Title = strings.TrimSpace(i.Title)
 	if i.Title == "" {
-		return errors.New("title wajib diisi")
+		v.Add("title", "title is required")
 	}
 
 	i.Content = strings.TrimSpace(i.Content)
 	if i.Content == "" {
-		return errors.New("content wajib diisi")
+		v.Add("content", "content is required")
 	}
 
 	if i.Status == "" {
@@ -100,10 +106,13 @@ func (i *CreatePostInput) Validate() error {
 	} else {
 		i.Status = strings.ToLower(strings.TrimSpace(i.Status))
 		if i.Status != StatusDraft && i.Status != StatusPublished {
-			return errors.New("status harus salah satu dari: draft, published")
+			v.Add("status", "status must be one of: draft, published")
 		}
 	}
 
+	if v.HasErrors() {
+		return v
+	}
 	return nil
 }
 
@@ -125,26 +134,35 @@ type UpdatePostInput struct {
 
 // Validate validates UpdatePostInput business rules.
 func (i *UpdatePostInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Type = strings.ToLower(strings.TrimSpace(i.Type))
-	if i.Type != TypeBlog && i.Type != TypeArticle && i.Type != TypeJournal {
-		return errors.New("type harus salah satu dari: blog, article, journal")
+	if i.Type == "" {
+		v.Add("type", "type is required")
+	} else if i.Type != TypeBlog && i.Type != TypeArticle && i.Type != TypeJournal {
+		v.Add("type", "type must be one of: blog, article, journal")
 	}
 
 	i.Title = strings.TrimSpace(i.Title)
 	if i.Title == "" {
-		return errors.New("title wajib diisi")
+		v.Add("title", "title is required")
 	}
 
 	i.Content = strings.TrimSpace(i.Content)
 	if i.Content == "" {
-		return errors.New("content wajib diisi")
+		v.Add("content", "content is required")
 	}
 
 	i.Status = strings.ToLower(strings.TrimSpace(i.Status))
-	if i.Status != StatusDraft && i.Status != StatusPublished {
-		return errors.New("status harus salah satu dari: draft, published")
+	if i.Status == "" {
+		v.Add("status", "status is required")
+	} else if i.Status != StatusDraft && i.Status != StatusPublished {
+		v.Add("status", "status must be one of: draft, published")
 	}
 
+	if v.HasErrors() {
+		return v
+	}
 	return nil
 }
 
@@ -166,7 +184,7 @@ func ValidateType(postType string) error {
 		return nil
 	}
 	if postType != TypeBlog && postType != TypeArticle && postType != TypeJournal {
-		return errors.New("type tidak valid, harus salah satu dari: blog, article, journal")
+		return errors.New("invalid type, must be one of: blog, article, journal")
 	}
 	return nil
 }
@@ -177,7 +195,7 @@ func ValidateStatus(status string) error {
 		return nil
 	}
 	if status != StatusDraft && status != StatusPublished {
-		return errors.New("status tidak valid, harus salah satu dari: draft, published")
+		return errors.New("invalid status, must be one of: draft, published")
 	}
 	return nil
 }

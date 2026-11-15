@@ -46,8 +46,8 @@ func (h *PublicPostHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	posts, total, err := h.postSvc.ListPublic(r.Context(), filter)
 	if err != nil {
-		slog.Error("gagal mengambil daftar konten publik", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar konten")
+		slog.Error("failed to fetch public posts", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
 	}
 
@@ -62,18 +62,18 @@ func (h *PublicPostHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *PublicPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if slug == "" {
-		utils.Error(w, http.StatusBadRequest, "slug wajib disertakan")
+		utils.Error(w, http.StatusBadRequest, "slug is required")
 		return
 	}
 
 	post, err := h.postSvc.GetPublishedBySlug(r.Context(), slug)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
-			utils.Error(w, http.StatusNotFound, "konten tidak ditemukan atau belum dipublikasikan")
+			utils.Error(w, http.StatusNotFound, "post not found or not published yet")
 			return
 		}
-		slog.Error("gagal mengambil konten publik", slog.String("slug", slug), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil konten")
+		slog.Error("failed to get public post", slog.String("slug", slug), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to get post")
 		return
 	}
 

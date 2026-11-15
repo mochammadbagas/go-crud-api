@@ -1,9 +1,10 @@
 package models
 
 import (
-	"errors"
 	"strings"
 	"time"
+
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 // Category represents a content category.
@@ -23,8 +24,12 @@ type CategoryInput struct {
 
 // Validate validates CategoryInput.
 func (i CategoryInput) Validate() error {
+	v := utils.ValidationErrors{}
 	if strings.TrimSpace(i.Name) == "" {
-		return errors.New("nama kategori wajib diisi")
+		v.Add("name", "category name is required")
+	}
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }

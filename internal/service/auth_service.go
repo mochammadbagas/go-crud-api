@@ -17,16 +17,16 @@ import (
 )
 
 var (
-	ErrInvalidCredentials   = errors.New("email atau password salah")
+	ErrInvalidCredentials   = errors.New("invalid email or password")
 	ErrUnauthorized         = errors.New("unauthorized")
-	ErrEmailExists          = errors.New("email sudah terdaftar, silakan gunakan email lain")
-	ErrUsernameExists       = errors.New("username sudah digunakan, silakan pilih username lain")
-	ErrUserNotActive        = errors.New("akun tidak aktif atau sedang ditangguhkan")
-	ErrTokenReused          = errors.New("indikasi pembajakan sesi terdeteksi, silakan login ulang")
-	ErrTokenExpired         = errors.New("refresh token telah kedaluwarsa")
-	ErrAuthTokenInvalid     = errors.New("token tidak valid atau telah kedaluwarsa")
-	ErrAuthTokenUsed        = errors.New("token telah digunakan sebelumnya")
-	ErrEmailAlreadyVerified = errors.New("alamat email ini sudah terverifikasi sebelumnya")
+	ErrEmailExists          = errors.New("email is already registered")
+	ErrUsernameExists       = errors.New("username is already taken")
+	ErrUserNotActive        = errors.New("account is inactive or suspended")
+	ErrTokenReused          = errors.New("session hijacking detected, please log in again")
+	ErrTokenExpired         = errors.New("refresh token has expired")
+	ErrAuthTokenInvalid     = errors.New("invalid or expired token")
+	ErrAuthTokenUsed        = errors.New("token has already been used")
+	ErrEmailAlreadyVerified = errors.New("email address is already verified")
 )
 
 type AuthServiceInterface interface {
@@ -364,7 +364,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, input m
 	// Validate old password
 	match, err := argon2id.ComparePasswordAndHash(input.OldPassword, user.PasswordHash)
 	if err != nil || !match {
-		return errors.New("password lama salah")
+		return errors.New("incorrect old password")
 	}
 
 	// Hash new password

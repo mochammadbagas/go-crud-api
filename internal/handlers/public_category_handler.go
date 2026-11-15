@@ -28,8 +28,8 @@ func NewPublicCategoryHandler(categorySvc service.CategoryServiceInterface, post
 func (h *PublicCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.categorySvc.List(r.Context())
 	if err != nil {
-		slog.Error("gagal mengambil daftar kategori publik", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar kategori")
+		slog.Error("failed to fetch public categories", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch categories")
 		return
 	}
 	utils.JSON(w, http.StatusOK, categories)
@@ -39,7 +39,7 @@ func (h *PublicCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *PublicCategoryHandler) ListPostsByCategory(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if slug == "" {
-		utils.Error(w, http.StatusBadRequest, "slug kategori wajib disertakan")
+		utils.Error(w, http.StatusBadRequest, "category slug is required")
 		return
 	}
 
@@ -67,8 +67,8 @@ func (h *PublicCategoryHandler) ListPostsByCategory(w http.ResponseWriter, r *ht
 
 	posts, total, err := h.postSvc.ListPublic(r.Context(), filter)
 	if err != nil {
-		slog.Error("gagal mengambil konten berdasarkan kategori", slog.String("slug", slug), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil konten kategori")
+		slog.Error("failed to fetch posts by category", slog.String("slug", slug), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch category posts")
 		return
 	}
 

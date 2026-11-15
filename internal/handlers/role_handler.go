@@ -25,8 +25,8 @@ func NewRoleHandler(rbacSvc service.RBACServiceInterface) *RoleHandler {
 func (h *RoleHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	roles, err := h.rbacSvc.ListRoles(r.Context())
 	if err != nil {
-		slog.Error("gagal mengambil daftar role", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar role")
+		slog.Error("failed to fetch roles", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch roles")
 		return
 	}
 	utils.JSON(w, http.StatusOK, map[string]interface{}{
@@ -43,8 +43,8 @@ func (h *RoleHandler) GetRole(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal mengambil detail role", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil detail role")
+		slog.Error("failed to get role detail", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to get role detail")
 		return
 	}
 	utils.JSON(w, http.StatusOK, role)
@@ -54,7 +54,7 @@ func (h *RoleHandler) GetRole(w http.ResponseWriter, r *http.Request) {
 func (h *RoleHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	var input models.CreateRoleInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -64,7 +64,7 @@ func (h *RoleHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (h *RoleHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.UpdateRoleInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *RoleHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -106,13 +106,13 @@ func (h *RoleHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusForbidden, err.Error())
 			return
 		}
-		slog.Error("gagal menghapus role", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menghapus role")
+		slog.Error("failed to delete role", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to delete role")
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "role berhasil dihapus",
+		"message": "role deleted successfully",
 	})
 }
 
@@ -121,7 +121,7 @@ func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	var input models.AssignPermissionsInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) 
 	role, err := h.rbacSvc.GetRoleByID(r.Context(), id)
 	if err != nil {
 		utils.JSON(w, http.StatusOK, map[string]string{
-			"message": "permission role berhasil diperbarui",
+			"message": "role permissions updated successfully",
 		})
 		return
 	}
@@ -151,8 +151,8 @@ func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) 
 func (h *RoleHandler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	perms, err := h.rbacSvc.ListPermissions(r.Context())
 	if err != nil {
-		slog.Error("gagal mengambil daftar permission", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil daftar permission")
+		slog.Error("failed to fetch permissions", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to fetch permissions")
 		return
 	}
 	utils.JSON(w, http.StatusOK, map[string]interface{}{
@@ -169,8 +169,8 @@ func (h *RoleHandler) GetPermission(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal mengambil detail permission", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal mengambil detail permission")
+		slog.Error("failed to get permission detail", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to get permission detail")
 		return
 	}
 	utils.JSON(w, http.StatusOK, perm)
@@ -180,7 +180,7 @@ func (h *RoleHandler) GetPermission(w http.ResponseWriter, r *http.Request) {
 func (h *RoleHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	var input models.CreatePermissionInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -190,7 +190,7 @@ func (h *RoleHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -202,7 +202,7 @@ func (h *RoleHandler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.UpdatePermissionInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *RoleHandler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -228,12 +228,12 @@ func (h *RoleHandler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		slog.Error("gagal menghapus permission", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menghapus permission")
+		slog.Error("failed to delete permission", slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to delete permission")
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "permission berhasil dihapus",
+		"message": "permission deleted successfully",
 	})
 }

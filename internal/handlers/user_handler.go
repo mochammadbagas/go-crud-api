@@ -46,7 +46,7 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusNotFound, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusInternalServerError, "gagal memuat data profil")
+		utils.Error(w, http.StatusInternalServerError, "failed to load profile data")
 		return
 	}
 
@@ -63,13 +63,13 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 	var input models.UpdateProfileInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
 	updated, err := h.userSvc.UpdateProfile(r.Context(), userID, input)
 	if err != nil {
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	// 5 MB max memory
 	if err := r.ParseMultipartForm(5 << 20); err != nil {
-		utils.Error(w, http.StatusBadRequest, "file avatar terlalu besar (maks 5MB) atau format tidak valid")
+		utils.Error(w, http.StatusBadRequest, "avatar file is too large (max 5MB) or invalid format")
 		return
 	}
 
@@ -98,14 +98,14 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		file, header, err = r.FormFile("file")
 	}
 	if err != nil {
-		utils.Error(w, http.StatusBadRequest, "file gambar avatar wajib disertakan (field 'avatar', 'image', atau 'file')")
+		utils.Error(w, http.StatusBadRequest, "avatar image file is required (field 'avatar', 'image', or 'file')")
 		return
 	}
 	defer file.Close()
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
-		utils.Error(w, http.StatusBadRequest, "format avatar tidak didukung, gunakan JPG, PNG, atau WEBP")
+		utils.Error(w, http.StatusBadRequest, "unsupported avatar format, please use JPG, PNG, or WEBP")
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 512)
 	n, err := file.Read(buf)
 	if err != nil && err != io.EOF {
-		utils.Error(w, http.StatusBadRequest, "gagal membaca header file gambar")
+		utils.Error(w, http.StatusBadRequest, "failed to read image file header")
 		return
 	}
 
@@ -124,18 +124,18 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		"image/webp": true,
 	}
 	if !allowedMIMEs[mimeType] {
-		utils.Error(w, http.StatusBadRequest, "tipe file tidak valid, hanya file gambar asli yang diizinkan")
+		utils.Error(w, http.StatusBadRequest, "invalid file type, only authentic image files are allowed")
 		return
 	}
 
 	// Rewind file pointer
 	if seeker, ok := file.(io.Seeker); ok {
 		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
-			utils.Error(w, http.StatusInternalServerError, "gagal memproses stream file")
+			utils.Error(w, http.StatusInternalServerError, "failed to process file stream")
 			return
 		}
 	} else {
-		utils.Error(w, http.StatusInternalServerError, "stream file tidak mendukung seek")
+		utils.Error(w, http.StatusInternalServerError, "file stream does not support seek")
 		return
 	}
 
@@ -150,27 +150,27 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	avatarURL, err := h.storage.Upload(r.Context(), file, uniqueName, mimeType)
 	if err != nil {
-		slog.Error("gagal menyimpan avatar pengguna", slog.String("filename", uniqueName), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "gagal menyimpan avatar")
+		slog.Error("failed to save user avatar", slog.String("filename", uniqueName), slog.Any("error", err))
+		utils.Error(w, http.StatusInternalServerError, "failed to save avatar")
 		return
 	}
 
 	if err := h.userSvc.UpdateAvatar(r.Context(), userID, avatarURL); err != nil {
 		// Rollback file yang baru diunggah jika database gagal update
 		_ = h.storage.Delete(r.Context(), avatarURL)
-		utils.Error(w, http.StatusInternalServerError, "gagal memperbarui avatar pengguna")
+		utils.Error(w, http.StatusInternalServerError, "failed to update user avatar")
 		return
 	}
 
 	// Auto-cleanup: Hapus avatar lama dari storage agar tidak menjadi orphaned file
 	if oldAvatarURL != "" && oldAvatarURL != avatarURL {
 		if delErr := h.storage.Delete(r.Context(), oldAvatarURL); delErr != nil {
-			slog.Warn("Gagal menghapus avatar lama dari storage saat pembaruan", slog.String("old_avatar", oldAvatarURL), slog.Any("error", delErr))
+			slog.Warn("Failed to delete old avatar from storage during update", slog.String("old_avatar", oldAvatarURL), slog.Any("error", delErr))
 		}
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message":    "avatar berhasil diunggah",
+		"message":    "avatar uploaded successfully",
 		"avatar_url": avatarURL,
 	})
 }
@@ -190,19 +190,19 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.userSvc.DeleteAvatar(r.Context(), userID); err != nil {
-		utils.Error(w, http.StatusInternalServerError, "gagal menghapus avatar")
+		utils.Error(w, http.StatusInternalServerError, "failed to delete avatar")
 		return
 	}
 
 	// Auto-cleanup: Hapus file fisik avatar dari storage jika database berhasil direset
 	if currentAvatarURL != "" {
 		if delErr := h.storage.Delete(r.Context(), currentAvatarURL); delErr != nil {
-			slog.Warn("Gagal menghapus avatar dari storage saat penghapusan", slog.String("avatar_url", currentAvatarURL), slog.Any("error", delErr))
+			slog.Warn("Failed to delete avatar from storage during removal", slog.String("avatar_url", currentAvatarURL), slog.Any("error", delErr))
 		}
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "avatar berhasil dihapus",
+		"message": "avatar deleted successfully",
 	})
 }
 
@@ -216,7 +216,7 @@ func (h *UserHandler) UpdateUsername(w http.ResponseWriter, r *http.Request) {
 
 	var input models.UpdateUsernameInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -225,12 +225,12 @@ func (h *UserHandler) UpdateUsername(w http.ResponseWriter, r *http.Request) {
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message":  "username berhasil diperbarui",
+		"message":  "username updated successfully",
 		"username": input.Username,
 	})
 }
@@ -245,7 +245,7 @@ func (h *UserHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 
 	profile, err := h.userSvc.GetProfile(r.Context(), userID)
 	if err != nil {
-		utils.Error(w, http.StatusInternalServerError, "gagal memuat status akun")
+		utils.Error(w, http.StatusInternalServerError, "failed to load account status")
 		return
 	}
 
@@ -269,7 +269,7 @@ func (h *UserHandler) RequestEmailChange(w http.ResponseWriter, r *http.Request)
 
 	var input models.RequestEmailChangeInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "format body request tidak valid")
+		utils.Error(w, http.StatusBadRequest, "invalid request body format")
 		return
 	}
 
@@ -278,12 +278,12 @@ func (h *UserHandler) RequestEmailChange(w http.ResponseWriter, r *http.Request)
 			utils.Error(w, http.StatusConflict, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "tautan konfirmasi telah dikirimkan ke alamat email baru Anda. Silakan periksa inbox.",
+		"message": "a confirmation link has been sent to your new email address. Please check your inbox.",
 	})
 }
 
@@ -297,7 +297,7 @@ func (h *UserHandler) ConfirmEmailChange(w http.ResponseWriter, r *http.Request)
 	}
 
 	if strings.TrimSpace(token) == "" {
-		utils.Error(w, http.StatusBadRequest, "token konfirmasi perubahan email wajib disertakan")
+		utils.Error(w, http.StatusBadRequest, "email change confirmation token is required")
 		return
 	}
 
@@ -310,11 +310,11 @@ func (h *UserHandler) ConfirmEmailChange(w http.ResponseWriter, r *http.Request)
 			utils.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ValidationError(w, err)
 		return
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "alamat email utama Anda berhasil diperbarui dan telah terverifikasi.",
+		"message": "your primary email address has been updated and verified successfully.",
 	})
 }

@@ -1,9 +1,10 @@
 package models
 
 import (
-	"errors"
 	"strings"
 	"time"
+
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 // Allowed user roles
@@ -72,13 +73,15 @@ type UpdateProfileInput struct {
 
 // Validate validates the profile update payload.
 func (i *UpdateProfileInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.FullName = strings.TrimSpace(i.FullName)
 	if i.FullName == "" {
-		return errors.New("nama lengkap tidak boleh kosong")
+		v.Add("full_name", "full name cannot be empty")
+	} else if len(i.FullName) > 100 {
+		v.Add("full_name", "full name must not exceed 100 characters")
 	}
-	if len(i.FullName) > 100 {
-		return errors.New("nama lengkap maksimal 100 karakter")
-	}
+
 	if i.Bio != nil {
 		bio := strings.TrimSpace(*i.Bio)
 		i.Bio = &bio
@@ -86,6 +89,10 @@ func (i *UpdateProfileInput) Validate() error {
 	if i.PhoneNumber != nil {
 		phone := strings.TrimSpace(*i.PhoneNumber)
 		i.PhoneNumber = &phone
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -97,9 +104,17 @@ type UpdateUsernameInput struct {
 
 // Validate validates the new username.
 func (i *UpdateUsernameInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	i.Username = strings.TrimSpace(i.Username)
-	if !usernameRegex.MatchString(i.Username) {
-		return errors.New("username harus 3-30 karakter alfanumerik, garis bawah (_), atau strip (-)")
+	if i.Username == "" {
+		v.Add("username", "username is required")
+	} else if !usernameRegex.MatchString(i.Username) {
+		v.Add("username", "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }

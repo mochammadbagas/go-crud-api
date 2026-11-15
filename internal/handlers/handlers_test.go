@@ -1335,3 +1335,84 @@ func TestAdminUserEndpoints(t *testing.T) {
 		t.Errorf("expected 403 for deleting last super admin, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestFieldLevelValidationResponse(t *testing.T) {
+	router, adminToken, _ := setupTestServer(t)
+
+	// 1. POST /api/v1/auth/register with empty payload
+	regPayload := `{}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(regPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty register, got %d", rec.Code)
+	}
+
+	var regResp utils.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&regResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+
+	if regResp.Error != "validation failed" {
+		t.Errorf("expected error 'validation failed', got %q", regResp.Error)
+	}
+	if regResp.Errors == nil {
+		t.Fatal("expected errors map to be non-nil")
+	}
+	if regResp.Errors["username"] == "" {
+		t.Error("expected username error in errors map")
+	}
+	if regResp.Errors["email"] == "" {
+		t.Error("expected email error in errors map")
+	}
+	if regResp.Errors["password"] == "" {
+		t.Error("expected password error in errors map")
+	}
+
+	// 2. POST /api/v1/auth/login with empty fields
+	loginPayload := `{"email":"","password":""}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(loginPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty login, got %d", rec.Code)
+	}
+
+	var loginResp utils.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("failed to decode login error response: %v", err)
+	}
+	if loginResp.Error != "validation failed" {
+		t.Errorf("expected 'validation failed', got %q", loginResp.Error)
+	}
+	if loginResp.Errors["email"] == "" || loginResp.Errors["password"] == "" {
+		t.Errorf("expected email and password validation errors, got %v", loginResp.Errors)
+	}
+
+	// 3. POST /api/v1/admin/posts with empty fields
+	postPayload := `{}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/posts", bytes.NewBufferString(postPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty post creation, got %d", rec.Code)
+	}
+
+	var postResp utils.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&postResp); err != nil {
+		t.Fatalf("failed to decode post error response: %v", err)
+	}
+	if postResp.Error != "validation failed" {
+		t.Errorf("expected 'validation failed', got %q", postResp.Error)
+	}
+	if postResp.Errors["type"] == "" || postResp.Errors["title"] == "" || postResp.Errors["content"] == "" {
+		t.Errorf("expected type, title, and content validation errors, got %v", postResp.Errors)
+	}
+}

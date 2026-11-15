@@ -107,7 +107,8 @@ Setiap proyek backend baru mengikuti struktur direktori berikut:
 │       ├── ulid.go                     # Generator & validator ULID 26-karakter
 │       ├── jwt.go                      # Generate/Validate JWT access token (roles claims) & SHA-256 token hashing
 │       ├── pagination.go               # Paginasi helper
-│       └── response.go                 # Helper JSON() & Error() standar
+│       ├── response.go                 # Helper JSON(), Error(), & ValidationError() standar
+│       └── validation.go               # ValidationErrors type & error collector untuk field-level validation
 ├── .air.toml                           # Konfigurasi live-reload Air
 ├── .env.example                        # Template environment variables
 ├── .gitignore
