@@ -15,7 +15,7 @@ func New(cfg *config.Config) Storage {
 
 	if driver == "s3" || driver == "r2" {
 		if cfg.S3Bucket == "" || cfg.S3AccessKeyID == "" || cfg.S3SecretAccessKey == "" {
-			slog.Warn("Peringatan: STORAGE_DRIVER disetel 's3'/'r2' tetapi S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY belum lengkap. Fallback otomatis ke LocalStorage.")
+			slog.Warn("STORAGE_DRIVER is set to 's3'/'r2' but S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY are incomplete. Falling back to LocalStorage.")
 			return NewLocalStorage(cfg.UploadDir)
 		}
 
@@ -28,7 +28,7 @@ func New(cfg *config.Config) Storage {
 			PublicURL:       cfg.S3PublicURL,
 		})
 		if err != nil {
-			slog.Error("Gagal menginisialisasi S3/R2 Storage, fallback otomatis ke LocalStorage", slog.Any("error", err))
+			slog.Error("Failed to initialize S3/R2 Storage, falling back to LocalStorage", slog.Any("error", err))
 			return NewLocalStorage(cfg.UploadDir)
 		}
 
@@ -36,10 +36,10 @@ func New(cfg *config.Config) Storage {
 		if driver == "r2" || strings.Contains(cfg.S3Endpoint, "r2.cloudflarestorage.com") {
 			providerName = "Cloudflare R2 Storage"
 		}
-		slog.Info("Menginisialisasi "+providerName+" (Mode Cloud)", slog.String("bucket", cfg.S3Bucket))
+		slog.Info("Initializing "+providerName+" (Cloud Mode)", slog.String("bucket", cfg.S3Bucket))
 		return s3Storage
 	}
 
-	slog.Info("Menginisialisasi LocalStorage (Mode Lokal)", slog.String("dir", cfg.UploadDir))
+	slog.Info("Initializing LocalStorage (Local Mode)", slog.String("dir", cfg.UploadDir))
 	return NewLocalStorage(cfg.UploadDir)
 }

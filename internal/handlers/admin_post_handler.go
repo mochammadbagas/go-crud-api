@@ -136,7 +136,7 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Deteksi cover image lama jika ada sebelum update
+	// Detect old cover image if any before update
 	var oldCoverURL string
 	if existingPost, err := h.postSvc.GetByID(r.Context(), id); err == nil && existingPost != nil && existingPost.CoverImage != nil {
 		oldCoverURL = *existingPost.CoverImage
@@ -160,7 +160,7 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-cleanup: Hapus cover image lama dari storage jika diganti atau dikosongkan
+	// Auto-cleanup: Delete old cover image from storage if replaced or cleared
 	if oldCoverURL != "" {
 		newCoverURL := ""
 		if post != nil && post.CoverImage != nil {
@@ -184,7 +184,7 @@ func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ambil post untuk mendapatkan URL cover image sebelum dihapus
+	// Fetch post to retrieve cover image URL before deletion
 	var coverImageURL string
 	if post, err := h.postSvc.GetByID(r.Context(), id); err == nil && post != nil && post.CoverImage != nil {
 		coverImageURL = *post.CoverImage
@@ -200,10 +200,10 @@ func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-cleanup: Hapus file cover image dari storage jika database berhasil dihapus
+	// Auto-cleanup: Delete cover image file from storage if post was deleted from database
 	if coverImageURL != "" {
 		if delErr := h.storage.Delete(r.Context(), coverImageURL); delErr != nil {
-			slog.Warn("Gagal menghapus cover image dari storage saat hapus post", slog.String("cover_image", coverImageURL), slog.Any("error", delErr))
+			slog.Warn("Failed to delete cover image from storage during post deletion", slog.String("cover_image", coverImageURL), slog.Any("error", delErr))
 		}
 	}
 

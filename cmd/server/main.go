@@ -24,10 +24,10 @@ import (
 func main() {
 	// 1. Structured Logging Setup (JSON)
 	initLogger()
-	slog.Info("Memulai bootstrap Go Starter Kit REST API...")
+	slog.Info("Starting Go Starter Kit REST API bootstrap...")
 
 	// 2. Command Line Flags
-	fresh := flag.Bool("fresh", false, "Hapus seluruh tabel sebelum migrasi ulang")
+	fresh := flag.Bool("fresh", false, "Drop and recreate all database tables before running migrations")
 	flag.Parse()
 
 	// 3. Load Configurations
@@ -36,7 +36,7 @@ func main() {
 	// 4. Initialize Database (Connection Pool, Migrations, & Seeder)
 	db, err := database.Init(cfg, *fresh)
 	if err != nil {
-		slog.Error("Inisialisasi database MySQL gagal", slog.Any("error", err))
+		slog.Error("Failed to initialize MySQL database", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer db.Close()
@@ -107,10 +107,10 @@ func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRep
 
 	// Run initial cleanup on startup
 	if err := tokenRepo.DeleteExpired(ctx); err != nil {
-		slog.Error("Gagal membersihkan refresh token kedaluwarsa saat start", slog.Any("error", err))
+		slog.Error("Failed to clean up expired refresh tokens on startup", slog.Any("error", err))
 	}
 	if err := authTokenRepo.DeleteExpiredOrUsed(ctx); err != nil {
-		slog.Error("Gagal membersihkan auth token kedaluwarsa saat start", slog.Any("error", err))
+		slog.Error("Failed to clean up expired auth tokens on startup", slog.Any("error", err))
 	}
 
 	for {
@@ -119,10 +119,10 @@ func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRep
 			return
 		case <-ticker.C:
 			if err := tokenRepo.DeleteExpired(ctx); err != nil {
-				slog.Error("Gagal membersihkan refresh token kedaluwarsa berkala", slog.Any("error", err))
+				slog.Error("Failed to clean up expired refresh tokens periodically", slog.Any("error", err))
 			}
 			if err := authTokenRepo.DeleteExpiredOrUsed(ctx); err != nil {
-				slog.Error("Gagal membersihkan auth token kedaluwarsa berkala", slog.Any("error", err))
+				slog.Error("Failed to clean up expired auth tokens periodically", slog.Any("error", err))
 			}
 		}
 	}
@@ -149,23 +149,23 @@ func runServer(handler http.Handler, port string) {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		slog.Info("Server HTTP aktif dan mendengarkan request", slog.String("port", port), slog.String("addr", serverAddr))
+		slog.Info("HTTP server is running and listening for requests", slog.String("port", port), slog.String("addr", serverAddr))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("Server HTTP mengalami kegagalan fatal", slog.Any("error", err))
+			slog.Error("HTTP server encountered a fatal error", slog.Any("error", err))
 			os.Exit(1)
 		}
 	}()
 
 	<-quit
-	slog.Info("Sinyal shutdown diterima. Menghentikan server secara graceful...")
+	slog.Info("Shutdown signal received. Shutting down server gracefully...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("Shutdown server secara graceful gagal, memaksa berhenti", slog.Any("error", err))
+		slog.Error("Graceful server shutdown failed, forcing exit", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	slog.Info("Server berhasil dihentikan dengan aman.")
+	slog.Info("Server stopped safely.")
 }

@@ -156,7 +156,7 @@ func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
 func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// Deteksi avatar pengguna sebelum akun dihapus dari database
+	// Fetch user details to detect avatar before account is deleted from database
 	var avatarURL string
 	if detail, err := h.adminUserSvc.GetUserDetail(r.Context(), id); err == nil && detail != nil && detail.AvatarURL != nil {
 		avatarURL = *detail.AvatarURL
@@ -177,7 +177,7 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-cleanup: Hapus avatar pengguna dari storage
+	// Auto-cleanup: Delete user avatar from storage
 	if avatarURL != "" {
 		if delErr := h.storage.Delete(r.Context(), avatarURL); delErr != nil {
 			slog.Warn("Failed to delete user avatar from storage during account removal", slog.String("avatar_url", avatarURL), slog.Any("error", delErr))

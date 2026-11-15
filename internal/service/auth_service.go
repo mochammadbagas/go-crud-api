@@ -251,7 +251,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 
 	// REUSE DETECTION: If token was already revoked, revoke the entire token family!
 	if storedToken.IsRevoked {
-		slog.Warn("Deteksi penggunaan ulang refresh token! Mencabut seluruh token family",
+		slog.Warn("Refresh token reuse detected! Revoking full token family",
 			slog.String("family", storedToken.TokenFamily),
 			slog.String("user_id", storedToken.UserID),
 		)
@@ -426,7 +426,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, input models.ForgotPas
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.FrontendURL, rawToken)
 	if s.mailer != nil {
 		if err := s.mailer.SendResetPasswordEmail(ctx, user.Email, resetLink); err != nil {
-			slog.Error("Gagal mengirim email reset password", slog.String("email", user.Email), slog.Any("error", err))
+			slog.Error("Failed to send password reset email", slog.String("email", user.Email), slog.Any("error", err))
 		}
 	}
 
@@ -468,7 +468,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, input models.ResetPassw
 
 	// Mark token as used
 	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
-		slog.Error("Gagal menandai auth token sebagai used", slog.String("id", storedToken.ID), slog.Any("error", err))
+		slog.Error("Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
 	}
 
 	// Revoke all active sessions
@@ -512,7 +512,7 @@ func (s *AuthService) SendVerification(ctx context.Context, userID string) error
 	verifyLink := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.FrontendURL, rawToken)
 	if s.mailer != nil {
 		if err := s.mailer.SendVerificationEmail(ctx, user.Email, verifyLink); err != nil {
-			slog.Error("Gagal mengirim email verifikasi", slog.String("email", user.Email), slog.Any("error", err))
+			slog.Error("Failed to send verification email", slog.String("email", user.Email), slog.Any("error", err))
 		}
 	}
 

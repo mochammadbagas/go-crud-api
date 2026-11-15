@@ -30,7 +30,7 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 
 	var adminID string
 	if userCount == 0 {
-		slog.Info("Menyemai data administrator awal...")
+		slog.Info("Seeding initial administrator account...")
 		passwordHash, err := argon2id.CreateHash(cfg.AdminPassword, argon2id.DefaultParams)
 		if err != nil {
 			return err
@@ -49,13 +49,13 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 		_, err = db.Exec(
 			`INSERT INTO user_profiles (user_id, full_name, bio, created_at, updated_at) 
 			 VALUES (?, ?, ?, ?, ?)`,
-			adminID, cfg.AdminName, "Administrator sistem", now, now,
+			adminID, cfg.AdminName, "System Administrator", now, now,
 		)
 		if err != nil {
 			return err
 		}
 
-		slog.Info("Administrator berhasil dibuat", slog.String("email", cfg.AdminEmail), slog.String("id", adminID))
+		slog.Info("Administrator account created successfully", slog.String("email", cfg.AdminEmail), slog.String("id", adminID))
 	} else {
 		// Find existing admin ID by email
 		_ = db.QueryRow("SELECT id FROM users WHERE email = ? LIMIT 1", cfg.AdminEmail).Scan(&adminID)
@@ -80,7 +80,7 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 
 	// 3. Seed Categories & Posts if empty
 	if categoryCount == 0 {
-		slog.Info("Menyemai data awal kategori dan postingan dengan ULID...")
+		slog.Info("Seeding initial categories and sample posts with ULID...")
 
 		cat1ID := utils.NewULID()
 		_, err := db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -118,13 +118,13 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 			"article",
 			"Building REST APIs with Go",
 			"building-rest-apis-with-go",
-			"Panduan komprehensif merancang dan membangun RESTful API performa tinggi menggunakan Go dan Chi.",
-			"# Building REST APIs with Go\n\nGo adalah bahasa yang sangat efisien untuk membangun layanan web modern...\n\n```go\npackage main\n\nfunc main() {\n    println(\"Hello, CMS!\")\n}\n```",
+			"Comprehensive guide to designing and building high-performance RESTful APIs using Go and Chi.",
+			"# Building REST APIs with Go\n\nGo is a highly efficient language for building modern web services...\n\n```go\npackage main\n\nfunc main() {\n    println(\"Hello, CMS!\")\n}\n```",
 			nil,
 			cat2ID,
 			tags1,
 			"Building REST APIs with Go - Complete Guide",
-			"Tutorial mendalam membangun REST API dengan Go, MySQL, dan arsitektur modular yang rapi.",
+			"In-depth tutorial on building REST APIs with Go, MySQL, and clean modular architecture.",
 			true,
 			"published",
 			now,
@@ -145,8 +145,8 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 			"blog",
 			"My Development Journey",
 			"my-development-journey",
-			"Refleksi perjalanan pengalaman membangun produk dan sistem backend selama bertahun-tahun.",
-			"# My Development Journey\n\nMenjadi seorang software engineer adalah perjalanan belajar tanpa akhir...",
+			"Reflections on the journey of building backend systems and products over the years.",
+			"# My Development Journey\n\nBeing a software engineer is a continuous learning journey...",
 			nil,
 			cat3ID,
 			tags2,
@@ -172,8 +172,8 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 			"journal",
 			"Rust vs Go File Hashing",
 			"rust-vs-go-file-hashing",
-			"Catatan eksperimen perbandingan performa hashing file berukuran besar antara Rust dan Go.",
-			"# Rust vs Go File Hashing\n\nEksperimen hari ini menguji throughput I/O dan utilisasi CPU...",
+			"Benchmark notes comparing large file hashing performance between Rust and Go.",
+			"# Rust vs Go File Hashing\n\nToday's experiment tests I/O throughput and CPU utilization...",
 			nil,
 			cat1ID,
 			tags3,
@@ -199,8 +199,8 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 			"article",
 			"Upcoming: Event Driven Architecture in Go",
 			"upcoming-event-driven-architecture-in-go",
-			"Draft tulisan yang mengeksplorasi message queue dan event streaming.",
-			"# Event Driven Architecture\n\nKonten ini masih dalam status draft...",
+			"Draft article exploring message queues and event streaming patterns.",
+			"# Event Driven Architecture\n\nThis content is currently in draft status...",
 			nil,
 			cat1ID,
 			tags1,
@@ -216,7 +216,7 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 			return err
 		}
 
-		slog.Info("Seeder awal kategori dan postingan berhasil diselesaikan.")
+		slog.Info("Initial categories and sample posts seeded successfully.")
 	}
 
 	return nil
@@ -234,13 +234,13 @@ type permissionSeed struct {
 }
 
 func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
-	slog.Info("Menyemai data awal RBAC (Roles & Permissions)...")
+	slog.Info("Seeding initial RBAC master data (Roles & Permissions)...")
 
 	// 1. Roles
 	roles := []roleSeed{
-		{Name: "super_admin", DisplayName: "Super Admin", Description: "Memiliki akses administratif tertinggi"},
-		{Name: "admin", DisplayName: "Admin", Description: "Mengelola pengguna dan fitur administratif sesuai permission"},
-		{Name: "user", DisplayName: "User", Description: "Pengguna standar aplikasi"},
+		{Name: "super_admin", DisplayName: "Super Admin", Description: "Full administrative access to all system resources"},
+		{Name: "admin", DisplayName: "Admin", Description: "Manages users, content, and categories based on granted permissions"},
+		{Name: "user", DisplayName: "User", Description: "Standard application user"},
 	}
 
 	roleMap := make(map[string]string) // name -> ID
@@ -265,23 +265,23 @@ func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
 
 	// 2. Permissions
 	permissions := []permissionSeed{
-		{Name: "users.read", Description: "Melihat pengguna"},
-		{Name: "users.create", Description: "Membuat pengguna"},
-		{Name: "users.update", Description: "Memperbarui pengguna"},
-		{Name: "users.delete", Description: "Menghapus pengguna"},
-		{Name: "roles.read", Description: "Melihat role"},
-		{Name: "roles.create", Description: "Membuat role"},
-		{Name: "roles.update", Description: "Memperbarui role"},
-		{Name: "roles.delete", Description: "Menghapus role"},
-		{Name: "permissions.read", Description: "Melihat permission"},
-		{Name: "permissions.create", Description: "Membuat permission"},
-		{Name: "permissions.update", Description: "Memperbarui permission"},
-		{Name: "permissions.delete", Description: "Menghapus permission"},
-		{Name: "posts.read", Description: "Melihat postingan"},
-		{Name: "posts.create", Description: "Membuat postingan"},
-		{Name: "posts.update", Description: "Memperbarui postingan"},
-		{Name: "posts.delete", Description: "Menghapus postingan"},
-		{Name: "categories.manage", Description: "Mengelola kategori"},
+		{Name: "users.read", Description: "View users"},
+		{Name: "users.create", Description: "Create users"},
+		{Name: "users.update", Description: "Update users"},
+		{Name: "users.delete", Description: "Delete users"},
+		{Name: "roles.read", Description: "View roles"},
+		{Name: "roles.create", Description: "Create roles"},
+		{Name: "roles.update", Description: "Update roles"},
+		{Name: "roles.delete", Description: "Delete roles"},
+		{Name: "permissions.read", Description: "View permissions"},
+		{Name: "permissions.create", Description: "Create permissions"},
+		{Name: "permissions.update", Description: "Update permissions"},
+		{Name: "permissions.delete", Description: "Delete permissions"},
+		{Name: "posts.read", Description: "View posts"},
+		{Name: "posts.create", Description: "Create posts"},
+		{Name: "posts.update", Description: "Update posts"},
+		{Name: "posts.delete", Description: "Delete posts"},
+		{Name: "categories.manage", Description: "Manage categories"},
 	}
 
 	permMap := make(map[string]string) // name -> ID
@@ -336,6 +336,6 @@ func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
 		}
 	}
 
-	slog.Info("Seeder RBAC berhasil diselesaikan.")
+	slog.Info("RBAC seeding completed successfully.")
 	return roleMap, nil
 }

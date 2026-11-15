@@ -18,10 +18,10 @@ func Init(cfg *config.Config, fresh bool) (*sql.DB, error) {
 		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName,
 	)
 
-	slog.Info("Membuka koneksi ke MySQL...", slog.String("host", cfg.DBHost), slog.String("port", cfg.DBPort), slog.String("database", cfg.DBName))
+	slog.Info("Connecting to MySQL database...", slog.String("host", cfg.DBHost), slog.String("port", cfg.DBPort), slog.String("database", cfg.DBName))
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("gagal membuka koneksi ke database: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
 	// Connection Pool configuration
@@ -31,17 +31,17 @@ func Init(cfg *config.Config, fresh bool) (*sql.DB, error) {
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("gagal menghubungi server MySQL: %w", err)
+		return nil, fmt.Errorf("failed to ping MySQL server: %w", err)
 	}
 
 	// Run migrations
 	if err := RunMigrations(db, cfg.DBName, fresh); err != nil {
-		return nil, fmt.Errorf("gagal menjalankan migrasi: %w", err)
+		return nil, fmt.Errorf("failed to run database migrations: %w", err)
 	}
 
 	// Seed initial data if empty
 	if err := Seed(db, cfg); err != nil {
-		return nil, fmt.Errorf("gagal menjalankan database seeder: %w", err)
+		return nil, fmt.Errorf("failed to run database seeder: %w", err)
 	}
 
 	return db, nil

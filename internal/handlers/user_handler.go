@@ -139,13 +139,13 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Deteksi avatar lama jika ada sebelum mengunggah avatar baru
+	// Detect old avatar if any before uploading new one
 	var oldAvatarURL string
 	if profile, err := h.userSvc.GetProfile(r.Context(), userID); err == nil && profile != nil && profile.AvatarURL != nil {
 		oldAvatarURL = *profile.AvatarURL
 	}
 
-	// Rename nama file keseluruhan menggunakan ULID murni (tidak menyisakan nama file asal)
+	// Rename file entirely using pure ULID (no original filename preserved)
 	uniqueName := fmt.Sprintf("avatar_%s%s", utils.NewULID(), ext)
 
 	avatarURL, err := h.storage.Upload(r.Context(), file, uniqueName, mimeType)
@@ -156,13 +156,13 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.userSvc.UpdateAvatar(r.Context(), userID, avatarURL); err != nil {
-		// Rollback file yang baru diunggah jika database gagal update
+		// Rollback newly uploaded file if database update fails
 		_ = h.storage.Delete(r.Context(), avatarURL)
 		utils.Error(w, http.StatusInternalServerError, "failed to update user avatar")
 		return
 	}
 
-	// Auto-cleanup: Hapus avatar lama dari storage agar tidak menjadi orphaned file
+	// Auto-cleanup: Delete old avatar from storage to avoid orphaned files
 	if oldAvatarURL != "" && oldAvatarURL != avatarURL {
 		if delErr := h.storage.Delete(r.Context(), oldAvatarURL); delErr != nil {
 			slog.Warn("Failed to delete old avatar from storage during update", slog.String("old_avatar", oldAvatarURL), slog.Any("error", delErr))
@@ -183,7 +183,7 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ambil profil saat ini untuk mendapatkan URL avatar yang akan dihapus dari storage
+	// Fetch current profile to obtain avatar URL before deletion
 	var currentAvatarURL string
 	if profile, err := h.userSvc.GetProfile(r.Context(), userID); err == nil && profile != nil && profile.AvatarURL != nil {
 		currentAvatarURL = *profile.AvatarURL
@@ -194,7 +194,7 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-cleanup: Hapus file fisik avatar dari storage jika database berhasil direset
+	// Auto-cleanup: Delete physical avatar file from storage once database record is cleared
 	if currentAvatarURL != "" {
 		if delErr := h.storage.Delete(r.Context(), currentAvatarURL); delErr != nil {
 			slog.Warn("Failed to delete avatar from storage during removal", slog.String("avatar_url", currentAvatarURL), slog.Any("error", delErr))

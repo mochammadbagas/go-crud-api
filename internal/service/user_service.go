@@ -194,7 +194,7 @@ func (s *UserService) RequestEmailChange(ctx context.Context, userID string, inp
 	confirmLink := fmt.Sprintf("%s/confirm-email-change?token=%s", s.cfg.FrontendURL, rawToken)
 	if s.mailer != nil {
 		if err := s.mailer.SendEmailChangeEmail(ctx, input.NewEmail, confirmLink); err != nil {
-			slog.Error("Gagal mengirim email konfirmasi perubahan email", slog.String("email", input.NewEmail), slog.Any("error", err))
+			slog.Error("Failed to send email change confirmation email", slog.String("email", input.NewEmail), slog.Any("error", err))
 		}
 	}
 
