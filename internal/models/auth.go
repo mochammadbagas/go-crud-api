@@ -1,16 +1,10 @@
 package models
 
 import (
-	"net/mail"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
-)
-
-var (
-	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,30}$`)
 )
 
 // TokenResponse represents the hybrid token response sent to clients.
@@ -35,25 +29,36 @@ func (i *RegisterInput) Validate() error {
 
 	i.Username = strings.TrimSpace(i.Username)
 	if i.Username == "" {
-		v.Add("username", "username is required")
-	} else if !usernameRegex.MatchString(i.Username) {
-		v.Add("username", "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+		v.Add("username", utils.ErrCodeRequired, "username is required")
+	} else if !utils.IsValidUsername(i.Username) {
+		v.Add("username", utils.ErrCodeInvalidFormat, "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+	} else if utils.IsReservedUsername(i.Username) {
+		v.Add("username", utils.ErrCodeReserved, "this username is reserved and cannot be registered")
 	}
 
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		v.Add("email", "email is required")
-	} else if _, err := mail.ParseAddress(i.Email); err != nil {
-		v.Add("email", "invalid email format")
+		v.Add("email", utils.ErrCodeRequired, "email is required")
+	} else if !utils.IsValidEmail(i.Email) {
+		v.Add("email", utils.ErrCodeInvalidEmail, "invalid email format")
 	}
 
 	if i.Password == "" {
-		v.Add("password", "password is required")
+		v.Add("password", utils.ErrCodeRequired, "password is required")
 	} else if len(i.Password) < 8 {
-		v.Add("password", "password must be at least 8 characters long")
+		v.Add("password", utils.ErrCodeTooShort, "password must be at least 8 characters long")
+	} else if len(i.Password) > 128 {
+		v.Add("password", utils.ErrCodeTooLong, "password must not exceed 128 characters")
 	}
 
 	i.FullName = strings.TrimSpace(i.FullName)
+	if i.FullName == "" {
+		v.Add("full_name", utils.ErrCodeRequired, "full name is required")
+	} else if len(i.FullName) < 2 {
+		v.Add("full_name", utils.ErrCodeTooShort, "full name must be at least 2 characters long")
+	} else if len(i.FullName) > 100 {
+		v.Add("full_name", utils.ErrCodeTooLong, "full name must not exceed 100 characters")
+	}
 
 	if v.HasErrors() {
 		return v
@@ -73,10 +78,15 @@ func (i *LoginInput) Validate() error {
 
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		v.Add("email", "email is required")
+		v.Add("email", utils.ErrCodeRequired, "email is required")
+	} else if !utils.IsValidEmail(i.Email) {
+		v.Add("email", utils.ErrCodeInvalidEmail, "invalid email format")
 	}
+
 	if strings.TrimSpace(i.Password) == "" {
-		v.Add("password", "password is required")
+		v.Add("password", utils.ErrCodeRequired, "password is required")
+	} else if len(i.Password) > 128 {
+		v.Add("password", utils.ErrCodeTooLong, "password must not exceed 128 characters")
 	}
 
 	if v.HasErrors() {
@@ -96,7 +106,7 @@ func (i *RefreshTokenInput) Validate() error {
 
 	i.RefreshToken = strings.TrimSpace(i.RefreshToken)
 	if i.RefreshToken == "" {
-		v.Add("refresh_token", "refresh_token is required")
+		v.Add("refresh_token", utils.ErrCodeRequired, "refresh_token is required")
 	}
 
 	if v.HasErrors() {
@@ -116,13 +126,15 @@ func (i *ChangePasswordInput) Validate() error {
 	v := utils.ValidationErrors{}
 
 	if strings.TrimSpace(i.OldPassword) == "" {
-		v.Add("old_password", "old password is required")
+		v.Add("old_password", utils.ErrCodeRequired, "old password is required")
 	}
 	if len(i.NewPassword) < 8 {
-		v.Add("new_password", "new password must be at least 8 characters long")
+		v.Add("new_password", utils.ErrCodeTooShort, "new password must be at least 8 characters long")
+	} else if len(i.NewPassword) > 128 {
+		v.Add("new_password", utils.ErrCodeTooLong, "new password must not exceed 128 characters")
 	}
 	if i.OldPassword != "" && i.OldPassword == i.NewPassword {
-		v.Add("new_password", "new password cannot be the same as old password")
+		v.Add("new_password", utils.ErrCodeInvalidValue, "new password cannot be the same as old password")
 	}
 
 	if v.HasErrors() {

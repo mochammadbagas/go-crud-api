@@ -43,7 +43,7 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.userSvc.GetProfile(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
 		utils.Error(w, http.StatusInternalServerError, "failed to load profile data")
@@ -222,7 +222,7 @@ func (h *UserHandler) UpdateUsername(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.userSvc.UpdateUsername(r.Context(), userID, input); err != nil {
 		if errors.Is(err, service.ErrUsernameExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "USERNAME_ALREADY_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -275,7 +275,7 @@ func (h *UserHandler) RequestEmailChange(w http.ResponseWriter, r *http.Request)
 
 	if err := h.userSvc.RequestEmailChange(r.Context(), userID, input); err != nil {
 		if errors.Is(err, service.ErrEmailExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "EMAIL_ALREADY_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -297,17 +297,21 @@ func (h *UserHandler) ConfirmEmailChange(w http.ResponseWriter, r *http.Request)
 	}
 
 	if strings.TrimSpace(token) == "" {
-		utils.Error(w, http.StatusBadRequest, "email change confirmation token is required")
+		utils.ErrorCode(w, http.StatusBadRequest, "TOKEN_REQUIRED", "email change confirmation token is required")
 		return
 	}
 
 	if err := h.userSvc.ConfirmEmailChange(r.Context(), models.ConfirmEmailChangeInput{Token: token}); err != nil {
 		if errors.Is(err, service.ErrEmailExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "EMAIL_ALREADY_EXISTS", err.Error())
 			return
 		}
-		if errors.Is(err, service.ErrAuthTokenInvalid) || errors.Is(err, service.ErrAuthTokenUsed) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, service.ErrAuthTokenInvalid) {
+			utils.ErrorCode(w, http.StatusBadRequest, "INVALID_OR_EXPIRED_TOKEN", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrAuthTokenUsed) {
+			utils.ErrorCode(w, http.StatusBadRequest, "TOKEN_ALREADY_USED", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)

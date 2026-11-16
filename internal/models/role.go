@@ -1,7 +1,6 @@
 package models
 
 import (
-	"net/mail"
 	"regexp"
 	"strings"
 	"time"
@@ -48,20 +47,25 @@ func (i *CreateRoleInput) Validate() error {
 
 	i.Name = strings.TrimSpace(strings.ToLower(i.Name))
 	if i.Name == "" {
-		v.Add("name", "role name is required")
+		v.Add("name", utils.ErrCodeRequired, "role name is required")
 	} else if !roleNameRegex.MatchString(i.Name) {
-		v.Add("name", "role name must be 2-50 lowercase alphanumeric characters, underscores (_), or hyphens (-)")
+		v.Add("name", utils.ErrCodeInvalidFormat, "role name must be 2-50 lowercase alphanumeric characters, underscores (_), or hyphens (-)")
 	}
 
 	i.DisplayName = strings.TrimSpace(i.DisplayName)
 	if i.DisplayName == "" {
-		v.Add("display_name", "display name cannot be empty")
+		v.Add("display_name", utils.ErrCodeRequired, "display name cannot be empty")
+	} else if len(i.DisplayName) < 2 {
+		v.Add("display_name", utils.ErrCodeTooShort, "display name must be at least 2 characters long")
 	} else if len(i.DisplayName) > 100 {
-		v.Add("display_name", "display name must not exceed 100 characters")
+		v.Add("display_name", utils.ErrCodeTooLong, "display name must not exceed 100 characters")
 	}
 
 	if i.Description != nil {
 		desc := strings.TrimSpace(*i.Description)
+		if len(desc) > 255 {
+			v.Add("description", utils.ErrCodeTooLong, "description must not exceed 255 characters")
+		}
 		i.Description = &desc
 	}
 
@@ -83,13 +87,18 @@ func (i *UpdateRoleInput) Validate() error {
 
 	i.DisplayName = strings.TrimSpace(i.DisplayName)
 	if i.DisplayName == "" {
-		v.Add("display_name", "display name cannot be empty")
+		v.Add("display_name", utils.ErrCodeRequired, "display name cannot be empty")
+	} else if len(i.DisplayName) < 2 {
+		v.Add("display_name", utils.ErrCodeTooShort, "display name must be at least 2 characters long")
 	} else if len(i.DisplayName) > 100 {
-		v.Add("display_name", "display name must not exceed 100 characters")
+		v.Add("display_name", utils.ErrCodeTooLong, "display name must not exceed 100 characters")
 	}
 
 	if i.Description != nil {
 		desc := strings.TrimSpace(*i.Description)
+		if len(desc) > 255 {
+			v.Add("description", utils.ErrCodeTooLong, "description must not exceed 255 characters")
+		}
 		i.Description = &desc
 	}
 
@@ -104,6 +113,27 @@ type AssignPermissionsInput struct {
 	PermissionIDs []string `json:"permission_ids"`
 }
 
+// Validate validates AssignPermissionsInput.
+func (i *AssignPermissionsInput) Validate() error {
+	v := utils.ValidationErrors{}
+
+	if len(i.PermissionIDs) == 0 {
+		v.Add("permission_ids", utils.ErrCodeRequired, "role must have at least one permission")
+	} else {
+		for _, id := range i.PermissionIDs {
+			if !utils.IsValidULID(strings.TrimSpace(id)) {
+				v.Add("permission_ids", utils.ErrCodeInvalidID, "permission_ids must contain valid 26-character ULIDs")
+				break
+			}
+		}
+	}
+
+	if v.HasErrors() {
+		return v
+	}
+	return nil
+}
+
 // CreatePermissionInput represents the payload for creating a master permission.
 type CreatePermissionInput struct {
 	Name        string  `json:"name"`
@@ -116,13 +146,16 @@ func (i *CreatePermissionInput) Validate() error {
 
 	i.Name = strings.TrimSpace(strings.ToLower(i.Name))
 	if i.Name == "" {
-		v.Add("name", "permission name is required")
+		v.Add("name", utils.ErrCodeRequired, "permission name is required")
 	} else if !permissionNameRegex.MatchString(i.Name) {
-		v.Add("name", "permission name must follow 'resource.action' format (e.g. 'users.read', 'roles.create')")
+		v.Add("name", utils.ErrCodeInvalidFormat, "permission name must follow 'resource.action' format (e.g. 'users.read', 'roles.create')")
 	}
 
 	if i.Description != nil {
 		desc := strings.TrimSpace(*i.Description)
+		if len(desc) > 255 {
+			v.Add("description", utils.ErrCodeTooLong, "description must not exceed 255 characters")
+		}
 		i.Description = &desc
 	}
 
@@ -139,9 +172,18 @@ type UpdatePermissionInput struct {
 
 // Validate validates UpdatePermissionInput.
 func (i *UpdatePermissionInput) Validate() error {
+	v := utils.ValidationErrors{}
+
 	if i.Description != nil {
 		desc := strings.TrimSpace(*i.Description)
+		if len(desc) > 255 {
+			v.Add("description", utils.ErrCodeTooLong, "description must not exceed 255 characters")
+		}
 		i.Description = &desc
+	}
+
+	if v.HasErrors() {
+		return v
 	}
 	return nil
 }
@@ -156,7 +198,14 @@ func (i *AssignRolesInput) Validate() error {
 	v := utils.ValidationErrors{}
 
 	if len(i.RoleIDs) == 0 {
-		v.Add("role_ids", "user must have at least one role")
+		v.Add("role_ids", utils.ErrCodeRequired, "user must have at least one role")
+	} else {
+		for _, id := range i.RoleIDs {
+			if !utils.IsValidULID(strings.TrimSpace(id)) {
+				v.Add("role_ids", utils.ErrCodeInvalidID, "role_ids must contain valid 26-character ULIDs")
+				break
+			}
+		}
 	}
 
 	if v.HasErrors() {
@@ -179,7 +228,7 @@ func (i *UpdateUserStatusInput) Validate() error {
 	case StatusActive, StatusInactive, StatusPendingVerification, StatusSuspended:
 		return nil
 	default:
-		v.Add("status", "invalid status, choose between: active, inactive, pending_verification, suspended")
+		v.Add("status", utils.ErrCodeInvalidStatus, "invalid status, choose between: active, inactive, pending_verification, suspended")
 		return v
 	}
 }
@@ -199,29 +248,41 @@ func (i *AdminUpdateUserInput) Validate() error {
 
 	i.Username = strings.TrimSpace(i.Username)
 	if i.Username == "" {
-		v.Add("username", "username is required")
-	} else if !usernameRegex.MatchString(i.Username) {
-		v.Add("username", "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+		v.Add("username", utils.ErrCodeRequired, "username is required")
+	} else if !utils.IsValidUsername(i.Username) {
+		v.Add("username", utils.ErrCodeInvalidFormat, "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+	} else if utils.IsReservedUsername(i.Username) {
+		v.Add("username", utils.ErrCodeReserved, "this username is reserved and cannot be used")
 	}
 
 	i.Email = strings.TrimSpace(strings.ToLower(i.Email))
 	if i.Email == "" {
-		v.Add("email", "email is required")
-	} else if _, err := mail.ParseAddress(i.Email); err != nil {
-		v.Add("email", "invalid email format")
+		v.Add("email", utils.ErrCodeRequired, "email is required")
+	} else if !utils.IsValidEmail(i.Email) {
+		v.Add("email", utils.ErrCodeInvalidEmail, "invalid email format")
 	}
 
 	i.FullName = strings.TrimSpace(i.FullName)
-	if i.FullName != "" && len(i.FullName) > 100 {
-		v.Add("full_name", "full name must not exceed 100 characters")
+	if i.FullName != "" {
+		if len(i.FullName) < 2 {
+			v.Add("full_name", utils.ErrCodeTooShort, "full name must be at least 2 characters long")
+		} else if len(i.FullName) > 100 {
+			v.Add("full_name", utils.ErrCodeTooLong, "full name must not exceed 100 characters")
+		}
 	}
 
 	if i.Bio != nil {
 		bio := strings.TrimSpace(*i.Bio)
+		if len(bio) > 500 {
+			v.Add("bio", utils.ErrCodeTooLong, "bio must not exceed 500 characters")
+		}
 		i.Bio = &bio
 	}
 	if i.PhoneNumber != nil {
 		phone := strings.TrimSpace(*i.PhoneNumber)
+		if len(phone) > 20 {
+			v.Add("phone_number", utils.ErrCodeTooLong, "phone number must not exceed 20 characters")
+		}
 		i.PhoneNumber = &phone
 	}
 

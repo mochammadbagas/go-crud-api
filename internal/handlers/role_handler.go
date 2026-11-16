@@ -40,7 +40,7 @@ func (h *RoleHandler) GetRole(w http.ResponseWriter, r *http.Request) {
 	role, err := h.rbacSvc.GetRoleByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "ROLE_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to get role detail", slog.Any("error", err))
@@ -61,7 +61,7 @@ func (h *RoleHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	role, err := h.rbacSvc.CreateRole(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNameExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "ROLE_NAME_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -83,7 +83,7 @@ func (h *RoleHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	role, err := h.rbacSvc.UpdateRole(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "ROLE_NOT_FOUND", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -99,11 +99,11 @@ func (h *RoleHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	err := h.rbacSvc.DeleteRole(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "ROLE_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCannotDeleteSystemRole) {
-			utils.Error(w, http.StatusForbidden, err.Error())
+			utils.ErrorCode(w, http.StatusForbidden, "CANNOT_DELETE_SYSTEM_ROLE", err.Error())
 			return
 		}
 		slog.Error("failed to delete role", slog.Any("error", err))
@@ -128,7 +128,7 @@ func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) 
 	err := h.rbacSvc.AssignPermissionsToRole(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "ROLE_NOT_FOUND", err.Error())
 			return
 		}
 		utils.Error(w, http.StatusBadRequest, err.Error())
@@ -166,7 +166,7 @@ func (h *RoleHandler) GetPermission(w http.ResponseWriter, r *http.Request) {
 	perm, err := h.rbacSvc.GetPermissionByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrPermissionNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "PERMISSION_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to get permission detail", slog.Any("error", err))
@@ -187,7 +187,7 @@ func (h *RoleHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	perm, err := h.rbacSvc.CreatePermission(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, service.ErrPermissionNameExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "PERMISSION_NAME_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -209,7 +209,7 @@ func (h *RoleHandler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 	perm, err := h.rbacSvc.UpdatePermission(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrPermissionNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "PERMISSION_NOT_FOUND", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -225,7 +225,7 @@ func (h *RoleHandler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 	err := h.rbacSvc.DeletePermission(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrPermissionNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "PERMISSION_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to delete permission", slog.Any("error", err))

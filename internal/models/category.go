@@ -25,9 +25,25 @@ type CategoryInput struct {
 // Validate validates CategoryInput.
 func (i CategoryInput) Validate() error {
 	v := utils.ValidationErrors{}
-	if strings.TrimSpace(i.Name) == "" {
-		v.Add("name", "category name is required")
+
+	name := strings.TrimSpace(i.Name)
+	if name == "" {
+		v.Add("name", utils.ErrCodeRequired, "category name is required")
+	} else if len(name) < 2 {
+		v.Add("name", utils.ErrCodeTooShort, "category name must be at least 2 characters long")
+	} else if len(name) > 100 {
+		v.Add("name", utils.ErrCodeTooLong, "category name must not exceed 100 characters")
 	}
+
+	slug := strings.TrimSpace(i.Slug)
+	if slug != "" {
+		if len(slug) > 100 {
+			v.Add("slug", utils.ErrCodeTooLong, "slug must not exceed 100 characters")
+		} else if !utils.IsValidSlug(slug) {
+			v.Add("slug", utils.ErrCodeInvalidFormat, "slug must contain only lowercase alphanumeric characters and hyphens")
+		}
+	}
+
 	if v.HasErrors() {
 		return v
 	}

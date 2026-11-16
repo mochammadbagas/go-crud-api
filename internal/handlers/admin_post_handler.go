@@ -86,11 +86,11 @@ func (h *AdminPostHandler) Create(w http.ResponseWriter, r *http.Request) {
 	post, err := h.postSvc.Create(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, service.ErrPostSlugExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "POST_SLUG_EXISTS", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCategoryNotFound) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+			utils.ErrorCode(w, http.StatusBadRequest, "CATEGORY_NOT_FOUND", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -111,7 +111,7 @@ func (h *AdminPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 	post, err := h.postSvc.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "POST_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to get admin post", slog.String("id", id), slog.Any("error", err))
@@ -145,15 +145,15 @@ func (h *AdminPostHandler) Update(w http.ResponseWriter, r *http.Request) {
 	post, err := h.postSvc.Update(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "POST_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrPostSlugExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "POST_SLUG_EXISTS", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCategoryNotFound) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+			utils.ErrorCode(w, http.StatusBadRequest, "CATEGORY_NOT_FOUND", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -192,7 +192,7 @@ func (h *AdminPostHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.postSvc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "POST_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to delete post", slog.String("id", id), slog.Any("error", err))

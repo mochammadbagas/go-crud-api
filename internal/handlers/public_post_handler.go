@@ -69,7 +69,7 @@ func (h *PublicPostHandler) Get(w http.ResponseWriter, r *http.Request) {
 	post, err := h.postSvc.GetPublishedBySlug(r.Context(), slug)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
-			utils.Error(w, http.StatusNotFound, "post not found or not published yet")
+			utils.ErrorCode(w, http.StatusNotFound, "POST_NOT_FOUND", "post not found or not published yet")
 			return
 		}
 		slog.Error("failed to get public post", slog.String("slug", slug), slog.Any("error", err))

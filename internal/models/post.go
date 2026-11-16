@@ -86,19 +86,39 @@ func (i *CreatePostInput) Validate() error {
 
 	i.Type = strings.ToLower(strings.TrimSpace(i.Type))
 	if i.Type == "" {
-		v.Add("type", "type is required")
+		v.Add("type", utils.ErrCodeRequired, "type is required")
 	} else if i.Type != TypeBlog && i.Type != TypeArticle && i.Type != TypeJournal {
-		v.Add("type", "type must be one of: blog, article, journal")
+		v.Add("type", utils.ErrCodeInvalidValue, "type must be one of: blog, article, journal")
 	}
 
 	i.Title = strings.TrimSpace(i.Title)
 	if i.Title == "" {
-		v.Add("title", "title is required")
+		v.Add("title", utils.ErrCodeRequired, "title is required")
+	} else if len(i.Title) < 3 {
+		v.Add("title", utils.ErrCodeTooShort, "title must be at least 3 characters long")
+	} else if len(i.Title) > 255 {
+		v.Add("title", utils.ErrCodeTooLong, "title must not exceed 255 characters")
 	}
 
 	i.Content = strings.TrimSpace(i.Content)
 	if i.Content == "" {
-		v.Add("content", "content is required")
+		v.Add("content", utils.ErrCodeRequired, "content is required")
+	}
+
+	if i.CategoryID != nil {
+		catID := strings.TrimSpace(*i.CategoryID)
+		if catID != "" && !utils.IsValidULID(catID) {
+			v.Add("category_id", utils.ErrCodeInvalidID, "category_id must be a valid 26-character ULID")
+		}
+		i.CategoryID = &catID
+	}
+
+	if i.MetaTitle != nil {
+		metaTitle := strings.TrimSpace(*i.MetaTitle)
+		if len(metaTitle) > 255 {
+			v.Add("meta_title", utils.ErrCodeTooLong, "meta_title must not exceed 255 characters")
+		}
+		i.MetaTitle = &metaTitle
 	}
 
 	if i.Status == "" {
@@ -106,7 +126,7 @@ func (i *CreatePostInput) Validate() error {
 	} else {
 		i.Status = strings.ToLower(strings.TrimSpace(i.Status))
 		if i.Status != StatusDraft && i.Status != StatusPublished {
-			v.Add("status", "status must be one of: draft, published")
+			v.Add("status", utils.ErrCodeInvalidStatus, "status must be one of: draft, published")
 		}
 	}
 
@@ -138,26 +158,56 @@ func (i *UpdatePostInput) Validate() error {
 
 	i.Type = strings.ToLower(strings.TrimSpace(i.Type))
 	if i.Type == "" {
-		v.Add("type", "type is required")
+		v.Add("type", utils.ErrCodeRequired, "type is required")
 	} else if i.Type != TypeBlog && i.Type != TypeArticle && i.Type != TypeJournal {
-		v.Add("type", "type must be one of: blog, article, journal")
+		v.Add("type", utils.ErrCodeInvalidValue, "type must be one of: blog, article, journal")
 	}
 
 	i.Title = strings.TrimSpace(i.Title)
 	if i.Title == "" {
-		v.Add("title", "title is required")
+		v.Add("title", utils.ErrCodeRequired, "title is required")
+	} else if len(i.Title) < 3 {
+		v.Add("title", utils.ErrCodeTooShort, "title must be at least 3 characters long")
+	} else if len(i.Title) > 255 {
+		v.Add("title", utils.ErrCodeTooLong, "title must not exceed 255 characters")
+	}
+
+	slug := strings.TrimSpace(i.Slug)
+	if slug != "" {
+		if len(slug) > 255 {
+			v.Add("slug", utils.ErrCodeTooLong, "slug must not exceed 255 characters")
+		} else if !utils.IsValidSlug(slug) {
+			v.Add("slug", utils.ErrCodeInvalidFormat, "slug must contain only lowercase alphanumeric characters and hyphens")
+		}
+		i.Slug = slug
 	}
 
 	i.Content = strings.TrimSpace(i.Content)
 	if i.Content == "" {
-		v.Add("content", "content is required")
+		v.Add("content", utils.ErrCodeRequired, "content is required")
+	}
+
+	if i.CategoryID != nil {
+		catID := strings.TrimSpace(*i.CategoryID)
+		if catID != "" && !utils.IsValidULID(catID) {
+			v.Add("category_id", utils.ErrCodeInvalidID, "category_id must be a valid 26-character ULID")
+		}
+		i.CategoryID = &catID
+	}
+
+	if i.MetaTitle != nil {
+		metaTitle := strings.TrimSpace(*i.MetaTitle)
+		if len(metaTitle) > 255 {
+			v.Add("meta_title", utils.ErrCodeTooLong, "meta_title must not exceed 255 characters")
+		}
+		i.MetaTitle = &metaTitle
 	}
 
 	i.Status = strings.ToLower(strings.TrimSpace(i.Status))
 	if i.Status == "" {
-		v.Add("status", "status is required")
+		v.Add("status", utils.ErrCodeRequired, "status is required")
 	} else if i.Status != StatusDraft && i.Status != StatusPublished {
-		v.Add("status", "status must be one of: draft, published")
+		v.Add("status", utils.ErrCodeInvalidStatus, "status must be one of: draft, published")
 	}
 
 	if v.HasErrors() {

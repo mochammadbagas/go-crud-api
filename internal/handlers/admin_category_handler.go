@@ -44,7 +44,7 @@ func (h *AdminCategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	cat, err := h.categorySvc.Create(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, service.ErrCategorySlugExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "CATEGORY_SLUG_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -71,11 +71,11 @@ func (h *AdminCategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	cat, err := h.categorySvc.Update(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrCategoryNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "CATEGORY_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCategorySlugExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "CATEGORY_SLUG_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -95,7 +95,7 @@ func (h *AdminCategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.categorySvc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, service.ErrCategoryNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "CATEGORY_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to delete category", slog.String("id", id), slog.Any("error", err))

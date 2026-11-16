@@ -8,8 +8,43 @@ import (
 
 // ErrorResponse defines the standard error response JSON format.
 type ErrorResponse struct {
-	Error  string            `json:"error"`
-	Errors map[string]string `json:"errors,omitempty"`
+	Code    string                `json:"code"`
+	Error   string                `json:"error"`
+	Message string                `json:"message"`
+	Errors  map[string]FieldError `json:"errors,omitempty"`
+}
+
+// DefaultErrorCode maps standard HTTP status codes to machine-readable string codes.
+func DefaultErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "BAD_REQUEST"
+	case http.StatusUnauthorized:
+		return "UNAUTHORIZED"
+	case http.StatusForbidden:
+		return "FORBIDDEN"
+	case http.StatusNotFound:
+		return "NOT_FOUND"
+	case http.StatusMethodNotAllowed:
+		return "METHOD_NOT_ALLOWED"
+	case http.StatusConflict:
+		return "CONFLICT"
+	case http.StatusGone:
+		return "GONE"
+	case http.StatusUnprocessableEntity:
+		return "UNPROCESSABLE_ENTITY"
+	case http.StatusTooManyRequests:
+		return "RATE_LIMIT_EXCEEDED"
+	case http.StatusInternalServerError:
+		return "INTERNAL_SERVER_ERROR"
+	case http.StatusServiceUnavailable:
+		return "SERVICE_UNAVAILABLE"
+	default:
+		if status >= 400 && status < 500 {
+			return "CLIENT_ERROR"
+		}
+		return "SERVER_ERROR"
+	}
 }
 
 // JSON writes a JSON response with status code and Content-Type header.
@@ -21,9 +56,21 @@ func JSON(w http.ResponseWriter, status int, data interface{}) {
 	}
 }
 
-// Error writes a JSON error response.
+// Error writes a JSON error response with an inferred code based on status code.
 func Error(w http.ResponseWriter, status int, message string) {
-	JSON(w, status, ErrorResponse{Error: message})
+	ErrorCode(w, status, DefaultErrorCode(status), message)
+}
+
+// ErrorCode writes a JSON error response with an explicit machine-readable code.
+func ErrorCode(w http.ResponseWriter, status int, code, message string) {
+	if code == "" {
+		code = DefaultErrorCode(status)
+	}
+	JSON(w, status, ErrorResponse{
+		Code:    code,
+		Error:   message,
+		Message: message,
+	})
 }
 
 // ValidationError writes a JSON response for validation errors.
@@ -33,10 +80,12 @@ func ValidationError(w http.ResponseWriter, err error) {
 	var valErr ValidationErrors
 	if errors.As(err, &valErr) {
 		JSON(w, http.StatusBadRequest, ErrorResponse{
-			Error:  "validation failed",
-			Errors: valErr,
+			Code:    "VALIDATION_FAILED",
+			Error:   "validation failed",
+			Message: "validation failed",
+			Errors:  valErr,
 		})
 		return
 	}
-	Error(w, http.StatusBadRequest, err.Error())
+	ErrorCode(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 }

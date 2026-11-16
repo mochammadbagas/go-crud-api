@@ -37,8 +37,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.authSvc.Register(r.Context(), input)
 	if err != nil {
-		if errors.Is(err, service.ErrEmailExists) || errors.Is(err, service.ErrUsernameExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+		if errors.Is(err, service.ErrEmailExists) {
+			utils.ErrorCode(w, http.StatusConflict, "EMAIL_ALREADY_EXISTS", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrUsernameExists) {
+			utils.ErrorCode(w, http.StatusConflict, "USERNAME_ALREADY_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -72,11 +76,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	tokenResp, err := h.authSvc.Login(r.Context(), input, userAgent, ipAddress)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			utils.Error(w, http.StatusUnauthorized, err.Error())
+			utils.ErrorCode(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrUserNotActive) {
-			utils.Error(w, http.StatusForbidden, err.Error())
+			utils.ErrorCode(w, http.StatusForbidden, "ACCOUNT_INACTIVE", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -104,20 +108,25 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrTokenReused) {
 			h.clearRefreshTokenCookie(w)
-			utils.Error(w, http.StatusUnauthorized, err.Error())
+			utils.ErrorCode(w, http.StatusUnauthorized, "TOKEN_REUSED", err.Error())
 			return
 		}
-		if errors.Is(err, service.ErrTokenExpired) || errors.Is(err, service.ErrUnauthorized) {
+		if errors.Is(err, service.ErrTokenExpired) {
 			h.clearRefreshTokenCookie(w)
-			utils.Error(w, http.StatusUnauthorized, "refresh token is invalid or expired")
+			utils.ErrorCode(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "refresh token has expired")
+			return
+		}
+		if errors.Is(err, service.ErrUnauthorized) {
+			h.clearRefreshTokenCookie(w)
+			utils.ErrorCode(w, http.StatusUnauthorized, "UNAUTHORIZED", "refresh token is invalid")
 			return
 		}
 		if errors.Is(err, service.ErrUserNotActive) {
 			h.clearRefreshTokenCookie(w)
-			utils.Error(w, http.StatusForbidden, err.Error())
+			utils.ErrorCode(w, http.StatusForbidden, "ACCOUNT_INACTIVE", err.Error())
 			return
 		}
-		utils.Error(w, http.StatusBadRequest, err.Error())
+		utils.ErrorCode(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
 
@@ -196,8 +205,12 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.authSvc.ResetPassword(r.Context(), input); err != nil {
-		if errors.Is(err, service.ErrAuthTokenInvalid) || errors.Is(err, service.ErrAuthTokenUsed) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, service.ErrAuthTokenInvalid) {
+			utils.ErrorCode(w, http.StatusBadRequest, "INVALID_OR_EXPIRED_TOKEN", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrAuthTokenUsed) {
+			utils.ErrorCode(w, http.StatusBadRequest, "TOKEN_ALREADY_USED", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -221,13 +234,17 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(token) == "" {
-		utils.Error(w, http.StatusBadRequest, "email verification token is required")
+		utils.ErrorCode(w, http.StatusBadRequest, "TOKEN_REQUIRED", "email verification token is required")
 		return
 	}
 
 	if err := h.authSvc.VerifyEmail(r.Context(), models.VerifyEmailInput{Token: token}); err != nil {
-		if errors.Is(err, service.ErrAuthTokenInvalid) || errors.Is(err, service.ErrAuthTokenUsed) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, service.ErrAuthTokenInvalid) {
+			utils.ErrorCode(w, http.StatusBadRequest, "INVALID_OR_EXPIRED_TOKEN", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrAuthTokenUsed) {
+			utils.ErrorCode(w, http.StatusBadRequest, "TOKEN_ALREADY_USED", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -249,7 +266,7 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 
 	if err := h.authSvc.ResendVerification(r.Context(), input); err != nil {
 		if errors.Is(err, service.ErrEmailAlreadyVerified) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+			utils.ErrorCode(w, http.StatusBadRequest, "EMAIL_ALREADY_VERIFIED", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)

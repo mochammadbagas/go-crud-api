@@ -77,17 +77,25 @@ func (i *UpdateProfileInput) Validate() error {
 
 	i.FullName = strings.TrimSpace(i.FullName)
 	if i.FullName == "" {
-		v.Add("full_name", "full name cannot be empty")
+		v.Add("full_name", utils.ErrCodeRequired, "full name is required")
+	} else if len(i.FullName) < 2 {
+		v.Add("full_name", utils.ErrCodeTooShort, "full name must be at least 2 characters long")
 	} else if len(i.FullName) > 100 {
-		v.Add("full_name", "full name must not exceed 100 characters")
+		v.Add("full_name", utils.ErrCodeTooLong, "full name must not exceed 100 characters")
 	}
 
 	if i.Bio != nil {
 		bio := strings.TrimSpace(*i.Bio)
+		if len(bio) > 500 {
+			v.Add("bio", utils.ErrCodeTooLong, "bio must not exceed 500 characters")
+		}
 		i.Bio = &bio
 	}
 	if i.PhoneNumber != nil {
 		phone := strings.TrimSpace(*i.PhoneNumber)
+		if len(phone) > 20 {
+			v.Add("phone_number", utils.ErrCodeTooLong, "phone number must not exceed 20 characters")
+		}
 		i.PhoneNumber = &phone
 	}
 
@@ -108,9 +116,11 @@ func (i *UpdateUsernameInput) Validate() error {
 
 	i.Username = strings.TrimSpace(i.Username)
 	if i.Username == "" {
-		v.Add("username", "username is required")
-	} else if !usernameRegex.MatchString(i.Username) {
-		v.Add("username", "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+		v.Add("username", utils.ErrCodeRequired, "username is required")
+	} else if !utils.IsValidUsername(i.Username) {
+		v.Add("username", utils.ErrCodeInvalidFormat, "username must be 3-30 characters long and can contain alphanumeric, underscore (_), or hyphen (-)")
+	} else if utils.IsReservedUsername(i.Username) {
+		v.Add("username", utils.ErrCodeReserved, "this username is reserved and cannot be used")
 	}
 
 	if v.HasErrors() {

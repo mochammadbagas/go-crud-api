@@ -1,7 +1,6 @@
 package models
 
 import (
-	"net/mail"
 	"strings"
 	"time"
 
@@ -37,9 +36,9 @@ func (i *ForgotPasswordInput) Validate() error {
 
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		v.Add("email", "email is required")
-	} else if _, err := mail.ParseAddress(i.Email); err != nil {
-		v.Add("email", "invalid email format")
+		v.Add("email", utils.ErrCodeRequired, "email is required")
+	} else if !utils.IsValidEmail(i.Email) {
+		v.Add("email", utils.ErrCodeInvalidEmail, "invalid email format")
 	}
 
 	if v.HasErrors() {
@@ -59,12 +58,14 @@ func (i *ResetPasswordInput) Validate() error {
 
 	i.Token = strings.TrimSpace(i.Token)
 	if i.Token == "" {
-		v.Add("token", "password reset token is required")
+		v.Add("token", utils.ErrCodeRequired, "password reset token is required")
 	}
 	if i.NewPassword == "" {
-		v.Add("new_password", "new password is required")
+		v.Add("new_password", utils.ErrCodeRequired, "new password is required")
 	} else if len(i.NewPassword) < 8 {
-		v.Add("new_password", "new password must be at least 8 characters long")
+		v.Add("new_password", utils.ErrCodeTooShort, "new password must be at least 8 characters long")
+	} else if len(i.NewPassword) > 128 {
+		v.Add("new_password", utils.ErrCodeTooLong, "new password must not exceed 128 characters")
 	}
 
 	if v.HasErrors() {
@@ -83,7 +84,7 @@ func (i *VerifyEmailInput) Validate() error {
 
 	i.Token = strings.TrimSpace(i.Token)
 	if i.Token == "" {
-		v.Add("token", "verification token is required")
+		v.Add("token", utils.ErrCodeRequired, "verification token is required")
 	}
 
 	if v.HasErrors() {
@@ -102,9 +103,9 @@ func (i *ResendVerificationInput) Validate() error {
 
 	i.Email = strings.ToLower(strings.TrimSpace(i.Email))
 	if i.Email == "" {
-		v.Add("email", "email is required")
-	} else if _, err := mail.ParseAddress(i.Email); err != nil {
-		v.Add("email", "invalid email format")
+		v.Add("email", utils.ErrCodeRequired, "email is required")
+	} else if !utils.IsValidEmail(i.Email) {
+		v.Add("email", utils.ErrCodeInvalidEmail, "invalid email format")
 	}
 
 	if v.HasErrors() {
@@ -124,13 +125,15 @@ func (i *RequestEmailChangeInput) Validate() error {
 
 	i.NewEmail = strings.ToLower(strings.TrimSpace(i.NewEmail))
 	if i.NewEmail == "" {
-		v.Add("new_email", "new email is required")
-	} else if _, err := mail.ParseAddress(i.NewEmail); err != nil {
-		v.Add("new_email", "invalid new email format")
+		v.Add("new_email", utils.ErrCodeRequired, "new email is required")
+	} else if !utils.IsValidEmail(i.NewEmail) {
+		v.Add("new_email", utils.ErrCodeInvalidEmail, "invalid new email format")
 	}
 
 	if strings.TrimSpace(i.Password) == "" {
-		v.Add("password", "current password is required for security confirmation")
+		v.Add("password", utils.ErrCodeRequired, "current password is required for security confirmation")
+	} else if len(i.Password) > 128 {
+		v.Add("password", utils.ErrCodeTooLong, "password must not exceed 128 characters")
 	}
 
 	if v.HasErrors() {
@@ -149,7 +152,7 @@ func (i *ConfirmEmailChangeInput) Validate() error {
 
 	i.Token = strings.TrimSpace(i.Token)
 	if i.Token == "" {
-		v.Add("token", "confirmation token is required")
+		v.Add("token", utils.ErrCodeRequired, "confirmation token is required")
 	}
 
 	if v.HasErrors() {

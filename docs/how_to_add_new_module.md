@@ -163,23 +163,27 @@ func (i CreateProductInput) Validate() error {
 	errs := make(utils.ValidationErrors)
 
 	if strings.TrimSpace(i.Name) == "" {
-		errs.Add("name", "name is required")
-	} else if len(i.Name) < 3 || len(i.Name) > 150 {
-		errs.Add("name", "name must be between 3 and 150 characters")
+		errs.Add("name", utils.ErrCodeRequired, "name is required")
+	} else if len(i.Name) < 3 {
+		errs.Add("name", utils.ErrCodeTooShort, "name must be at least 3 characters long")
+	} else if len(i.Name) > 150 {
+		errs.Add("name", utils.ErrCodeTooLong, "name must not exceed 150 characters")
 	}
 
 	if strings.TrimSpace(i.SKU) == "" {
-		errs.Add("sku", "sku is required")
-	} else if len(i.SKU) < 3 || len(i.SKU) > 50 {
-		errs.Add("sku", "sku must be between 3 and 50 characters")
+		errs.Add("sku", utils.ErrCodeRequired, "sku is required")
+	} else if len(i.SKU) < 3 {
+		errs.Add("sku", utils.ErrCodeTooShort, "sku must be at least 3 characters long")
+	} else if len(i.SKU) > 50 {
+		errs.Add("sku", utils.ErrCodeTooLong, "sku must not exceed 50 characters")
 	}
 
 	if i.Price < 0 {
-		errs.Add("price", "price cannot be negative")
+		errs.Add("price", utils.ErrCodeInvalidValue, "price cannot be negative")
 	}
 
 	if i.Stock < 0 {
-		errs.Add("stock", "stock cannot be negative")
+		errs.Add("stock", utils.ErrCodeInvalidValue, "stock cannot be negative")
 	}
 
 	if errs.HasErrors() {
@@ -201,16 +205,16 @@ func (i UpdateProductInput) Validate() error {
 	errs := make(utils.ValidationErrors)
 
 	if strings.TrimSpace(i.Name) == "" {
-		errs.Add("name", "name is required")
+		errs.Add("name", utils.ErrCodeRequired, "name is required")
 	}
 	if i.Price < 0 {
-		errs.Add("price", "price cannot be negative")
+		errs.Add("price", utils.ErrCodeInvalidValue, "price cannot be negative")
 	}
 	if i.Stock < 0 {
-		errs.Add("stock", "stock cannot be negative")
+		errs.Add("stock", utils.ErrCodeInvalidValue, "stock cannot be negative")
 	}
 	if i.Status != "active" && i.Status != "archived" {
-		errs.Add("status", "status must be either active or archived")
+		errs.Add("status", utils.ErrCodeInvalidStatus, "status must be either active or archived")
 	}
 
 	if errs.HasErrors() {
@@ -219,6 +223,9 @@ func (i UpdateProductInput) Validate() error {
 	return nil
 }
 ```
+
+> [!NOTE]
+> Always use standard validation error code constants (`utils.ErrCodeRequired`, `utils.ErrCodeTooShort`, `utils.ErrCodeTooLong`, `utils.ErrCodeInvalidFormat`, `utils.ErrCodeInvalidValue`, etc.) when calling `errs.Add(...)`. For the full list of standardized codes and their meanings, see [docs/architecture.md](architecture.md#field-level-validation-error-codes-dictionary).
 
 ---
 
@@ -540,7 +547,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	product, err := h.svc.Create(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, service.ErrProductSKUExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+			utils.ErrorCode(w, http.StatusConflict, "PRODUCT_SKU_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -576,7 +583,7 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	product, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrProductNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "PRODUCT_NOT_FOUND", err.Error())
 			return
 		}
 		utils.Error(w, http.StatusInternalServerError, "failed to get product")
@@ -602,7 +609,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	product, err := h.svc.Update(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrProductNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "PRODUCT_NOT_FOUND", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -621,7 +628,7 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, service.ErrProductNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "PRODUCT_NOT_FOUND", err.Error())
 			return
 		}
 		utils.Error(w, http.StatusInternalServerError, "failed to delete product")

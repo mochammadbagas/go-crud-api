@@ -43,6 +43,14 @@ func Setup(
 	r.Use(chimiddleware.Recoverer)
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 
+	// Unified JSON 404 & 405 error handlers
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		utils.ErrorCode(w, http.StatusNotFound, "NOT_FOUND", "endpoint not found")
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		utils.ErrorCode(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
+	})
+
 	// Health check endpoint
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -86,7 +94,7 @@ func Setup(
 				time.Minute,
 				clientIPKey,
 				httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
-					utils.Error(w, http.StatusTooManyRequests, "terlalu banyak percobaan autentikasi, silakan coba lagi nanti")
+					utils.ErrorCode(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "too many authentication attempts, please try again later")
 				}),
 			)
 

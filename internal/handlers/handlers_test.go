@@ -857,6 +857,53 @@ func TestAuthEndpoints(t *testing.T) {
 		t.Fatalf("expected 201 for register, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
+	// 1b. Duplicate register should return 409 with EMAIL_ALREADY_EXISTS code
+	dupReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(regPayload))
+	dupReq.Header.Set("Content-Type", "application/json")
+	dupRec := httptest.NewRecorder()
+	router.ServeHTTP(dupRec, dupReq)
+	if dupRec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for duplicate register, got %d", dupRec.Code)
+	}
+	var dupResp utils.ErrorResponse
+	if err := json.NewDecoder(dupRec.Body).Decode(&dupResp); err != nil {
+		t.Fatalf("failed to parse duplicate error response: %v", err)
+	}
+	if dupResp.Code != "EMAIL_ALREADY_EXISTS" {
+		t.Errorf("expected EMAIL_ALREADY_EXISTS code, got %s", dupResp.Code)
+	}
+
+	// 1c. Login with wrong password should return 401 with INVALID_CREDENTIALS code
+	badLoginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"alice@test.com","password":"wrongpassword"}`))
+	badLoginReq.Header.Set("Content-Type", "application/json")
+	badLoginRec := httptest.NewRecorder()
+	router.ServeHTTP(badLoginRec, badLoginReq)
+	if badLoginRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for bad login, got %d", badLoginRec.Code)
+	}
+	var badLoginResp utils.ErrorResponse
+	if err := json.NewDecoder(badLoginRec.Body).Decode(&badLoginResp); err != nil {
+		t.Fatalf("failed to parse bad login response: %v", err)
+	}
+	if badLoginResp.Code != "INVALID_CREDENTIALS" {
+		t.Errorf("expected INVALID_CREDENTIALS code, got %s", badLoginResp.Code)
+	}
+
+	// 1d. Accessing protected route without token should return 401 with TOKEN_REQUIRED code
+	noAuthReq := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+	noAuthRec := httptest.NewRecorder()
+	router.ServeHTTP(noAuthRec, noAuthReq)
+	if noAuthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for no token, got %d", noAuthRec.Code)
+	}
+	var noAuthResp utils.ErrorResponse
+	if err := json.NewDecoder(noAuthRec.Body).Decode(&noAuthResp); err != nil {
+		t.Fatalf("failed to parse no auth response: %v", err)
+	}
+	if noAuthResp.Code != "TOKEN_REQUIRED" {
+		t.Errorf("expected TOKEN_REQUIRED code, got %s", noAuthResp.Code)
+	}
+
 	// 2. Login user
 	loginPayload := `{"email":"alice@test.com","password":"mypassword123"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(loginPayload))
@@ -1358,16 +1405,19 @@ func TestFieldLevelValidationResponse(t *testing.T) {
 	if regResp.Error != "validation failed" {
 		t.Errorf("expected error 'validation failed', got %q", regResp.Error)
 	}
+	if regResp.Code != "VALIDATION_FAILED" {
+		t.Errorf("expected code 'VALIDATION_FAILED', got %q", regResp.Code)
+	}
 	if regResp.Errors == nil {
 		t.Fatal("expected errors map to be non-nil")
 	}
-	if regResp.Errors["username"] == "" {
+	if regResp.Errors["username"].Code == "" {
 		t.Error("expected username error in errors map")
 	}
-	if regResp.Errors["email"] == "" {
+	if regResp.Errors["email"].Code == "" {
 		t.Error("expected email error in errors map")
 	}
-	if regResp.Errors["password"] == "" {
+	if regResp.Errors["password"].Code == "" {
 		t.Error("expected password error in errors map")
 	}
 
@@ -1389,7 +1439,7 @@ func TestFieldLevelValidationResponse(t *testing.T) {
 	if loginResp.Error != "validation failed" {
 		t.Errorf("expected 'validation failed', got %q", loginResp.Error)
 	}
-	if loginResp.Errors["email"] == "" || loginResp.Errors["password"] == "" {
+	if loginResp.Errors["email"].Code == "" || loginResp.Errors["password"].Code == "" {
 		t.Errorf("expected email and password validation errors, got %v", loginResp.Errors)
 	}
 
@@ -1412,7 +1462,46 @@ func TestFieldLevelValidationResponse(t *testing.T) {
 	if postResp.Error != "validation failed" {
 		t.Errorf("expected 'validation failed', got %q", postResp.Error)
 	}
-	if postResp.Errors["type"] == "" || postResp.Errors["title"] == "" || postResp.Errors["content"] == "" {
+	if postResp.Errors["type"].Code == "" || postResp.Errors["title"].Code == "" || postResp.Errors["content"].Code == "" {
 		t.Errorf("expected type, title, and content validation errors, got %v", postResp.Errors)
+	}
+}
+
+func TestNotFoundAndMethodNotAllowed(t *testing.T) {
+	router, _, _ := setupTestServer(t)
+
+	// Test 404 Not Found returns structured JSON
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/non-existent-endpoint", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	var notFoundResp utils.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&notFoundResp); err != nil {
+		t.Fatalf("failed to decode 404 response: %v", err)
+	}
+	if notFoundResp.Code != "NOT_FOUND" {
+		t.Errorf("expected code NOT_FOUND, got %s", notFoundResp.Code)
+	}
+	if notFoundResp.Error != "endpoint not found" {
+		t.Errorf("expected error 'endpoint not found', got %q", notFoundResp.Error)
+	}
+
+	// Test 405 Method Not Allowed returns structured JSON
+	req = httptest.NewRequest(http.MethodDelete, "/health", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rec.Code)
+	}
+	var methodResp utils.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&methodResp); err != nil {
+		t.Fatalf("failed to decode 405 response: %v", err)
+	}
+	if methodResp.Code != "METHOD_NOT_ALLOWED" {
+		t.Errorf("expected code METHOD_NOT_ALLOWED, got %s", methodResp.Code)
 	}
 }

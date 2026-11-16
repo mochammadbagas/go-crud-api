@@ -117,17 +117,36 @@ This project follows Clean Architecture and Domain-Driven Design (DDD) principle
 
 - **Critical Super Admin Protection**: Built-in invariant logic prevents the last remaining active `super_admin` from being deleted, deactivated, suspended, or demoted, preventing irreversible system lockouts.
 
-### 5. Multi-Input Field-Level Validation
+### 5. Multi-Input Field-Level Validation & Unified Error Format
 
-- Comprehensive payload evaluation collecting all field constraints into a unified `errors` map without early exit, enabling client-side forms to display inline feedback across all fields simultaneously:
+- **Multi-Input Field-Level Validation**: Comprehensive payload evaluation collecting all field constraints into a unified `errors` map without early exit, enabling client-side forms to display inline feedback across all fields simultaneously:
   ```json
   {
+    "code": "VALIDATION_FAILED",
     "error": "validation failed",
+    "message": "validation failed",
     "errors": {
-      "username": "username must be between 3 and 30 characters",
-      "email": "invalid email format",
-      "password": "password must be at least 8 characters long"
+      "username": {
+        "code": "TOO_SHORT",
+        "message": "username must be 3-30 characters long"
+      },
+      "email": {
+        "code": "INVALID_EMAIL",
+        "message": "invalid email format"
+      },
+      "password": {
+        "code": "TOO_SHORT",
+        "message": "password must be at least 8 characters long"
+      }
     }
+  }
+  ```
+- **Unified Production-Grade Error Envelope**: All application errors across domain logic, authentication, permissions, rate limits, and 404/405 routing return a standardized JSON structure with machine-readable `code` alongside `error` and `message` properties:
+  ```json
+  {
+    "code": "EMAIL_ALREADY_EXISTS",
+    "error": "email is already registered",
+    "message": "email is already registered"
   }
   ```
 

@@ -23,14 +23,14 @@ func JWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-				utils.Error(w, http.StatusUnauthorized, "unauthorized: Authorization header 'Bearer <token>' is required")
+				utils.ErrorCode(w, http.StatusUnauthorized, "TOKEN_REQUIRED", "unauthorized: Authorization header 'Bearer <token>' is required")
 				return
 			}
 
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 			claims, err := utils.ValidateAccessToken(jwtSecret, tokenStr)
 			if err != nil {
-				utils.Error(w, http.StatusUnauthorized, "unauthorized: invalid or expired token")
+				utils.ErrorCode(w, http.StatusUnauthorized, "INVALID_OR_EXPIRED_TOKEN", "unauthorized: invalid or expired token")
 				return
 			}
 
@@ -50,7 +50,7 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetClaimsFromContext(r.Context())
 			if claims == nil || (!claims.HasRole(role) && !claims.IsSuperAdmin()) {
-				utils.Error(w, http.StatusForbidden, "forbidden: insufficient permissions to access this resource")
+				utils.ErrorCode(w, http.StatusForbidden, "INSUFFICIENT_PERMISSIONS", "forbidden: insufficient permissions to access this resource")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -64,7 +64,7 @@ func RequireRoles(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetClaimsFromContext(r.Context())
 			if claims == nil {
-				utils.Error(w, http.StatusForbidden, "forbidden: insufficient permissions to access this resource")
+				utils.ErrorCode(w, http.StatusForbidden, "INSUFFICIENT_PERMISSIONS", "forbidden: insufficient permissions to access this resource")
 				return
 			}
 			if claims.IsSuperAdmin() {
@@ -77,7 +77,7 @@ func RequireRoles(roles ...string) func(http.Handler) http.Handler {
 					return
 				}
 			}
-			utils.Error(w, http.StatusForbidden, "forbidden: insufficient permissions to access this resource")
+			utils.ErrorCode(w, http.StatusForbidden, "INSUFFICIENT_PERMISSIONS", "forbidden: insufficient permissions to access this resource")
 		})
 	}
 }
@@ -88,7 +88,7 @@ func RequirePermission(permission string, userRepo repository.UserRepository) fu
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetClaimsFromContext(r.Context())
 			if claims == nil {
-				utils.Error(w, http.StatusForbidden, "forbidden: insufficient permissions to access this resource")
+				utils.ErrorCode(w, http.StatusForbidden, "INSUFFICIENT_PERMISSIONS", "forbidden: insufficient permissions to access this resource")
 				return
 			}
 
@@ -100,7 +100,7 @@ func RequirePermission(permission string, userRepo repository.UserRepository) fu
 
 			perms, err := userRepo.GetUserPermissions(r.Context(), claims.UserID)
 			if err != nil {
-				utils.Error(w, http.StatusForbidden, "forbidden: failed to verify permissions")
+				utils.ErrorCode(w, http.StatusForbidden, "PERMISSION_VERIFICATION_FAILED", "forbidden: failed to verify permissions")
 				return
 			}
 
@@ -113,7 +113,7 @@ func RequirePermission(permission string, userRepo repository.UserRepository) fu
 			}
 
 			if !hasPerm {
-				utils.Error(w, http.StatusForbidden, "forbidden: insufficient permissions to access this resource")
+				utils.ErrorCode(w, http.StatusForbidden, "INSUFFICIENT_PERMISSIONS", "forbidden: insufficient permissions to access this resource")
 				return
 			}
 

@@ -308,7 +308,7 @@ func TestPostService_SlugCollisionAndCategoryValidation(t *testing.T) {
 	}
 
 	// Non-existent category on Create
-	invalidCatID := "non-existent-cat-id"
+	invalidCatID := utils.NewULID()
 	_, err = svc.Create(ctx, models.CreatePostInput{
 		Type:       models.TypeBlog,
 		Title:      "Second Post",

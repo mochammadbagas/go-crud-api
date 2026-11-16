@@ -60,7 +60,7 @@ func (h *AdminUserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	user, err := h.adminUserSvc.GetUserDetail(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
 		slog.Error("failed to get user detail", slog.Any("error", err))
@@ -82,11 +82,15 @@ func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user, err := h.adminUserSvc.UpdateUser(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
-		if errors.Is(err, service.ErrEmailExists) || errors.Is(err, service.ErrUsernameExists) {
-			utils.Error(w, http.StatusConflict, err.Error())
+		if errors.Is(err, service.ErrEmailExists) {
+			utils.ErrorCode(w, http.StatusConflict, "EMAIL_ALREADY_EXISTS", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrUsernameExists) {
+			utils.ErrorCode(w, http.StatusConflict, "USERNAME_ALREADY_EXISTS", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -108,11 +112,11 @@ func (h *AdminUserHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) 
 	user, err := h.adminUserSvc.UpdateUserStatus(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCannotDeactivateLastSuperAdmin) {
-			utils.Error(w, http.StatusForbidden, err.Error())
+			utils.ErrorCode(w, http.StatusForbidden, "CANNOT_DEACTIVATE_LAST_SUPER_ADMIN", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -134,15 +138,15 @@ func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
 	user, err := h.adminUserSvc.AssignUserRoles(r.Context(), id, input)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrRoleNotFound) {
-			utils.Error(w, http.StatusBadRequest, err.Error())
+			utils.ErrorCode(w, http.StatusBadRequest, "ROLE_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCannotDemoteLastSuperAdmin) {
-			utils.Error(w, http.StatusForbidden, err.Error())
+			utils.ErrorCode(w, http.StatusForbidden, "CANNOT_DEMOTE_LAST_SUPER_ADMIN", err.Error())
 			return
 		}
 		utils.ValidationError(w, err)
@@ -165,11 +169,11 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	err := h.adminUserSvc.DeleteUser(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
-			utils.Error(w, http.StatusNotFound, err.Error())
+			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
 		if errors.Is(err, service.ErrCannotDeleteLastSuperAdmin) {
-			utils.Error(w, http.StatusForbidden, err.Error())
+			utils.ErrorCode(w, http.StatusForbidden, "CANNOT_DELETE_LAST_SUPER_ADMIN", err.Error())
 			return
 		}
 		slog.Error("failed to delete user", slog.Any("error", err))
