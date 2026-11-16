@@ -1,384 +1,458 @@
 # Go REST API Starter Kit
 
-Template backend RESTful API modular, tangguh, dan siap pakai (_production-ready_) berbasis **Go (Golang)** dan **MySQL 8.0+**. Dirancang sebagai pondasi (_starter kit_) untuk berbagai proyek web dan aplikasi backend modern.
+A production-grade, modular, and security-hardened RESTful API starter kit built with **Go (Golang)** and **MySQL 8.0+**. Designed with clean architecture, enterprise authentication standards, granular role-based access control (RBAC), and pluggable infrastructure drivers.
+
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
+[![Router](https://img.shields.io/badge/Router-Chi_v5-black?style=flat-square)](https://github.com/go-chi/chi)
+[![Database](https://img.shields.io/badge/Database-MySQL_8.0+-4479A1?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![ORM / Query](https://img.shields.io/badge/Query_Builder-SQLC-007acc?style=flat-square)](https://sqlc.dev/)
+[![Security](https://img.shields.io/badge/Password_Hash-Argon2id-critical?style=flat-square)](https://datatracker.ietf.org/doc/html/rfc9106)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 ---
 
-## 1. Fitur Utama & Keunggulan
+## Table of Contents
 
-- **Identitas Global Berbasis ULID**: Menggunakan _Universally Unique Lexicographically Sortable Identifier_ (`CHAR(26)`) pada seluruh tabel untuk mencegah enumerasi URL, ramah JSON/JavaScript 53-bit, dan otomatis terurut kronologis (`ORDER BY id DESC`).
-- **Autentikasi Modern (JWT + Refresh Token Rotation)**:
-  - **Access Token**: Stateless JWT (HS256) dengan masa aktif pendek (default 15 menit).
-  - **Refresh Token (RTR)**: Stateful token acak 64-karakter yang disimpan dalam bentuk hash **SHA-256** di database.
-  - **Reuse Detection (Token Family)**: Mendeteksi indikasi pembajakan sesi saat token lama yang sudah dirotasi dicoba digunakan kembali, otomatis mencabut seluruh sesi terkait.
-- **Delivery Token Hybrid**: Mendukung konsumsi client Web/SPA via **HTTP-only Cookie** (`SameSite=Lax`, `Path=/api/v1/auth`) maupun Mobile/Postman via **JSON Response Body** & Header `Authorization: Bearer <token>`.
-- **Pluggable Mailer Architecture (LogMailer & Resend)**: Arsitektur email berbasis driver/interface. Di lingkungan lokal/pengembangan, secara default menggunakan `LogMailer` yang mencetak outbox email langsung ke konsol terminal tanpa butuh akun atau jaringan eksternal. Di lingkungan production, langsung siap _plug-and-play_ dengan layanan transactional email modern (Resend) hanya dengan mengatur konfigurasi di `.env`.
-- **Pluggable File Storage (LocalStorage & Cloudflare R2 / AWS S3)**:
-  - Arsitektur penyimpanan file berbasis interface adapter (`internal/storage`).
-  - **Mode Lokal (Dev)**: Menyimpan file langsung ke direktori `./uploads` dan diserve statis oleh Chi router.
-  - **Mode Cloud (Prod)**: Terintegrasi dengan **Cloudflare R2** (bebas egress fee) dan AWS S3 / MinIO via AWS SDK for Go v2.
-  - **Full File Renaming**: Seluruh nama file yang diunggah otomatis diganti total menggunakan identitas **ULID murni** (`CHAR(26)`) tanpa menyisakan jejak nama file asli dari client, mencegah *path traversal* dan kebocoran informasi.
-  - **Auto-Cleanup**: Otomatis menghapus file fisik lama dari storage (R2/Local) saat pengguna mengganti avatar, menghapus avatar, mengganti/menghapus cover artikel, maupun saat akun pengguna dihapus oleh admin, mencegah penumpukan file yatim (*orphaned files*).
-  - **Graceful Fallback**: Otomatis *fallback* ke `LocalStorage` dengan log peringatan jika driver R2/S3 diaktifkan namun kredensial belum terisi lengkap.
-- **Alur Pemulihan & Verifikasi Akun Lengkap**:
-  - **Forgot Password**: Permintaan reset password dengan proteksi ketat anti user-enumeration (respons 200 konstan).
-  - **Reset Password**: Validasi token SHA-256 15 menit, pembaruan password hash Argon2id, dan otomatis mencabut seluruh sesi refresh token aktif pengguna.
-  - **Email Verification**: Verifikasi pendaftaran akun via tautan email atau kode JSON, lengkap dengan endpoint pengiriman ulang (_resend verification_).
-  - **Email Change Verification**: Penggantian email akun dengan autentikasi password saat ini, verifikasi dikirim ke email tujuan baru, dan otomatis terverifikasi setelah tautan diklik.
-- **User & Profile Management**: Pengelolaan data akun (ganti username, status verifikasi) dan profil personal (nama lengkap, bio, telepon, upload & hapus avatar dengan validasi _magic bytes_).
-- **Password Hashing Standar Tertinggi**: Menggunakan **Argon2id** (RFC 9106 / rekomendasi OWASP) untuk keamanan kredensial maksimal.
-- **Granular Role-Based Access Control (RBAC)**:
-  - Multi-role support (`super_admin`, `admin`, `user`, custom roles).
-  - Format permission granular `resource.action` (contoh: `users.read`, `roles.create`, `posts.update`).
-  - Wildcard bypass (`*`) otomatis untuk `super_admin`.
-  - Middleware otorisasi backend: `RoleMiddleware`, `RequireRoles`, dan `PermissionMiddleware`.
-- **Admin User Management & Critical Safeguard**:
-  - Pengelolaan seluruh akun pengguna (pencarian kata kunci, filter role, filter status `active`, `inactive`, `pending_verification`, `suspended`, pagination).
-  - Penetapan multi-role dan pembaruan informasi profil.
-  - **Super Admin Safeguard**: Perlindungan mutlak mencegah penghapusan, penonaktifan (`inactive`/`suspended`), atau pencabutan role dari Super Admin aktif terakhir (mengembalikan HTTP 403 Forbidden).
-- **Proteksi Brute-Force**: Dilengkapi rate limiter `10 request/menit per IP` pada endpoint registrasi, login, forgot password, dan reset password.
-- **Background Periodic Worker**: Membersihkan refresh token dan auth token kedaluwarsa secara otomatis setiap 24 jam.
-- **Modul CRUD Referensi**: Modul `posts` dan `categories` lengkap sebagai cetak biru (_blueprint_) pembuatan fitur CRUD di masa mendatang.
-- **Developer Experience Prima**: Live reloading dengan **Air**, type-safe queries dengan **SQLC**, dan migrasi ter-embed via **golang-migrate**.
+- [Go REST API Starter Kit](#go-rest-api-starter-kit)
+  - [Table of Contents](#table-of-contents)
+  - [Architectural Overview](#architectural-overview)
+  - [Key Features \& Capabilities](#key-features--capabilities)
+    - [1. Identity \& Data Consistency](#1-identity--data-consistency)
+    - [2. Enterprise Authentication \& Session Management](#2-enterprise-authentication--session-management)
+    - [3. Granular Role-Based Access Control (RBAC)](#3-granular-role-based-access-control-rbac)
+    - [4. Administrative Safeguards](#4-administrative-safeguards)
+    - [5. Multi-Input Field-Level Validation](#5-multi-input-field-level-validation)
+    - [6. Pluggable Infrastructure Adapters](#6-pluggable-infrastructure-adapters)
+    - [7. Background Maintenance \& Hardening](#7-background-maintenance--hardening)
+  - [Technology Stack](#technology-stack)
+  - [Directory Layout](#directory-layout)
+  - [Database Schema \& Data Models](#database-schema--data-models)
+  - [API Reference](#api-reference)
+    - [1. Authentication (`/api/v1/auth`)](#1-authentication-apiv1auth)
+    - [2. User Profile Management (`/api/v1/users`)](#2-user-profile-management-apiv1users)
+    - [3. Public Content (`/api/v1/posts` \& `/api/v1/categories`)](#3-public-content-apiv1posts--apiv1categories)
+    - [4. Content Administration (`/api/v1/admin`)](#4-content-administration-apiv1admin)
+    - [5. Role-Based Access Control (`/api/v1/admin/roles` \& `/permissions`)](#5-role-based-access-control-apiv1adminroles--permissions)
+    - [6. User Administration (`/api/v1/admin/users`)](#6-user-administration-apiv1adminusers)
+  - [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [1. Configuration Setup](#1-configuration-setup)
+    - [2. Database Initialization](#2-database-initialization)
+    - [3. Development Server](#3-development-server)
+    - [4. Testing](#4-testing)
+    - [5. Docker Environment](#5-docker-environment)
+  - [Production & Cloud Drivers](#production--cloud-drivers)
+  - [Documentation & Extended Guides](#documentation--extended-guides)
+  - [API Testing \& Tooling](#api-testing--tooling)
+  - [License](#license)
 
 ---
 
-## 2. Tech Stack & Arsitektur
+## Architectural Overview
 
-### Technology Stack
-
-| Komponen               | Pilihan Teknologi                            | Keterangan                                                               |
-| :--------------------- | :------------------------------------------- | :----------------------------------------------------------------------- |
-| **Bahasa**             | Go (Golang) 1.25+                            | Standard library modern (`log/slog`, `embed`, `net/http`)                |
-| **HTTP Router**        | Chi (`github.com/go-chi/chi/v5`)             | Ringan, cepat, idiomatik `net/http`, sub-router terstruktur              |
-| **Identitas (ID)**     | ULID (`github.com/oklog/ulid/v2`)            | Crockford Base32 26-karakter (`CHAR(26)`)                                |
-| **JWT**                | `github.com/golang-jwt/jwt/v5`               | Token stateless HS256 untuk otorisasi bearer                             |
-| **Password Hashing**   | Argon2id (`github.com/alexedwards/argon2id`) | Standar keamanan kredensial modern terkini                               |
-| **Rate Limiter**       | `github.com/go-chi/httprate`                 | Proteksi IP-based pada endpoint sensitif                                 |
-| **Pluggable Mailer**   | Adapter Pattern (`internal/mailer`)          | `LogMailer` untuk dev lokal (terminal) & `ResendMailer` untuk production |
-| **Pluggable Storage**  | Adapter Pattern (`internal/storage`)         | `LocalStorage` untuk dev lokal & Cloudflare R2 / AWS S3 via AWS SDK Go v2|
-| **CORS**               | `github.com/go-chi/cors`                     | Cross-Origin Resource Sharing terkonfigurasi via `.env`                  |
-| **Database**           | MySQL 8.0+                                   | InnoDB, collation `utf8mb4_0900_ai_ci`                                   |
-| **SQL Generator**      | `sqlc` (`sqlc.yaml`)                         | Compile query SQL murni menjadi kode Go type-safe                        |
-| **Database Migration** | `github.com/golang-migrate/migrate/v4`       | Migrasi DDL ter-embed ke dalam binary dengan `//go:embed`                |
-| **Markdown Parser**    | Goldmark (`github.com/yuin/goldmark`)        | Parser Markdown ke HTML aman bebas XSS                                   |
-| **Live Reload**        | Air (`.air.toml`)                            | Otomatis rebuild saat file source code berubah                           |
-
-### Arsitektur Layering
+This project follows Clean Architecture and Domain-Driven Design (DDD) principles. It isolates business rules from delivery mechanisms and third-party libraries, ensuring maintainability, testability, and deterministic behavior.
 
 ```text
-HTTP Request
-     ↓
-Chi Router & Global Middleware (Logger, Recoverer, CORS, RealIP)
-     ↓
-Route Group & Auth Middleware (JWTAuthMiddleware / RequireRole / RateLimiter)
-     ↓
-Handler Layer (internal/handlers) — Validasi DTO & format respon HTTP
-     ↓
-Service Layer (internal/service) — Logika bisnis & orkestrasi ──► Mailer Layer (Log / Resend)
-     ↓
-Repository Layer (internal/repository) — Interface & implementasi SQLC
-     ↓
-Database MySQL 8.0+
+[ Client HTTP Request ]
+         │
+         ▼
+[ Chi Router & Global Middleware ]
+  ├── Structured Logger (slog)
+  ├── Recovery & Panic Handler
+  ├── CORS Preflight / Headers
+  └── RealIP & Proxy Sanitization
+         │
+         ▼
+[ Route Group & Authorization Pipeline ]
+  ├── Rate Limiter (IP-based, httprate)
+  ├── JWT Authentication Middleware
+  ├── Role Guard (RequireRole / RequireRoles)
+  └── Permission Guard (PermissionMiddleware)
+         │
+         ▼
+[ HTTP Handlers (internal/handlers) ]
+  ├── Payload Decoding & JSON Parsing
+  └── Field-Level Multi-Error Validation (internal/models)
+         │
+         ▼
+[ Service Layer (internal/service) ]
+  ├── Core Business Logic & Invariants
+  ├── Password Hashing (Argon2id)
+  ├── Pluggable Mailer (internal/mailer)
+  └── Pluggable Storage (internal/storage)
+         │
+         ▼
+[ Repository Layer (internal/repository) ]
+  ├── SQLC Type-Safe Query Execution
+  └── ULID Generator & Normalization (internal/utils)
+         │
+         ▼
+[ MySQL 8.0+ Database Engine ]
 ```
 
 ---
 
-## 3. Struktur Direktori Proyek
+## Key Features & Capabilities
+
+### 1. Identity & Data Consistency
+
+- **ULID Primary & Foreign Keys**: All entities use 26-character Crockford Base32 Universally Unique Lexicographically Sortable Identifiers (`CHAR(26)`). Prevents ID enumeration attacks, guarantees chronological sorting (`ORDER BY id DESC`), and eliminates 53-bit JavaScript integer truncation issues.
+
+### 2. Enterprise Authentication & Session Management
+
+- **JWT + Refresh Token Rotation (RTR)**:
+  - **Access Token**: Stateless, short-lived (15 minutes default) HS256 JWT containing user identity and role claims.
+  - **Refresh Token**: Cryptographically secure 64-character random string, stored as a SHA-256 hash in the database.
+  - **Token Family & Reuse Detection**: Automatically tracks lineage. If an expired or revoked refresh token is reused (indicating session interception), the system revokes the entire token family immediately.
+- **Hybrid Delivery Strategy**: Supports browser-based Single Page Applications via `HttpOnly`, `SameSite=Lax` cookies, alongside mobile/desktop clients via standard `Authorization: Bearer <token>` headers and JSON payload bodies.
+
+### 3. Granular Role-Based Access Control (RBAC)
+
+- Multi-role association per user (`users` -> `user_roles` -> `roles`).
+- Fine-grained permission model structured as `resource.action` (e.g., `users.read`, `roles.create`, `posts.delete`).
+- Automatic wildcard bypass (`*`) for accounts holding the `super_admin` role.
+- Modular middleware decorators: `RequireRole`, `RequireRoles`, and `PermissionMiddleware`.
+
+### 4. Administrative Safeguards
+
+- **Critical Super Admin Protection**: Built-in invariant logic prevents the last remaining active `super_admin` from being deleted, deactivated, suspended, or demoted, preventing irreversible system lockouts.
+
+### 5. Multi-Input Field-Level Validation
+
+- Comprehensive payload evaluation collecting all field constraints into a unified `errors` map without early exit, enabling client-side forms to display inline feedback across all fields simultaneously:
+  ```json
+  {
+    "error": "validation failed",
+    "errors": {
+      "username": "username must be between 3 and 30 characters",
+      "email": "invalid email format",
+      "password": "password must be at least 8 characters long"
+    }
+  }
+  ```
+
+### 6. Pluggable Infrastructure Adapters
+
+- **Storage Driver (`internal/storage`)**:
+  - `local`: Writes to local filesystem (`./uploads`) with path traversal sanitization and Chi static file serving.
+  - `s3` / `r2`: Cloudflare R2 (zero egress fees) and AWS S3 integration via AWS SDK for Go v2.
+  - **Zero Leakage Renaming**: Uploaded files are renamed using pure ULIDs (`avatar_<ULID>.<ext>`), erasing original client filenames to eliminate path traversal vulnerabilities.
+  - **Automated Orphan Cleanup**: Automatically purges replaced or deleted files from storage whenever users update avatars, remove covers, or delete accounts.
+  - **Graceful Fallback**: Automatically reverts to local storage with warning logs if cloud credentials are incomplete.
+- **Mailer Driver (`internal/mailer`)**:
+  - `log`: Console dev mailer outputting formatted terminal inspection boxes without requiring network access or third-party accounts.
+  - `resend`: Production-ready transactional email engine leveraging Resend's REST API for verification and password reset workflows.
+
+### 7. Background Maintenance & Hardening
+
+- **Automated Token Pruning**: Background worker executes every 24 hours to delete expired refresh tokens and consumed auth tokens.
+- **Rate Limiting**: Configured IP rate limiting (10 requests/minute) protecting sensitive endpoints against brute-force attacks.
+- **Argon2id Hashing**: Password hashing compliant with OWASP guidelines and RFC 9106.
+
+---
+
+## Technology Stack
+
+| Layer / Concern       | Technology        | Version | Purpose                                                    |
+| :-------------------- | :---------------- | :------ | :--------------------------------------------------------- |
+| Runtime Language      | Go (Golang)       | 1.25+   | High-performance compiled backend runtime                  |
+| HTTP Router           | Chi Router        | v5.2.5  | Lightweight, idiomatic `net/http` subrouting               |
+| Primary Storage       | MySQL             | 8.0+    | Relational engine, InnoDB, `utf8mb4_0900_ai_ci`            |
+| Database Migration    | golang-migrate    | v4.19.1 | Embedded DDL migration runner (`iofs` / `embed`)           |
+| Query Generator       | SQLC              | v1.27.0 | Compile-time type-safe Go repository generation            |
+| Entity Identification | ULID              | v2.1.0  | Lexicographically sortable 128-bit unique identifiers      |
+| Authentication        | Golang JWT        | v5.3.1  | Stateless JSON Web Tokens (HS256)                          |
+| Password Encryption   | Argon2id          | -       | Modern memory-hard key derivation                          |
+| Rate Limiter          | httprate          | v0.15.1 | In-memory token bucket rate limiting                       |
+| Cloud Object Storage  | AWS SDK for Go v2 | v2.x    | S3 / Cloudflare R2 API compatibility                       |
+| Markdown Processor    | Goldmark          | v1.7.16 | Standards-compliant Markdown parser with HTML sanitization |
+| Hot Reloading         | Air               | v1.62.0 | Development file watcher and binary rebuilder              |
+
+---
+
+## Directory Layout
 
 ```text
 .
 ├── cmd/
 │   └── server/
-│       └── main.go                     # Composition Root: Bootstrap server, DI wiring, background worker
+│       └── main.go                  # Application entrypoint & composition root
 ├── db/
-│   ├── embed.go                        # Embed asset migrasi SQL ke binary Go
-│   ├── migrations/                     # File migrasi DDL golang-migrate (UP/DOWN)
-│   │   ├── 000001_init_schema.up.sql
-│   │   ├── 000001_init_schema.down.sql
-│   │   ├── 000002_rbac_and_admin.up.sql
-│   │   └── 000002_rbac_and_admin.down.sql
-│   └── queries/                        # Query SQL mentah untuk sqlc generator
-│       ├── auth_tokens.sql
-│       ├── categories.sql
-│       ├── permissions.sql
-│       ├── post_views.sql
-│       ├── posts.sql
-│       ├── refresh_tokens.sql
-│       ├── role_permissions.sql
-│       ├── roles.sql
-│       ├── user_profiles.sql
-│       ├── user_roles.sql
-│       └── users.sql
+│   ├── embed.go                     # Migration filesystem embed directive
+│   ├── migrations/                  # Schema DDL versions (up/down SQL)
+│   └── queries/                     # Raw SQL statements consumed by SQLC
 ├── docs/
-│   ├── ref/
-│   │   └── architecture_reference.md   # Blueprint arsitektur backend Go
-│   ├── learning_guide.md               # Panduan belajar arsitektur & konsep Go proyek ini
-│   ├── starter_kit_specification.md    # Spesifikasi teknis & arsitektur Starter Kit
-│   ├── technical_specification.md      # Spesifikasi teknis modul & skema database
-│   └── postman_collection.json         # Koleksi Postman v2.1 siap pakai
-├── internal/                           # Paket privat (hanya bisa diimpor modul ini)
-│   ├── config/                         # Loader konfigurasi dari .env / OS env
-│   ├── database/                       # MySQL pool, migrate runner, & idempotent seeder
-│   ├── handlers/                       # HTTP Handlers (Auth, Users, Admin, Public, Roles, Admin Users)
-│   ├── mailer/                         # Pluggable Mailer (LogMailer & ResendMailer)
-│   ├── middleware/                     # JWT Auth, Role Guard, Permission Guard, CORS middleware
-│   ├── models/                         # Domain entities, input DTOs, & payload validators
-│   ├── repository/                     # Repository interfaces & sqlc wrappers
-│   │   └── sqlc/                       # Kode Go hasil generate otomatis sqlc
-│   ├── routes/                         # Pendaftaran rute Chi & static file uploads
-│   ├── service/                        # Business logic layer (Auth, User, RBAC, AdminUser, Content)
-│   ├── storage/                        # Pluggable Storage (LocalStorage & Cloudflare R2 / AWS S3)
-│   └── utils/                          # ULID, JWT, HashToken, JSON response helpers
-├── .air.toml                           # Konfigurasi live-reload Air
-├── .env.example                        # Template environment variables
-├── api.http                            # Koleksi HTTP request REST Client
-├── sqlc.yaml                           # Konfigurasi sqlc
-└── README.md
+│   ├── architecture.md          # Architectural blueprint, layering, and design principles
+│   ├── how_to_add_new_module.md # Step-by-step practical guide: Adding new CRUD features
+│   ├── security_and_rbac.md     # Authentication (JWT RTR), RBAC, and security safeguards
+│   ├── deployment.md            # Production deployment, Docker, Resend, and Cloudflare R2
+│   ├── learning_guide.md        # Educational walkthrough of Go concepts and idioms
+│   ├── postman_collection.json  # Postman v2.1 test collection
+│   └── specs/                   # Historical build-phase technical specifications
+├── internal/
+│   ├── config/                      # Environment variables loading and validation
+│   ├── database/                    # MySQL connection pooling, migrations, & seeder
+│   ├── handlers/                    # HTTP presentation layer & request controllers
+│   ├── mailer/                      # Pluggable transactional email adapters
+│   ├── middleware/                  # Auth, RBAC, Rate Limit, and CORS middleware
+│   ├── models/                      # Domain entities, request DTOs, & validators
+│   ├── repository/                  # Data access layer & SQLC interfaces
+│   ├── routes/                      # Route registry and middleware tree assembly
+│   ├── service/                     # Core business logic layer
+│   ├── storage/                     # Pluggable local and cloud storage adapters
+│   └── utils/                       # Cryptographic tokens, ULID, JWT, & JSON helpers
+├── .air.toml                        # Live reload configuration
+├── .env.example                     # Environment variables template
+├── api.http                         # VS Code REST Client executable requests
+├── compose.yaml                     # Production multi-container Docker configuration
+├── Dockerfile                       # Multi-stage lightweight scratch/alpine build
+└── sqlc.yaml                        # SQLC generator rules and mapping configuration
 ```
 
 ---
 
-## 4. Skema Database (MySQL 8.0+)
+## Database Schema & Data Models
 
-Semua entitas menggunakan tipe `CHAR(26)` untuk Primary Key dan Foreign Key:
+All primary and foreign keys utilize `CHAR(26)` UTF-8 strings representing ULID values.
 
-1. **`users`**: Kredensial inti akun (`id`, `username`, `email`, `password_hash`, `role`, `status`, `email_verified_at`, `created_at`, `updated_at`).
-2. **`user_profiles`**: Profil personal (`user_id` PK & FK, `full_name`, `bio`, `phone_number`, `avatar_url`, `created_at`, `updated_at`).
-3. **`refresh_tokens`**: Stateful session tracker (`id`, `user_id`, `token_hash`, `token_family`, `is_revoked`, `expires_at`, `user_agent`, `ip_address`).
-4. **`auth_tokens`**: Token sementara untuk verifikasi email, reset password, dan ubah email (`id`, `user_id`, `token_hash`, `token_type`, `payload`, `is_used`, `expires_at`, `created_at`).
-5. **`roles`**: Master peran pengguna RBAC (`id`, `name`, `display_name`, `description`). Default: `super_admin`, `admin`, `user`.
-6. **`permissions`**: Master izin/hak akses granular sistem dengan pola `resource.action` (`id`, `name`, `description`).
-7. **`role_permissions`**: Pivot relasi many-to-many role ke permissions (`role_id`, `permission_id`).
-8. **`user_roles`**: Pivot relasi many-to-many user ke roles / dukungan multi-role (`user_id`, `role_id`).
-9. **`categories`**: Modul referensi kategori konten (`id`, `name`, `slug`).
-10. **`posts`**: Modul referensi konten artikel/blog (`id`, `type`, `title`, `slug`, `content`, `category_id`, `tags`, `status`, `published_at`).
-11. **`post_views`**: Modul statistik views (`id`, `post_id`, `views`).
-
----
-
-## 5. Rincian Endpoint API
-
-### 5.1. Autentikasi (`/api/v1/auth`)
-
-| Method         | Endpoint                           | Auth                  | Deskripsi                                                                                              |
-| :------------- | :--------------------------------- | :-------------------- | :----------------------------------------------------------------------------------------------------- |
-| `POST`         | `/api/v1/auth/register`            | Public (Rate Limited) | Registrasi pengguna baru (username, email, password, full_name). Otomatis mengirim email verifikasi.   |
-| `POST`         | `/api/v1/auth/login`               | Public (Rate Limited) | Login pengguna/admin. Mengembalikan token hybrid (JSON & Cookie).                                      |
-| `POST`         | `/api/v1/auth/refresh`             | Public / Cookie       | Memperoleh access token baru dengan mekanisme Refresh Token Rotation (RTR).                            |
-| `POST`         | `/api/v1/auth/logout`              | Protected (Bearer)    | Mencabut refresh token dan menghapus cookie sesi.                                                      |
-| `POST`         | `/api/v1/auth/change-password`     | Protected (Bearer)    | Mengganti password akun dan membatalkan seluruh sesi login lainnya.                                    |
-| `POST`         | `/api/v1/auth/forgot-password`     | Public (Rate Limited) | Permintaan reset password via email. Anti-enumerasi (selalu 200 OK).                                   |
-| `POST`         | `/api/v1/auth/reset-password`      | Public (Rate Limited) | Mengatur ulang password dengan token reset SHA-256 (TTL 15 mnt). Mencabut seluruh refresh token aktif. |
-| `GET` / `POST` | `/api/v1/auth/verify-email`        | Public                | Verifikasi alamat email pengguna via query parameter (`?token=...`) atau JSON body.                    |
-| `POST`         | `/api/v1/auth/resend-verification` | Public (Rate Limited) | Pengiriman ulang email verifikasi. Anti user-enumeration (selalu 200 OK).                              |
-
-### 5.2. User Management (`/api/v1/users`)
-
-| Method         | Endpoint                             | Auth               | Deskripsi                                                                                                    |
-| :------------- | :----------------------------------- | :----------------- | :----------------------------------------------------------------------------------------------------------- |
-| `GET`          | `/api/v1/users/me`                   | Protected (Bearer) | Mengambil informasi akun dan profil pengguna yang sedang login.                                              |
-| `PUT`          | `/api/v1/users/profile`              | Protected (Bearer) | Memperbarui informasi profil (`full_name`, `bio`, `phone_number`).                                           |
-| `POST`         | `/api/v1/users/avatar`               | Protected (Bearer) | Mengunggah foto profil avatar (multipart, JPG/PNG/WEBP maks 5MB).                                            |
-| `DELETE`       | `/api/v1/users/avatar`               | Protected (Bearer) | Menghapus foto profil avatar.                                                                                |
-| `PUT`          | `/api/v1/users/username`             | Protected (Bearer) | Mengubah username (validasi alfanumerik 3-30 karakter & anti-duplikasi).                                     |
-| `GET`          | `/api/v1/users/status`               | Protected (Bearer) | Melihat status aktif akun dan status verifikasi email.                                                       |
-| `POST`         | `/api/v1/users/email/request-change` | Protected (Bearer) | Mengajukan penggantian email akun dengan validasi password saat ini. Token dikirim ke email baru.            |
-| `GET` / `POST` | `/api/v1/users/email/confirm-change` | Public             | Konfirmasi pergantian email via query parameter atau JSON body. Mengubah email dan menandai status verified. |
-
-### 5.3. Admin & Content Management (`/api/v1/admin`)
-
-_Dapat diakses oleh akun dengan role `admin` atau `super_admin` sesuai permission terdaftar._
-
-| Method                   | Endpoint                        | Permission Required  | Deskripsi                                                |
-| :----------------------- | :------------------------------ | :------------------- | :------------------------------------------------------- |
-| `GET` / `POST`           | `/api/v1/admin/posts`           | `posts.read/create`  | List seluruh post (draft & published) / Tambah post baru |
-| `GET` / `PUT` / `DELETE` | `/api/v1/admin/posts/{id}`      | `posts.read/upd/del` | Detail / Perbarui / Hapus post berdasarkan ULID          |
-| `GET` / `POST`           | `/api/v1/admin/categories`      | `categories.manage`  | List seluruh kategori / Tambah kategori baru             |
-| `PUT` / `DELETE`         | `/api/v1/admin/categories/{id}` | `categories.manage`  | Perbarui / Hapus kategori berdasarkan ULID               |
-| `POST`                   | `/api/v1/admin/upload`          | Admin                | Upload file gambar umum ke direktori lokal               |
-
-### 5.4. RBAC Management (`/api/v1/admin/roles` & `/api/v1/admin/permissions`)
-
-_Super Admin memiliki akses wildcard bypass (`*`) otomatis untuk seluruh endpoint._
-
-| Method                   | Endpoint                               | Permission Required  | Deskripsi                                           |
-| :----------------------- | :------------------------------------- | :------------------- | :-------------------------------------------------- |
-| `GET` / `POST`           | `/api/v1/admin/roles`                  | `roles.read/create`  | Melihat daftar role / Membuat role baru             |
-| `GET` / `PUT` / `DELETE` | `/api/v1/admin/roles/{id}`             | `roles.read/upd/del` | Detail / Perbarui / Hapus role kustom               |
-| `PUT`                    | `/api/v1/admin/roles/{id}/permissions` | `roles.update`       | Sinkronisasi permission yang dimiliki role          |
-| `GET` / `POST`           | `/api/v1/admin/permissions`            | `permissions.r/c`    | Melihat daftar permission / Membuat permission baru |
-| `GET` / `PUT` / `DELETE` | `/api/v1/admin/permissions/{id}`       | `permissions.r/u/d`  | Detail / Perbarui / Hapus permission                |
-
-### 5.5. Admin User Management (`/api/v1/admin/users`)
-
-_Dilengkapi **Super Admin Safeguard**: mencegah penghapusan, penonaktifan, atau demosi Super Admin aktif terakhir._
-
-| Method   | Endpoint                          | Permission Required | Deskripsi                                                                        |
-| :------- | :-------------------------------- | :------------------ | :------------------------------------------------------------------------------- |
-| `GET`    | `/api/v1/admin/users`             | `users.read`        | Daftar seluruh pengguna (filter: search, status, role, pagination)               |
-| `GET`    | `/api/v1/admin/users/{id}`        | `users.read`        | Detail lengkap pengguna (biodata profil dan multi-role)                          |
-| `PUT`    | `/api/v1/admin/users/{id}`        | `users.update`      | Perbarui informasi pengguna (username, email, biodata profil)                    |
-| `PUT`    | `/api/v1/admin/users/{id}/status` | `users.update`      | Mengubah status akun (`active`, `inactive`, `pending_verification`, `suspended`) |
-| `PUT`    | `/api/v1/admin/users/{id}/roles`  | `users.update`      | Menetapkan multi-role ke pengguna                                                |
-| `DELETE` | `/api/v1/admin/users/{id}`        | `users.delete`      | Menghapus pengguna dari sistem                                                   |
-
-### 5.6. Public Content (`/api/v1/posts` & `/api/v1/categories`)
-
-Endpoint publik read-only tanpa autentikasi:
-
-- `GET /api/v1/posts` (Filter: `type`, `tag`, `featured`, `page`, `limit`)
-- `GET /api/v1/posts/{slug}` (Detail post published & increment views)
-- `GET /api/v1/categories` & `GET /api/v1/categories/{slug}/posts`
-- URL Aliases: `/blog/{slug}`, `/articles/{slug}`, `/journal/{slug}`, `/categories/{slug}`
+| Table              | Purpose                                        | Key Attributes                                                                    |
+| :----------------- | :--------------------------------------------- | :-------------------------------------------------------------------------------- |
+| `users`            | Core user identity & credentials               | `id`, `username`, `email`, `password_hash`, `role`, `status`, `email_verified_at` |
+| `user_profiles`    | Extended personal profile data                 | `user_id` (PK/FK), `full_name`, `bio`, `phone_number`, `avatar_url`               |
+| `refresh_tokens`   | Stateful session lifecycle tracking            | `id`, `user_id`, `token_hash`, `token_family`, `is_revoked`, `expires_at`         |
+| `auth_tokens`      | Ephemeral tokens (Verify, Reset, Email Change) | `id`, `user_id`, `token_hash`, `token_type`, `payload`, `is_used`, `expires_at`   |
+| `roles`            | RBAC role definitions                          | `id`, `name`, `display_name`, `description`                                       |
+| `permissions`      | RBAC granular permissions                      | `id`, `name`, `description` (format: `resource.action`)                           |
+| `role_permissions` | Pivot table for role-to-permission mapping     | `role_id`, `permission_id`                                                        |
+| `user_roles`       | Pivot table for user multi-role assignment     | `user_id`, `role_id`                                                              |
+| `categories`       | Content classification blueprint               | `id`, `name`, `slug`                                                              |
+| `posts`            | Content management blueprint                   | `id`, `type`, `title`, `slug`, `content`, `category_id`, `status`, `published_at` |
+| `post_views`       | Post view counters                             | `id`, `post_id`, `views`                                                          |
 
 ---
 
-## 6. Panduan Menjalankan Proyek
+## API Reference
 
-### Persyaratan Sistem
+### 1. Authentication (`/api/v1/auth`)
 
-- **Go 1.25+**
-- **MySQL 8.0+**
+| Method | Endpoint                           | Authorization         | Description                                                                      |
+| :----- | :--------------------------------- | :-------------------- | :------------------------------------------------------------------------------- |
+| `POST` | `/api/v1/auth/register`            | Public (Rate Limited) | Registers a new account and dispatches an email verification token.              |
+| `POST` | `/api/v1/auth/login`               | Public (Rate Limited) | Authenticates user; returns access token (JSON) and refresh token (Cookie/JSON). |
+| `POST` | `/api/v1/auth/refresh`             | Public / Cookie       | Rotates refresh token and issues a new access token via RTR.                     |
+| `POST` | `/api/v1/auth/logout`              | Bearer Token          | Revokes refresh token session and invalidates HTTP-only cookie.                  |
+| `POST` | `/api/v1/auth/change-password`     | Bearer Token          | Updates password and terminates all other active sessions.                       |
+| `POST` | `/api/v1/auth/forgot-password`     | Public (Rate Limited) | Dispatches reset token. Anti-enumeration returns 200 OK unconditionally.         |
+| `POST` | `/api/v1/auth/reset-password`      | Public (Rate Limited) | Validates reset token and sets new password; revokes all sessions.               |
+| `GET`  | `/api/v1/auth/verify-email`        | Public                | Confirms registration via query parameter (`?token=...`).                        |
+| `POST` | `/api/v1/auth/verify-email`        | Public                | Confirms registration via JSON payload.                                          |
+| `POST` | `/api/v1/auth/resend-verification` | Public (Rate Limited) | Resends verification email. Anti-enumeration returns 200 OK unconditionally.     |
 
-### 1. Setup Environment (`.env`)
+### 2. User Profile Management (`/api/v1/users`)
 
-Salin file `.env.example` ke `.env`:
+| Method   | Endpoint                             | Authorization | Description                                                                   |
+| :------- | :----------------------------------- | :------------ | :---------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/users/me`                   | Bearer Token  | Retrieves authenticated user account and profile data.                        |
+| `PUT`    | `/api/v1/users/profile`              | Bearer Token  | Updates profile details (`full_name`, `bio`, `phone_number`).                 |
+| `PUT`    | `/api/v1/users/username`             | Bearer Token  | Updates username with uniqueness and character pattern validation.            |
+| `GET`    | `/api/v1/users/status`               | Bearer Token  | Checks account verification and status.                                       |
+| `POST`   | `/api/v1/users/avatar`               | Bearer Token  | Uploads profile picture (multipart form, magic bytes validation, max 5MB).    |
+| `DELETE` | `/api/v1/users/avatar`               | Bearer Token  | Removes avatar file and resets database reference.                            |
+| `POST`   | `/api/v1/users/email/request-change` | Bearer Token  | Initiates email change with current password check; sends confirmation token. |
+| `GET`    | `/api/v1/users/email/confirm-change` | Public        | Confirms email change via browser link (`?token=...`).                        |
+| `POST`   | `/api/v1/users/email/confirm-change` | Public        | Confirms email change via JSON payload.                                       |
 
-```powershell
-Copy-Item .env.example .env
+### 3. Public Content (`/api/v1/posts` & `/api/v1/categories`)
+
+| Method | Endpoint                          | Authorization | Description                                                                        |
+| :----- | :-------------------------------- | :------------ | :--------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/posts`                   | Public        | Lists published posts with filtering (`type`, `tag`, `featured`, `page`, `limit`). |
+| `GET`  | `/api/v1/posts/{slug}`            | Public        | Retrieves post by slug and increments view counter.                                |
+| `GET`  | `/api/v1/categories`              | Public        | Lists all content categories.                                                      |
+| `GET`  | `/api/v1/categories/{slug}/posts` | Public        | Lists published posts associated with a category slug.                             |
+| `GET`  | `/articles/{slug}`                | Public        | SEO vanity alias for articles.                                                     |
+| `GET`  | `/blog/{slug}`                    | Public        | SEO vanity alias for blog posts.                                                   |
+| `GET`  | `/journal/{slug}`                 | Public        | SEO vanity alias for journal posts.                                                |
+
+### 4. Content Administration (`/api/v1/admin`)
+
+| Method   | Endpoint                        | Permission Required | Description                                                  |
+| :------- | :------------------------------ | :------------------ | :----------------------------------------------------------- |
+| `GET`    | `/api/v1/admin/posts`           | `posts.read`        | Lists all posts (draft and published).                       |
+| `POST`   | `/api/v1/admin/posts`           | `posts.create`      | Creates a new post with automatic slug generation.           |
+| `GET`    | `/api/v1/admin/posts/{id}`      | `posts.read`        | Retrieves post details by ULID.                              |
+| `PUT`    | `/api/v1/admin/posts/{id}`      | `posts.update`      | Updates post; cleans up obsolete cover images automatically. |
+| `DELETE` | `/api/v1/admin/posts/{id}`      | `posts.delete`      | Deletes post record and associated storage file.             |
+| `GET`    | `/api/v1/admin/categories`      | `categories.manage` | Lists all categories.                                        |
+| `POST`   | `/api/v1/admin/categories`      | `categories.manage` | Creates a new category.                                      |
+| `PUT`    | `/api/v1/admin/categories/{id}` | `categories.manage` | Updates category by ULID.                                    |
+| `DELETE` | `/api/v1/admin/categories/{id}` | `categories.manage` | Deletes category by ULID.                                    |
+| `POST`   | `/api/v1/admin/upload`          | Role: `admin`       | Uploads generic image asset to storage.                      |
+
+### 5. Role-Based Access Control (`/api/v1/admin/roles` & `/permissions`)
+
+| Method   | Endpoint                               | Permission Required  | Description                                      |
+| :------- | :------------------------------------- | :------------------- | :----------------------------------------------- |
+| `GET`    | `/api/v1/admin/roles`                  | `roles.read`         | Lists all configured roles.                      |
+| `POST`   | `/api/v1/admin/roles`                  | `roles.create`       | Creates a new role.                              |
+| `GET`    | `/api/v1/admin/roles/{id}`             | `roles.read`         | Retrieves role details and assigned permissions. |
+| `PUT`    | `/api/v1/admin/roles/{id}`             | `roles.update`       | Updates role metadata.                           |
+| `PUT`    | `/api/v1/admin/roles/{id}/permissions` | `roles.update`       | Synchronizes permission array for a role.        |
+| `DELETE` | `/api/v1/admin/roles/{id}`             | `roles.delete`       | Deletes role by ULID.                            |
+| `GET`    | `/api/v1/admin/permissions`            | `permissions.read`   | Lists all available system permissions.          |
+| `POST`   | `/api/v1/admin/permissions`            | `permissions.create` | Registers a new permission descriptor.           |
+| `GET`    | `/api/v1/admin/permissions/{id}`       | `permissions.read`   | Retrieves permission details.                    |
+| `PUT`    | `/api/v1/admin/permissions/{id}`       | `permissions.update` | Updates permission description.                  |
+| `DELETE` | `/api/v1/admin/permissions/{id}`       | `permissions.delete` | Deletes permission by ULID.                      |
+
+### 6. User Administration (`/api/v1/admin/users`)
+
+| Method   | Endpoint                          | Permission Required | Description                                                                 |
+| :------- | :-------------------------------- | :------------------ | :-------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/admin/users`             | `users.read`        | Lists users (search, status filter, role filter, pagination).               |
+| `GET`    | `/api/v1/admin/users/{id}`        | `users.read`        | Retrieves user profile and multi-role assignments.                          |
+| `PUT`    | `/api/v1/admin/users/{id}`        | `users.update`      | Updates user credentials and profile information.                           |
+| `PUT`    | `/api/v1/admin/users/{id}/status` | `users.update`      | Updates status (`active`, `inactive`, `pending_verification`, `suspended`). |
+| `PUT`    | `/api/v1/admin/users/{id}/roles`  | `users.update`      | Assigns multi-roles to user.                                                |
+| `DELETE` | `/api/v1/admin/users/{id}`        | `users.delete`      | Permanently deletes user and cleans up avatar from storage.                 |
+
+_Note: Endpoints affecting user status, role assignments, and deletions enforce the Super Admin Safeguard, blocking modifications against the last active `super_admin` with HTTP 403 Forbidden._
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Go**: 1.25 or higher
+- **MySQL Server**: 8.0 or higher
+- **Make** or **Air** (optional, for hot-reloading)
+
+### 1. Configuration Setup
+
+Copy the environment template to create your local `.env`:
+
+```bash
+cp .env.example .env
 ```
 
-Sesuaikan konfigurasi koneksi MySQL dan kunci JWT pada file `.env`:
+Adjust the parameters to match your local database and secret keys:
 
 ```ini
 PORT=8080
+APP_ENV=development
+FRONTEND_URL=http://localhost:3000
+
+# Database Configuration
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=root
-DB_PASSWORD=
+DB_PASSWORD=your_password
 DB_NAME=go_crud_api
 
+# Initial Administrator Credentials (used during -fresh seed)
 ADMIN_NAME=Administrator
 ADMIN_EMAIL=admin@mmdbconnect.com
 ADMIN_PASSWORD=adminpassword123
 
-JWT_SECRET=super-secret-starter-kit-jwt-key-change-in-production
+# JWT Token Lifecycles
+JWT_SECRET=replace_with_a_long_random_entropy_secret_key
 JWT_ACCESS_TTL_MINUTES=15
 JWT_REFRESH_TTL_DAYS=7
 
-# Pluggable Mailer: 'log' (default lokal tanpa setup/akun) atau 'resend'
+# Pluggable Mailer: 'log' (local terminal) or 'resend' (production)
 MAILER_DRIVER=log
 RESEND_API_KEY=
 MAIL_FROM=Go Starter Kit <onboarding@resend.dev>
-FRONTEND_URL=http://localhost:3000
+
+# Pluggable Storage: 'local', 'r2', or 's3'
+STORAGE_DRIVER=local
+UPLOAD_DIR=./uploads
 ```
 
-### 2. Inisialisasi Database Pertama Kali
+### 2. Database Initialization
 
-Jalankan server dengan flag `-fresh` untuk membuat seluruh tabel dan menyemai akun administrator awal:
+Execute the server binary with the `-fresh` flag once to drop any legacy tables, execute all migrations sequentially, and seed initial roles, permissions, categories, sample posts, and the default administrator account:
 
-```powershell
+```bash
 go run cmd/server/main.go -fresh
 ```
 
-### 3. Menjalankan Server Development (Hot-Reload)
+### 3. Development Server
 
-Gunakan **Air** untuk proses development cepat:
+Start the application with live reload using **Air**:
 
-```powershell
+```bash
 air
 ```
 
-Atau gunakan perintah standar Go:
+Alternatively, run directly via the Go toolchain:
 
-```powershell
+```bash
 go run cmd/server/main.go
 ```
 
-### 4. Menjalankan Unit & Integration Test
+The server binds to `http://localhost:8080`.
 
-```powershell
-go test -v ./...
+### 4. Testing
+
+Run the full automated test suite (including validation, auth lifecycles, and storage tests):
+
+```bash
+go test -v -count=1 ./...
 ```
 
-### 5. Menjalankan SQL Generator (SQLC)
+Run test suite with race condition detection:
 
-Jika Anda menambah query SQL di `db/queries/*.sql`:
-
-```powershell
-sqlc generate
+```bash
+go test -race ./...
 ```
 
-### 6. Panduan Menghubungkan Layanan Email Production (Resend)
+### 5. Docker Environment
 
-Ketika Anda siap beralih dari pengujian lokal (`LogMailer`) ke pengiriman email sungguhan di staging/production:
+The repository includes a ready-to-run containerized setup with multi-stage build:
 
-1. **Daftar Akun Resend**:
-   Kunjungi [resend.com](https://resend.com) dan buat akun (tier gratis mencakup 3.000 email/bulan dan 100 email/hari).
+```bash
+# Start MySQL and the Go REST API container
+docker compose up -d --build
 
-2. **Dapatkan API Key**:
-   - Masuk ke dashboard Resend $\rightarrow$ menu **API Keys**.
-   - Klik **Create API Key**, beri nama (misal: `go-starter-kit`), pilih permission `Full access`, lalu salin token yang diawali dengan `re_...`.
-
-3. **Domain Pengirim**:
-   - **Mode Testing Cepat**: Anda dapat langsung menggunakan sender bawaan Resend: `onboarding@resend.dev` (hanya bisa mengirim ke email yang Anda daftarkan di akun Resend).
-   - **Mode Production**: Tambahkan domain Anda di menu **Domains**, masukkan DNS records (DKIM, SPF) ke registrar domain Anda, dan tunggu statusnya terverifikasi.
-
-4. **Konfigurasi Environment (`.env` / `.env.docker`)**:
-   Buka file `.env` dan perbarui variabel mailer:
-
-   ```ini
-   # Ubah driver dari 'log' ke 'resend'
-   MAILER_DRIVER=resend
-
-   # Masukkan API Key dari Resend
-   RESEND_API_KEY=re_1234567890abcdef...
-
-   # Sender email terverifikasi (atau onboarding@resend.dev untuk testing)
-   MAIL_FROM=Go Starter Kit <onboarding@resend.dev>
-
-   # URL frontend Anda tempat tautan email diarahkan
-   FRONTEND_URL=https://app.domainanda.com
-   ```
-
-5. **Jalankan Ulang Aplikasi**:
-   Mulai ulang server Go (`go run cmd/server/main.go` atau `docker compose up -d`). Seluruh alur verifikasi email pendaftaran, permintaan reset kata sandi, dan konfirmasi ubah email akan terkirim secara otomatis ke inbox pengguna via Resend REST API!
-
-### 7. Panduan Menghubungkan Cloudflare R2 / S3 Storage
-
-Starter kit ini mendukung **Cloudflare R2** (layanan object storage S3-compatible tanpa biaya egress data) serta AWS S3 dan MinIO:
-
-1. **Buat Bucket di Cloudflare R2**:
-   - Masuk ke dashboard Cloudflare $\rightarrow$ menu **R2**.
-   - Klik **Create bucket**, tentukan nama bucket (misal: `go-crud-media`).
-2. **Dapatkan Kredensial API R2**:
-   - Di halaman utama R2, klik **Manage R2 API Tokens** $\rightarrow$ **Create API Token**.
-   - Pilih permissions **Object Read & Write**, pilih bucket Anda, lalu klik **Create API Token**.
-   - Salin **Access Key ID**, **Secret Access Key**, dan **Endpoint URL** (berformat: `https://<account_id>.r2.cloudflarestorage.com`).
-3. **Konfigurasi Akses Publik (URL Gambar)**:
-   - Di dashboard bucket R2 Anda, buka tab **Settings** $\rightarrow$ **Public Access**.
-   - Aktifkan **Custom Domain** (misal: `https://media.domainanda.com`) atau aktifkan **R2.dev subdomain** (misal: `https://pub-xxxxxx.r2.dev`).
-4. **Konfigurasi File `.env`**:
-   ```ini
-   # Ubah driver storage ke 'r2' atau 's3'
-   STORAGE_DRIVER=r2
-
-   S3_BUCKET=go-crud-media
-   S3_REGION=auto
-   S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
-   S3_ACCESS_KEY_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   S3_SECRET_ACCESS_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   # URL publik tempat gambar dapat diakses oleh client / browser
-   S3_PUBLIC_URL=https://pub-xxxxxx.r2.dev
-   ```
-5. **Jalankan Aplikasi**:
-   Ketika user atau admin mengunggah avatar maupun gambar artikel, file akan otomatis di-rename total menggunakan **ULID** dan disimpan langsung ke Cloudflare R2 bucket. Response API akan langsung mengembalikan URL publik Cloudflare R2 Anda!
+# Inspect container logs
+docker compose logs -f api
+```
 
 ---
 
-## 8. Pengujian API
+## Production & Cloud Drivers
 
-- **Postman**: Impor file [postman_collection.json](docs/postman_collection.json). Koleksi ini sudah dilengkapi script otomatis untuk menyimpan `accessToken` dan `refreshToken` ke Postman Environment variable.
-- **VS Code REST Client**: Buka file [api.http](api.http) untuk mengeksekusi request langsung dari editor Anda.
-- **Spesifikasi Lengkap**: Rincian arsitektur lengkap dapat dibaca pada [starter_kit_specification.md](docs/starter_kit_specification.md).
+The starter kit features pluggable infrastructure adapters, allowing zero-code switching between local development and cloud production via `.env`:
+
+| Capability | Local Driver (`development`) | Production Driver (`production`) | Documentation Guide |
+| :--- | :--- | :--- | :--- |
+| **Transactional Email** | `MAILER_DRIVER=log` (Console Box) | `MAILER_DRIVER=resend` (Resend API) | [docs/deployment.md#3-transactional-email-setup-resend](docs/deployment.md#3-transactional-email-setup-resend) |
+| **Media & File Storage** | `STORAGE_DRIVER=local` (`./uploads`) | `STORAGE_DRIVER=r2` / `s3` (Cloudflare R2 / AWS S3) | [docs/deployment.md#4-object-storage-setup-cloudflare-r2--aws-s3](docs/deployment.md#4-object-storage-setup-cloudflare-r2--aws-s3) |
+
+For complete production deployment instructions, Docker Compose setup, reverse proxy configurations (Nginx/Caddy), and security checklists, refer to [docs/deployment.md](docs/deployment.md).
+
+---
+
+## Documentation & Extended Guides
+
+- **Adding New Modules**: Read the practical walkthrough on building new features in [docs/how_to_add_new_module.md](docs/how_to_add_new_module.md).
+- **System Architecture**: Read the architectural design principles and layer breakdown in [docs/architecture.md](docs/architecture.md).
+- **Security & Authorization**: In-depth details on JWT RTR, session reuse detection, and RBAC in [docs/security_and_rbac.md](docs/security_and_rbac.md).
+- **Production Deployment**: Guide for Docker, Resend email, and Cloudflare R2 / AWS S3 in [docs/deployment.md](docs/deployment.md).
+- **Go Learning Walkthrough**: Educational guide covering Go concepts and idioms used throughout the project in [docs/learning_guide.md](docs/learning_guide.md).
+- **Historical Specifications**: Build-phase specifications are archived in [docs/specs/initial_system_specification.md](docs/specs/initial_system_specification.md).
+
+---
+
+## API Testing & Tooling
+
+- **VS Code REST Client**: Open [api.http](api.http) to send requests directly from your code editor. Variables (`@accessToken`, `@refreshToken`, `@sampleToken`) allow complete step-by-step end-to-end testing without external applications.
+- **Postman Collection**: Import [postman_collection.json](docs/postman_collection.json) into Postman. Includes automated post-response test scripts that automatically capture and populate Bearer tokens into your collection environment.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for full details.

@@ -1,252 +1,219 @@
-# Panduan Lengkap Memahami Proyek (Golang Learning Guide)
+# Go REST API Starter Kit — Developer Learning Guide
 
-Dokumen ini disusun sebagai **panduan belajar komprehensif** untuk memahami arsitektur, pola desain (_design pattern_), alur eksekusi, serta idiom bahasa Go yang diimplementasikan pada **Go REST API Starter Kit (`go-crud-api`)**.
-
----
-
-## 1. Peta Konsep Utama Golang pada Proyek Ini
-
-| Konsep Golang                 | Lokasi Penerapan                                                                                            | Penjelasan Singkat                                                                                                                                                                                                                   |
-| :---------------------------- | :---------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Identitas ULID**            | `internal/utils/ulid.go`                                                                                    | Crockford Base32 26-karakter (`github.com/oklog/ulid/v2`) menggantikan integer auto-increment, mencegah scraping ID, dan otomatis terurut kronologis.                                                                                |
-| **JWT & Refresh Token**       | `internal/utils/jwt.go`, `internal/service/auth_service.go`                                                 | Access Token stateless HS256 (`golang-jwt/jwt/v5`) dan Refresh Token acak 64-karakter dengan hashing SHA-256 serta Refresh Token Rotation (RTR).                                                                                     |
-| **Pluggable Adapter Pattern** | `internal/mailer/`, `internal/storage/`                                                                     | Abstraksi interface `Mailer` (Log vs Resend) dan `Storage` (Local disk vs Cloudflare R2 / AWS S3 via AWS SDK v2). Menyediakan fallback otomatis dan penamaan file aman dengan ULID murni.                                            |
-| **One-Time Token & Hashing**  | `internal/models/auth_token.go`, `internal/repository/auth_token_repository.go`                             | Token acak 32-byte untuk pemulihan akun & verifikasi email. Token mentah hanya dikirimkan sekali ke email, sedangkan database hanya menyimpan hash **SHA-256**.                                                                      |
-| **Struct, Pointer & DTO**     | `internal/models/`                                                                                          | Memisahkan entitas domain (`User`, `UserProfile`, `RefreshToken`, `AuthToken`, `Post`) dari DTO input (`RegisterInput`, `ResetPasswordInput`, `UpdateProfileInput`). Pointer dipakai untuk field nullable (`*string`, `*time.Time`). |
-| **Interface & DIP**           | `internal/service/`, `internal/repository/`, `internal/mailer/`                                             | Layer atas bergantung pada **interface** (`UserRepository`, `AuthTokenRepository`, `Mailer`, `AuthServiceInterface`) agar modular dan mudah di-mock.                                                                                 |
-| **Type-Safe SQL (`sqlc`)**    | `db/queries/`, `internal/repository/sqlc/`                                                                  | Query SQL dikompilasi oleh `sqlc` menjadi fungsi Go yang strongly-typed tanpa overhead ORM.                                                                                                                                          |
-| **Embedded Assets (`embed`)** | `db/embed.go`                                                                                               | File migrasi SQL di-embed ke dalam binary Go dengan `//go:embed migrations/*.sql`.                                                                                                                                                   |
-| **Goroutines & Channels**     | `cmd/server/main.go`                                                                                        | Menjalankan HTTP server, pembersihan background token kedaluwarsa (`time.Ticker`), serta menangkap sinyal shutdown OS (`os.Signal`).                                                                                                 |
-| **Error Handling & Sentinel** | `internal/repository/`, `internal/service/`                                                                 | Sentinel errors (`ErrNotFound`, `ErrDuplicate`, `ErrTokenReused`, `ErrInvalidCredentials`) dipetakan lewat `errors.Is` dan `errors.As`.                                                                                              |
-| **Higher-Order Functions**    | `internal/middleware/auth.go`, `internal/routes/routes.go`                                                  | Middleware standar `net/http` (`func(http.Handler) http.Handler`) di router **Chi**.                                                                                                                                                 |
-| **Context & Timeouts**        | `cmd/server/main.go`, `internal/middleware/auth.go`                                                         | `context.WithTimeout` untuk graceful shutdown, `context.WithCancel` untuk stop worker, dan `context.WithValue` untuk menyisipkan `user_id`, `role`, dan claims JWT.                                                                  |
-| **Granular RBAC & Safeguard** | `internal/service/rbac_service.go`, `internal/service/admin_user_service.go`, `internal/middleware/auth.go` | Otorisasi berbasis hak akses (multi-role, pola `resource.action`, Super Admin wildcard bypass `*`, dan proteksi mutlak terhadap penghapusan/penonaktifan Super Admin terakhir).                                                      |
-| **Testing & Mocking**         | `internal/handlers/handlers_test.go`, `internal/service/*_test.go`, `internal/mailer/mailer_test.go`        | Table-driven tests, in-memory repository mocks, dan `net/http/httptest` tanpa database nyata.                                                                                                                                        |
+**Document Type:** Educational Architecture Walkthrough & Idiomatic Go Guide  
+**Target Audience:** Software Engineers, Backend Developers, and System Architects  
+**Prerequisites:** Basic understanding of Go syntax (structs, interfaces, goroutines)  
+**Standard:** Clean Architecture, Idiomatic Go Patterns  
 
 ---
 
-## 2. Struktur Proyek & Filosofi Desain
+## 1. Core Go Concepts Applied in This Project
 
-Aplikasi ini menerapkan **Layered Architecture** (`Handler → Service → Repository → Database`) berbasis _Standard Go Project Layout_:
+This guide explains the specific Go language idioms, concurrency patterns, and design principles implemented throughout the **Go REST API Starter Kit (`go-crud-api`)**.
 
-```text
-go-crud-api/
-├── cmd/
-│   └── server/
-│       └── main.go                     # [1] Composition Root, Bootstrap server & Token cleanup
-├── db/
-│   ├── embed.go                        # [2] Embed file SQL migrasi ke runtime binary
-│   ├── migrations/                     # [3] Skema DDL golang-migrate dengan ULID (.up.sql / .down.sql)
-│   └── queries/                        # [4] Sumber query SQL untuk generator sqlc
-│       ├── auth_tokens.sql             # Query untuk token verifikasi & reset
-│       ├── categories.sql
-│       ├── permissions.sql             # Master permissions query
-│       ├── post_views.sql
-│       ├── posts.sql
-│       ├── refresh_tokens.sql
-│       ├── role_permissions.sql        # Role-Permissions pivot query
-│       ├── roles.sql                   # Master roles query
-│       ├── user_profiles.sql
-│       ├── user_roles.sql              # User-Roles multi-role query
-│       └── users.sql
-├── docs/
-│   ├── ref/
-│   │   └── architecture_reference.md   # [5] Blueprint arsitektur backend untuk proyek baru
-│   ├── learning_guide.md               # [6] Panduan belajar proyek (file ini)
-│   ├── starter_kit_specification.md    # [7] Spesifikasi teknis, skema DB, & kontrak endpoint
-│   ├── technical_specification.md      # [8] Spesifikasi teknis modul & database schema
-│   └── postman_collection.json         # [9] Koleksi Postman v2.1 siap pakai
-├── internal/                           # [10] Kode privat modul (tidak bisa diimpor modul luar)
-│   ├── config/                         # Konfigurasi environment (.env / OS env)
-│   ├── database/                       # Connection pool, migrate runner (-fresh), & seeder ULID
-│   ├── handlers/                       # HTTP Handlers (Auth, User, Admin, Public) + httptest
-│   ├── mailer/                         # Pluggable Mailer (LogMailer & ResendMailer)
-│   ├── middleware/                     # JWT Auth, RequireRole, & CORS middleware
-│   ├── models/                         # Domain Entities, Input DTOs, & payload validators
-│   ├── repository/                     # Repository interfaces, wrapper sqlc, & dynamic SQL
-│   ├── routes/                         # Chi Router, sub-routes, uploads, & rate limiter
-│   ├── service/                        # Business logic, Argon2id, RTR, Mailer orchestration
-│   ├── storage/                        # Pluggable Storage (LocalStorage & Cloudflare R2 / AWS S3)
-│   └── utils/                          # ULID, JWT, HashToken, response helpers
-├── .air.toml                           # Live-reload config (Air)
-├── .env.example                        # Template environment variables
-├── api.http                            # Koleksi request untuk VS Code REST Client
-├── go.mod / go.sum                     # Manifest dependensi Go
-└── sqlc.yaml                           # Konfigurasi generator sqlc
-```
+| Concept | Implementation Location | Architectural Purpose & Idiomatic Benefit |
+| :--- | :--- | :--- |
+| **Decentralized ULID Identity** | `internal/utils/ulid.go` | Uses 26-character Crockford Base32 strings (`CHAR(26)`) via `github.com/oklog/ulid/v2`. Prevents ID enumeration, ensures chronological sorting via millisecond timestamp prefixes, and prevents 53-bit JavaScript integer truncation. |
+| **Pluggable Adapter Pattern** | `internal/mailer/`, `internal/storage/` | Isolates external infrastructure behind clean Go interfaces (`Mailer` and `Storage`). Enables zero-config local development (`LogMailer`, `LocalStorage`) and seamless production switching (`ResendMailer`, Cloudflare R2 / AWS S3) via configuration flags. |
+| **Struct Pointers for Nullable Types** | `internal/models/` | Uses pointers (`*string`, `*time.Time`) to represent nullable database fields in Go structs, mapping cleanly to SQL `NULL` and JSON `null` / `omitempty`. |
+| **Multi-Input Field Validation** | `internal/utils/validation.go`, `internal/models/` | Replaces fail-fast early returns with a unified `ValidationErrors map[string]string` collector implementing Go's standard `error` interface. Evaluates all field constraints simultaneously and returns structured errors for client UI forms. |
+| **Dependency Inversion Principle (DIP)** | `internal/service/`, `internal/repository/` | Higher-level business services depend exclusively upon repository and infrastructure interfaces, enabling full modularity, loose coupling, and straightforward unit testing via in-memory mock repositories. |
+| **Compile-Time Type-Safe SQL** | `db/queries/`, `internal/repository/sqlc/` | Uses `sqlc` to compile raw SQL queries directly into type-safe Go code. Delivers native database performance and query visibility without the abstraction overhead or runtime reflection of traditional ORMs. |
+| **Embedded Binary Assets** | `db/embed.go` | Embeds migration DDL scripts directly into the compiled executable binary using Go's `//go:embed` directive, eliminating external migration script dependencies during deployment. |
+| **Concurrency & Synchronization** | `cmd/server/main.go` | Uses goroutines and channels to coordinate the HTTP server listener, periodic background token cleanup workers (`time.Ticker`), and OS termination signal interception (`os.Signal`). |
+| **Sentinel Error Architecture** | `internal/repository/`, `internal/service/` | Defines domain sentinel errors (`ErrNotFound`, `ErrDuplicate`, `ErrTokenReused`, `ErrUnauthorized`) compared using `errors.Is` across layer boundaries. |
+| **Higher-Order Middleware Functions** | `internal/middleware/auth.go`, `internal/routes/routes.go` | Implements standard `func(http.Handler) http.Handler` middleware wrappers on the Chi router to enforce rate limiting, authentication, CORS, and RBAC authorization pipelines. |
+| **Context Propagation & Timeouts** | `cmd/server/main.go`, `internal/middleware/auth.go` | Leverages `context.Context` for request lifecycle management: `context.WithTimeout` for graceful shutdown, `context.WithCancel` for worker termination, and `context.WithValue` for propagating authenticated identity claims. |
+| **Comprehensive Test Automation** | `internal/handlers/handlers_test.go`, `internal/service/*_test.go` | Utilizes table-driven test patterns, in-memory mock repositories, and `net/http/httptest` to verify HTTP responses, status codes, and domain invariants without requiring a live database. |
 
 ---
 
-## 3. Bedah Komponen Lapisan demi Lapisan
+## 2. Idiomatic Go Deep Dives
 
-### A. Lapisan Model (`internal/models/`)
+### 2.1. Pointer vs Value Semantics for Nullable SQL Types
 
-1. **`auth.go`**:
-   - `TokenResponse`: memuat DTO hybrid (`access_token`, `refresh_token`, `token_type`, `expires_in`).
-   - `RegisterInput` & `LoginInput`: DTO request dengan validasi regex username dan email.
-   - `RefreshToken`: representasi entity token sesi di database.
-2. **`auth_token.go`**:
-   - `AuthToken`: representasi entity token sementara di MySQL (`password_reset`, `email_verification`, `email_change`).
-   - DTOs: `ForgotPasswordInput`, `ResetPasswordInput`, `VerifyEmailInput`, `ResendVerificationInput`, `RequestEmailChangeInput`, `ConfirmEmailChangeInput`.
-   - Metode `Validate()` untuk masing-masing DTO dengan validasi format email, kekuatan kata sandi, dan format token.
-3. **`user.go`**:
-   - `User`: kredensial akun dengan tag `json:"-"` pada `PasswordHash`.
-   - `UserProfile`: data profil personal (`FullName`, `Bio`, `PhoneNumber`, `AvatarURL`).
-   - `UserWithProfile`: model agregasi JOIN untuk endpoint `/api/v1/users/me`.
-4. **`post.go` & `category.go`**:
-   - Entitas modul konten dengan ID string 26-karakter (ULID).
+In relational databases, columns such as `bio`, `phone_number`, and `avatar_url` are often nullable (`NULL`). Go primitives (`string`, `int`) do not have a `null` state—they default to their zero values (`""`, `0`).
 
-### B. Lapisan Repository (`internal/repository/`)
-
-1. **Interface & Sentinel Errors**:
-   - `UserRepository`, `UserProfileRepository`, `RefreshTokenRepository`, `AuthTokenRepository`, `CategoryRepository`, `PostRepository`.
-   - Sentinel error: `ErrNotFound` dan `ErrDuplicate` (mendeteksi error MySQL 1062 via `IsDuplicateKeyError`).
-2. **Penugasan ULID**:
-   - Setiap method `Create()` mengecek apakah ID kosong; jika ya, memanggil `utils.NewULID()` sebelum query `INSERT` dieksekusi.
-3. **One-Time Token Storage (`AuthTokenRepository`)**:
-   - Menyimpan hash SHA-256 (`CHAR(64)`), status `is_used`, dan `expires_at`.
-   - Metode `InvalidateTokensByType` untuk membatalkan token lama saat token baru diterbitkan (misal: saat resend verification).
-   - Metode `DeleteExpiredOrUsedTokens` yang dieksekusi secara berkala oleh background worker.
-
-### C. Subsistem Mailer Pluggable (`internal/mailer/`)
-
-Menerapkan **Adapter / Strategy Pattern** melalui interface `Mailer`:
+Instead of using verbose `sql.NullString` in domain models, this project uses standard Go pointers:
 
 ```go
-type Mailer interface {
-    SendResetPasswordEmail(ctx context.Context, toEmail, resetLink string) error
-    SendVerificationEmail(ctx context.Context, toEmail, verifyLink string) error
-    SendEmailChangeEmail(ctx context.Context, toNewEmail, confirmLink string) error
+type UserProfile struct {
+    UserID      string    `json:"user_id"`
+    FullName    string    `json:"full_name"`
+    Bio         *string   `json:"bio,omitempty"`          // nil represents SQL NULL
+    PhoneNumber *string   `json:"phone_number,omitempty"` // nil represents SQL NULL
+    AvatarURL   *string   `json:"avatar_url,omitempty"`   // nil represents SQL NULL
+    UpdatedAt   time.Time `json:"updated_at"`
 }
 ```
 
-1. **`LogMailer` (Default Development)**:
-   - Aktif jika `MAILER_DRIVER=log`.
-   - Mencetak email outbox dalam format kotak ASCII yang cantik di terminal log tanpa perlu akun/koneksi eksternal.
-2. **`ResendMailer` (Production Ready)**:
-   - Aktif jika `MAILER_DRIVER=resend`.
-   - Mengirim email HTML responsif melalui REST API resmi Resend menggunakan standard library `net/http`.
-
-### D. Lapisan Service (`internal/service/`)
-
-1. **`auth_service.go` (`AuthServiceInterface`)**:
-   - **Register**: Validasi duplikasi email & username, hashing password dengan **Argon2id**, buat record user dan profil default, serta terbitkan token verifikasi email otomatis.
-   - **Login**: Verifikasi kredensial Argon2id, periksa status akun (`active`), terbitkan JWT Access Token dan Refresh Token, simpan hash SHA-256 token baru ke database.
-   - **RefreshToken (RTR)**: Deteksi pembajakan (_Reuse Detection_). Jika token yang dikirim statusnya sudah `is_revoked`, seluruh keluarga token (`token_family`) langsung dicabut. Jika valid, token lama di-revoke dan token baru diterbitkan.
-   - **ForgotPassword**: Menerapkan proteksi ketat anti _user-enumeration_ (selalu merespons `200 OK`). Membuat token acak 32-byte (64 hex), menyimpan hash SHA-256 (TTL 15 menit), dan mengirim tautan reset via Mailer.
-   - **ResetPassword**: Memvalidasi token & waktu kedaluwarsa, memastikan belum digunakan, meng-hash password baru dengan Argon2id, menandai token `is_used = TRUE`, dan mencabut seluruh sesi refresh token aktif pengguna (_forced logout_).
-   - **VerifyEmail & ResendVerification**: Memvalidasi token verifikasi dan memperbarui `email_verified_at = NOW()`.
-   - **Logout & ChangePassword**: Mencabut sesi token dan membatalkan refresh token di DB.
-2. **`user_service.go` (`UserServiceInterface`)**:
-   - **RequestEmailChange**: Memvalidasi password saat ini, memastikan email baru belum terdaftar, menyimpan email tujuan di `payload` token (TTL 1 jam), dan mengirim email verifikasi ke email baru.
-   - **ConfirmEmailChange**: Memvalidasi token, mengupdate `users.email = payload`, dan menandai email sebagai terverifikasi.
-   - Menangani update profil personal, upload/delete avatar, dan perubahan username.
-
-### E. Lapisan Middleware & Routing (`internal/middleware/`, `internal/routes/`)
-
-1. **`middleware/auth.go`**:
-   - `JWTAuthMiddleware`: Membaca header `Authorization: Bearer <token>`, memvalidasi signature & expiry, lalu menyuntikkan claims ke context.
-   - `RequireRole`: Memastikan user memiliki role tertentu (misalnya `admin`).
-2. **`routes/routes.go`**:
-   - `/api/v1/auth/*`: Registrasi, login, forgot-password, dan resend-verification diproteksi rate limiter `httprate.LimitBy` (10 req/menit per IP).
-   - `/api/v1/auth/verify-email`: Menerima token via URL query parameter (`?token=...`) maupun JSON payload body.
-   - `/api/v1/users/email/confirm-change`: Dapat diakses publik melalui browser tanpa header Authorization Bearer.
-   - `/api/v1/users/*`: Seluruh endpoint user lainnya diproteksi `JWTAuthMiddleware`.
-   - `/api/v1/admin/*`: Diproteksi `JWTAuthMiddleware` + `RequireRole("admin")`.
+**Benefits**:
+- Clean JSON serialization: If `Bio == nil`, `json:"bio,omitempty"` omits the key or serializes as `null`.
+- Zero database coupling: Domain models remain pure Go structs without importing `database/sql`.
+- Conversion to `sql.NullString` happens strictly at the repository boundary (`internal/repository/`).
 
 ---
 
-## 4. Alur Request Nyata (Lifecycle Walkthrough)
+### 2.2. Dependency Inversion with Go Interfaces
 
-### Skenario 1: User Melakukan Refresh Token Rotation (`POST /api/v1/auth/refresh`)
+Go interfaces are **satisfied implicitly**. A struct does not declare `implements Repository`; it simply implements the required method signatures.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client as Frontend / Postman
-    participant Router as Chi Router
-    participant Handler as AuthHandler
-    participant Service as AuthService
-    participant Repo as RefreshTokenRepo
-    participant DB as MySQL Server
+```go
+// 1. Service defines what it needs (the contract)
+type UserRepository interface {
+    GetByID(ctx context.Context, id string) (*models.User, error)
+    UpdatePassword(ctx context.Context, id string, hash string) error
+}
 
-    Client->>Router: POST /api/v1/auth/refresh (Cookie / Header / JSON)
-    Router->>Handler: RefreshToken(w, r)
-    Handler->>Handler: extractRefreshToken (Cookie -> Header -> Body)
-    Handler->>Service: RefreshToken(ctx, rawToken, userAgent, ipAddress)
-    Service->>Service: HashToken(rawToken) -> SHA-256
-    Service->>Repo: GetByHash(ctx, hash)
-    Repo->>DB: SELECT * FROM refresh_tokens WHERE token_hash = ?
-    DB-->>Repo: Record RefreshToken
-    Repo-->>Service: *models.RefreshToken
+// 2. Service receives the interface via constructor
+type AuthService struct {
+    userRepo UserRepository
+}
 
-    alt Token Sudah Pernah Di-Revoke (Indikasi Pembajakan!)
-        Service->>Repo: RevokeFamily(ctx, tokenFamily)
-        Repo->>DB: UPDATE refresh_tokens SET is_revoked = TRUE WHERE token_family = ?
-        Service-->>Handler: ErrTokenReused
-        Handler-->>Client: 401 Unauthorized (Deteksi Pembajakan)
-    else Token Masih Valid & Belum Expired
-        Service->>Repo: Revoke(ctx, storedToken.ID)
-        Service->>Service: GenerateAccessToken() & GenerateRefreshToken()
-        Service->>Repo: Create(ctx, newRefreshToken)
-        Repo->>DB: INSERT INTO refresh_tokens (...)
-        Service-->>Handler: *models.TokenResponse
-        Handler->>Handler: setRefreshTokenCookie(w, newRefreshToken)
-        Handler-->>Client: 200 OK + Hybrid Token Response
-    end
+func NewAuthService(userRepo UserRepository, ...) *AuthService {
+    return &AuthService{userRepo: userRepo}
+}
 ```
 
-### Skenario 2: Alur Pemulihan Password Aman (Forgot & Reset Password)
+**Testing Advantage**:
+In unit tests (`internal/service/auth_service_test.go`), we do not need a live MySQL connection. We pass an in-memory struct implementing `UserRepository`, allowing instantaneous, deterministic test execution.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Pengguna
-    participant Handler as AuthHandler
-    participant Service as AuthService
-    participant Mailer as Pluggable Mailer
-    participant DB as MySQL Server
+---
 
-    Note over User,DB: Tahap 1: Lupa Password (Anti User-Enumeration)
-    User->>Handler: POST /api/v1/auth/forgot-password { email }
-    Handler->>Service: ForgotPassword(ctx, email)
-    Service->>DB: Cari user berdasarkan email
-    alt User Tidak Ada
-        Service-->>Handler: Return nil (tanpa error)
-        Handler-->>User: 200 OK ("Jika email terdaftar, tautan pemulihan telah dikirim")
-    else User Ditemukan
-        Service->>Service: Buat token acak 32-byte & Hash SHA-256
-        Service->>DB: Invalidate token lama & INSERT auth_tokens (TTL 15 mnt)
-        Service->>Mailer: SendResetPasswordEmail(email, resetLink)
-        Mailer-->>User: Email/Log outbox berisi tautan reset
-        Service-->>Handler: Success
-        Handler-->>User: 200 OK ("Jika email terdaftar, tautan pemulihan telah dikirim")
-    end
+### 2.3. Background Workers with Goroutines & Tickers
 
-    Note over User,DB: Tahap 2: Reset Password Baru
-    User->>Handler: POST /api/v1/auth/reset-password { token, new_password }
-    Handler->>Service: ResetPassword(ctx, token, new_password)
-    Service->>Service: HashToken(token) -> SHA-256
-    Service->>DB: SELECT * FROM auth_tokens WHERE token_hash = ? AND type = 'password_reset'
-    alt Token Tidak Ditemukan / Sudah Digunakan / Kedaluwarsa
-        Service-->>Handler: ErrInvalidToken
-        Handler-->>User: 400 Bad Request
-    else Token Valid
-        Service->>Service: Hash password baru dengan Argon2id
-        Service->>DB: UPDATE users SET password_hash = ?
-        Service->>DB: UPDATE auth_tokens SET is_used = TRUE
-        Service->>DB: RevokeAllUserTokens (Batalkan semua refresh token sesi aktif)
-        Service-->>Handler: Success
-        Handler-->>User: 200 OK ("Password berhasil diubah, silakan login kembali")
-    end
+In `cmd/server/main.go`, expired tokens are cleaned up periodically using a background goroutine, non-blocking channels, and `time.Ticker`:
+
+```go
+func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRepository, authTokenRepo repository.AuthTokenRepository, interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+
+    // 1. Initial cleanup upon server startup
+    _ = tokenRepo.DeleteExpired(ctx)
+    _ = authTokenRepo.DeleteExpiredOrUsed(ctx)
+
+    // 2. Loop continuously until context cancellation
+    for {
+        select {
+        case <-ctx.Done():
+            return // Server shutting down; exit goroutine cleanly
+        case <-ticker.C:
+            _ = tokenRepo.DeleteExpired(ctx)
+            _ = authTokenRepo.DeleteExpiredOrUsed(ctx)
+        }
+    }
+}
+```
+
+**Why this is idiomatic**:
+- The `select` statement prevents busy-waiting and consumes zero CPU cycles while idle.
+- Passing `context.Context` allows graceful worker termination when the server shuts down.
+- `defer ticker.Stop()` releases the underlying runtime timer resource.
+
+---
+
+### 2.4. Graceful Shutdown with OS Signal Trapping
+
+When deploying in Docker or Kubernetes, a container receives a `SIGTERM` or `SIGINT` signal before termination. Abruptly killing the process drops active HTTP requests.
+
+The server implements graceful shutdown:
+
+```go
+// 1. Create buffered signal channel
+quit := make(chan os.Signal, 1)
+signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+// 2. Block until signal received
+<-quit
+slog.Info("Shutdown signal received. Shutting down server gracefully...")
+
+// 3. Create 10-second drain window
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+
+// 4. Shutdown gracefully (stops accepting new connections, waits for active handlers)
+if err := srv.Shutdown(ctx); err != nil {
+    slog.Error("Graceful server shutdown failed, forcing exit", slog.Any("error", err))
+    os.Exit(1)
+}
+slog.Info("Server stopped safely.")
 ```
 
 ---
 
-## 5. Menjalankan Seluruh Pengujian
+### 2.5. Higher-Order Functions for HTTP Middleware
 
-Jalankan seluruh unit test dan handler integration test:
+Chi middlewares in Go are higher-order functions adhering to the `func(http.Handler) http.Handler` signature:
 
-```powershell
-go test -v ./...
+```go
+func JWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            tokenString := extractTokenFromHeader(r)
+            claims, err := utils.ValidateJWT(tokenString, jwtSecret)
+            if err != nil {
+                utils.Error(w, http.StatusUnauthorized, "unauthorized")
+                return
+            }
+
+            // Propagate authenticated identity downstream via Context
+            ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
 ```
+
+---
+
+### 2.6. Table-Driven Unit Testing with `httptest`
+
+The test suite leverages Go's standard table-driven test pattern combined with `net/http/httptest` to verify HTTP endpoints:
+
+```go
+func TestFieldLevelValidationResponse(t *testing.T) {
+    tests := []struct {
+        name         string
+        payload      string
+        expectedCode int
+        expectedKeys []string
+    }{
+        {
+            name:         "Empty username, invalid email, short password",
+            payload:      `{"username": "", "email": "invalid-format", "password": "123"}`,
+            expectedCode: http.StatusUnprocessableEntity,
+            expectedKeys: []string{"username", "email", "password"},
+        },
+        {
+            name:         "Missing email only",
+            payload:      `{"username": "validuser", "email": "", "password": "password123"}`,
+            expectedCode: http.StatusUnprocessableEntity,
+            expectedKeys: []string{"email"},
+        },
+    }
+
+    for _, tc := range tests {
+        t.Run(tc.name, func(t *testing.T) {
+            req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(tc.payload))
+            req.Header.Set("Content-Type", "application/json")
+            rr := httptest.NewRecorder()
+
+            router.ServeHTTP(rr, req)
+
+            if rr.Code != tc.expectedCode {
+                t.Fatalf("expected status %d, got %d", tc.expectedCode, rr.Code)
+            }
+        })
+    }
+}
+```
+
+---
+
+## 3. Related Documentation References
+
+- For the complete system architecture, clean layering, and error handling rules, see [docs/architecture.md](architecture.md).
+- For step-by-step instructions on implementing a new CRUD feature, see [docs/how_to_add_new_module.md](how_to_add_new_module.md).
+- For details on the security architecture, JWT rotation, and RBAC safeguards, see [docs/security_and_rbac.md](security_and_rbac.md).
+- For deployment guidelines, Docker Compose, and cloud configuration, see [docs/deployment.md](deployment.md).
