@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"context"
+	"database/sql"
 	"net"
 	"net/http"
 	"os"
@@ -33,6 +35,7 @@ func Setup(
 	roleHandler *handlers.RoleHandler,
 	adminUserHandler *handlers.AdminUserHandler,
 	userRepo repository.UserRepository,
+	sqlDB ...*sql.DB,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -52,11 +55,39 @@ func Setup(
 		utils.ErrorCode(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
 	})
 
-	// Health check endpoint
+	// Comprehensive Health & Readiness Probes
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if len(sqlDB) > 0 && sqlDB[0] != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := sqlDB[0].PingContext(ctx); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"status":"degraded","database":"unreachable"}`))
+				return
+			}
+		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","database":"healthy"}`))
+	})
+	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"live"}`))
+	})
+	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if len(sqlDB) > 0 && sqlDB[0] != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := sqlDB[0].PingContext(ctx); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"status":"unavailable","database":"unreachable"}`))
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ready","database":"healthy"}`))
 	})
 
 	// Static file server for local image/avatar uploads

@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/rand"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -10,13 +11,16 @@ import (
 
 var (
 	ErrInvalidULID = errors.New("invalid ULID format, must be 26 Crockford Base32 characters")
+	entropyPool    = ulid.Monotonic(rand.Reader, 0)
+	entropyPoolMu  sync.Mutex
 )
 
-// NewULID generates a new cryptographically secure ULID string.
+// NewULID generates a new cryptographically secure and monotonic ULID string.
 func NewULID() string {
 	t := time.Now().UTC()
-	entropy := ulid.Monotonic(rand.Reader, 0)
-	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
+	entropyPoolMu.Lock()
+	defer entropyPoolMu.Unlock()
+	return ulid.MustNew(ulid.Timestamp(t), entropyPool).String()
 }
 
 // IsValidULID checks if a string is a valid ULID.

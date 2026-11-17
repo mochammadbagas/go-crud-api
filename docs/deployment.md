@@ -12,7 +12,7 @@ Before exposing the API to public traffic, ensure the following items are verifi
 
 - [ ] **Generate High-Entropy Secret Key**: Set `JWT_SECRET` to a 64+ character random string (minimum 32 characters enforced by application fail-fast validation in `APP_ENV=production`).
 - [ ] **Configure Production Database**: Enable SSL/TLS encryption for database connections (`tls=true`).
-- [ ] **Enforce CORS Allowed Origins**: Set `CORS_ALLOWED_ORIGINS` to your production frontend domain (e.g., `https://app.yourdomain.com`). Never leave it as `*`.
+- [ ] **Enforce Allowed Origins**: Set `ALLOWED_ORIGINS` to your production frontend domain (e.g., `https://app.yourdomain.com`). Never leave it open.
 - [ ] **Switch Mailer Driver**: Set `MAILER_DRIVER=resend` and configure a verified sender domain.
 - [ ] **Switch Storage Driver**: Set `STORAGE_DRIVER=r2` or `s3` with cloud object storage credentials.
 - [ ] **Disable `-fresh` Flag**: Never pass `-fresh` in production commands as it will drop all existing tables.
@@ -31,14 +31,20 @@ Before exposing the API to public traffic, ensure the following items are verifi
 | `DB_PORT`                | MySQL connection port                     | `3306`                           | `3306`                                          |
 | `DB_USER`                | MySQL database user                       | `root`                           | Dedicated application user                      |
 | `DB_PASSWORD`            | MySQL user password                       | `""`                             | Strong entropy password                         |
-| `DB_NAME`                | MySQL database schema name                | `go_crud_api`                    | `production_db_name`                            |
-| `ADMIN_NAME`             | Initial administrator display name        | `Administrator`                  | `Your Admin Name`                               |
-| `ADMIN_EMAIL`            | Initial administrator login email         | `admin@mmdbconnect.com`          | `admin@yourdomain.com`                          |
-| `ADMIN_PASSWORD`         | Initial administrator password            | `adminpassword123`               | Strong 16+ char password                        |
-| `JWT_SECRET`             | HMAC SHA-256 signing key                  | `super-secret-key...`            | `openssl rand -hex 64`                          |
-| `JWT_ACCESS_TTL_MINUTES` | Access token lifespan                     | `15`                             | `15`                                            |
-| `JWT_REFRESH_TTL_DAYS`   | Refresh token lifespan                    | `7`                              | `7` (or `30`)                                   |
-| `CORS_ALLOWED_ORIGINS`   | Comma-separated allowed origins           | `http://localhost:3000`          | `https://yourdomain.com`                        |
+| `DB_NAME`                    | MySQL database schema name                | `go_crud_api`                    | `production_db_name`                            |
+| `DB_MAX_OPEN_CONNS`          | Maximum open database connections         | `100`                            | `50` - `200` (based on DB instance RAM)         |
+| `DB_MAX_IDLE_CONNS`          | Maximum idle database connections         | `10`                             | `10` - `50`                                     |
+| `DB_CONN_MAX_LIFETIME_MINUTES`| Connection maximum lifetime duration     | `60`                             | `60`                                            |
+| `DB_CONN_MAX_IDLE_TIME_MINUTES`| Connection idle timeout duration         | `10`                             | `10`                                            |
+| `COOKIE_SECURE`              | Enable Secure flag on HTTP cookies        | `false`                          | `true` (enforces HTTPS)                         |
+| `COOKIE_DOMAIN`              | Domain attribute for cookies              | `""`                             | `.yourdomain.com`                               |
+| `ADMIN_NAME`                 | Initial administrator display name        | `Administrator`                  | `Your Admin Name`                               |
+| `ADMIN_EMAIL`                | Initial administrator login email         | `admin@mmdbconnect.com`          | `admin@yourdomain.com`                          |
+| `ADMIN_PASSWORD`             | Initial administrator password            | `adminpassword123`               | Strong 16+ char password                        |
+| `JWT_SECRET`                 | HMAC SHA-256 signing key                  | `super-secret-key...`            | `openssl rand -hex 64`                          |
+| `JWT_ACCESS_TTL_MINUTES`     | Access token lifespan                     | `15`                             | `15`                                            |
+| `JWT_REFRESH_TTL_DAYS`       | Refresh token lifespan                    | `7`                              | `7` (or `30`)                                   |
+| `ALLOWED_ORIGINS`            | Comma-separated allowed origins           | `http://localhost:3000`          | `https://yourdomain.com`                        |
 | `MAILER_DRIVER`          | Active email driver (`log` / `resend`)    | `log`                            | `resend`                                        |
 | `RESEND_API_KEY`         | Resend REST API authentication key        | `""`                             | `re_xxxxxxxxxxxx`                               |
 | `MAIL_FROM`              | RFC 5322 sender display and address       | `Go Kit <onboarding@resend.dev>` | `AppName <noreply@yourdomain.com>`              |
@@ -171,5 +177,27 @@ api.yourdomain.com {
 
 ## 7. Health Checks & Observability
 
-- **Liveness Probe**: `GET /health` returns HTTP 200 `OK`.
-- **Structured Logs**: The application emits structured JSON logs using Go's standard `log/slog` directly to `stdout`. Logs can be captured and indexed by vector, Fluentbit, Datadog, or Grafana Loki.
+The application provides three specialized probes for orchestration engines (Kubernetes, AWS ECS, Docker Swarm, Nomad):
+
+- **Deep Health Check**: `GET /health` executes `db.PingContext` with a 2-second timeout. Returns HTTP 200 `{"status":"ok","database":"healthy"}` when operational, or HTTP 503 `{"status":"degraded","database":"unreachable"}` if the database is inaccessible.
+- **Liveness Probe**: `GET /health/live` returns HTTP 200 `{"status":"live"}` instantly. Used by orchestrators to determine whether the application process needs to be restarted.
+- **Readiness Probe**: `GET /health/ready` validates database connectivity and returns HTTP 200 `{"status":"ready","database":"healthy"}` or HTTP 503 `{"status":"unavailable","database":"unreachable"}`. Ingress controllers use this to route traffic only to instances ready to serve queries.
+
+### Kubernetes Manifest Example
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+- **Structured Logs**: The application emits structured JSON logs using Go's standard `log/slog` directly to `stdout`. Logs can be captured and indexed by Vector, Fluentbit, Datadog, or Grafana Loki.

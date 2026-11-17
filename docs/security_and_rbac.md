@@ -129,6 +129,9 @@ r.With(middleware.RequirePermission("users.delete", userRepo)).Delete("/admin/us
 
 Accounts possessing the `super_admin` role automatically bypass granular permission lookups. The `PermissionMiddleware` detects the `super_admin` role claim in the JWT and allows the request through without querying the database.
 
+### 3.4. In-Memory Permission Caching with Automatic Invalidation
+To eliminate redundant database lookups on high-frequency admin endpoints, `middleware.RequirePermission` caches user permissions in an in-memory thread-safe `sync.Map` with a 1-minute TTL. Whenever an administrator modifies role assignments (`AssignUserRoles`) or permission bindings (`AssignPermissionsToRole`), `middleware.ClearUserPermissionCache` is called immediately, ensuring authorization changes take effect instantly across the system.
+
 ---
 
 ## 4. Administrative Safeguards: Super Admin Safeguard
@@ -170,7 +173,10 @@ Content modules supporting Markdown rendering (e.g. posts and articles) utilize 
 ## 6. HTTP Hardening & Denial of Service (DoS) Defense
 
 ### 6.1. Request Body Size Limiting (`http.MaxBytesReader`)
-All JSON request bodies are processed through `utils.DecodeJSON`, which wraps the request reader in `http.MaxBytesReader(w, r.Body, 1<<20)`. This enforces a hard **1 MB limit** per request, preventing memory exhaustion (OOM DoS) attacks via malicious payload streaming. Payload overflows return HTTP 413 `PAYLOAD_TOO_LARGE`.
+All incoming HTTP request bodies are strictly bounded using `http.MaxBytesReader` to prevent memory exhaustion and disk-filling Denial of Service (DoS) attacks:
+- **JSON Request Payloads**: Enforces a hard **1 MB limit** (`1 << 20`) via `utils.DecodeJSON`. Payload overflows return HTTP 413 `PAYLOAD_TOO_LARGE`.
+- **User Avatar Uploads**: Enforces a hard **5 MB limit** (`5 << 20`) on multipart streams before parsing in `user_handler.go`.
+- **Content Media / Cover Uploads**: Enforces a hard **10 MB limit** (`10 << 20`) on multipart streams in `admin_upload_handler.go`.
 
 ### 6.2. OWASP Security Headers Middleware
 All HTTP responses carry standard OWASP security headers injected via `middleware.SecurityHeaders()`:

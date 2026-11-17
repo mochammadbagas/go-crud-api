@@ -83,7 +83,8 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5 MB max memory
+	// Enforce 5 MB maximum request stream size to prevent disk/memory exhaustion DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
 	if err := r.ParseMultipartForm(5 << 20); err != nil {
 		utils.Error(w, http.StatusBadRequest, "avatar file is too large (max 5MB) or invalid format")
 		return

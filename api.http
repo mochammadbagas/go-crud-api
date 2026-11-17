@@ -21,6 +21,20 @@
 
 
 ### =========================================================================
+### 0. SYSTEM HEALTH & READINESS PROBES
+### =========================================================================
+
+### 0.1 Full System Health Check (Checks Database Connection & Pool)
+GET {{baseUrl}}/health
+
+### 0.2 Liveness Probe (Instant Container Lifecycle Verification)
+GET {{baseUrl}}/health/live
+
+### 0.3 Readiness Probe (Traffic Routing Ingress Check)
+GET {{baseUrl}}/health/ready
+
+
+### =========================================================================
 ### 1. AUTHENTICATION (JWT + REFRESH TOKEN ROTATION)
 ### =========================================================================
 
@@ -45,7 +59,7 @@ Content-Type: application/json
   "password": "adminpassword123"
 }
 
-### 1.3 Refresh Token (Refresh Token Rotation - RTR)
+### 1.3 Refresh Token (via JSON Body)
 # Can be sent via JSON body, automatic HTTP-only cookie, or X-Refresh-Token header
 POST {{baseUrl}}/api/v1/auth/refresh
 Content-Type: application/json
@@ -53,6 +67,10 @@ Content-Type: application/json
 {
   "refresh_token": "{{refreshToken}}"
 }
+
+### 1.3b Refresh Token (via X-Refresh-Token Header)
+POST {{baseUrl}}/api/v1/auth/refresh
+X-Refresh-Token: {{refreshToken}}
 
 ### 1.4 Logout (Revoke Session & Clear Cookie)
 POST {{baseUrl}}/api/v1/auth/logout

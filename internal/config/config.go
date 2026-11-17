@@ -18,8 +18,12 @@ type Config struct {
 	DBPort         string
 	DBUser         string
 	DBPassword     string
-	DBName         string
-	CookieSecure   bool
+	DBName            string
+	DBMaxOpenConns    int
+	DBMaxIdleConns    int
+	DBConnMaxLifetime time.Duration
+	DBConnMaxIdleTime time.Duration
+	CookieSecure      bool
 	CookieDomain   string
 	UploadDir      string
 	AdminName      string
@@ -73,6 +77,27 @@ func Load() *Config {
 		refreshTTLDays = 7
 	}
 
+	dbMaxOpenConns, _ := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNS", "100"))
+	if dbMaxOpenConns <= 0 {
+		dbMaxOpenConns = 100
+	}
+
+	dbMaxIdleConns, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "10"))
+	if dbMaxIdleConns <= 0 {
+		dbMaxIdleConns = 10
+	}
+
+	dbConnMaxLifetimeMin, _ := strconv.Atoi(getEnv("DB_CONN_MAX_LIFETIME_MINUTES", "60"))
+	if dbConnMaxLifetimeMin <= 0 {
+		dbConnMaxLifetimeMin = 60
+	}
+
+	dbConnMaxIdleTimeMin, _ := strconv.Atoi(getEnv("DB_CONN_MAX_IDLE_TIME_MINUTES", "10"))
+	if dbConnMaxIdleTimeMin <= 0 {
+		dbConnMaxIdleTimeMin = 10
+	}
+
+	adminPassword := getEnv("ADMIN_PASSWORD", "adminpassword123")
 	jwtSecret := getEnv("JWT_SECRET", DefaultInsecureJWTSecret)
 	if appEnv == "production" {
 		if jwtSecret == DefaultInsecureJWTSecret {
@@ -83,22 +108,32 @@ func Load() *Config {
 			slog.Error("FATAL: JWT_SECRET is too short (< 32 characters) for production environment. Minimum 32 characters required!")
 			os.Exit(1)
 		}
+		if adminPassword == "adminpassword123" {
+			slog.Warn("WARNING: Default insecure ADMIN_PASSWORD ('adminpassword123') detected while APP_ENV is set to production. Please set a strong, unique ADMIN_PASSWORD in your production environment!")
+		}
+		if !cookieSecure {
+			slog.Warn("WARNING: COOKIE_SECURE is set to false in production! HTTPS-only cookies are strongly recommended for production environments.")
+		}
 	}
 
 	return &Config{
-		AppEnv:         appEnv,
-		Port:           getEnv("PORT", "8080"),
-		DBHost:         getEnv("DB_HOST", "127.0.0.1"),
-		DBPort:         getEnv("DB_PORT", "3306"),
-		DBUser:         getEnv("DB_USER", "root"),
-		DBPassword:     getEnv("DB_PASSWORD", ""),
-		DBName:         getEnv("DB_NAME", "go_crud_api"),
-		CookieSecure:   cookieSecure,
-		CookieDomain:   getEnv("COOKIE_DOMAIN", ""),
-		UploadDir:      getEnv("UPLOAD_DIR", "./uploads"),
-		AdminName:      getEnv("ADMIN_NAME", "Administrator"),
-		AdminEmail:     getEnv("ADMIN_EMAIL", "admin@mmdbconnect.com"),
-		AdminPassword:  getEnv("ADMIN_PASSWORD", "adminpassword123"),
+		AppEnv:            appEnv,
+		Port:              getEnv("PORT", "8080"),
+		DBHost:            getEnv("DB_HOST", "127.0.0.1"),
+		DBPort:            getEnv("DB_PORT", "3306"),
+		DBUser:            getEnv("DB_USER", "root"),
+		DBPassword:        getEnv("DB_PASSWORD", ""),
+		DBName:            getEnv("DB_NAME", "go_crud_api"),
+		DBMaxOpenConns:    dbMaxOpenConns,
+		DBMaxIdleConns:    dbMaxIdleConns,
+		DBConnMaxLifetime: time.Duration(dbConnMaxLifetimeMin) * time.Minute,
+		DBConnMaxIdleTime: time.Duration(dbConnMaxIdleTimeMin) * time.Minute,
+		CookieSecure:      cookieSecure,
+		CookieDomain:      getEnv("COOKIE_DOMAIN", ""),
+		UploadDir:         getEnv("UPLOAD_DIR", "./uploads"),
+		AdminName:         getEnv("ADMIN_NAME", "Administrator"),
+		AdminEmail:        getEnv("ADMIN_EMAIL", "admin@mmdbconnect.com"),
+		AdminPassword:     adminPassword,
 		AllowedOrigins: allowedOrigins,
 		JWTSecret:      jwtSecret,
 		JWTAccessTTL:   time.Duration(accessTTLMin) * time.Minute,

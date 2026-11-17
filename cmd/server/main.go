@@ -90,6 +90,7 @@ func main() {
 		roleHandler,
 		adminUserHandler,
 		userRepo,
+		db,
 	)
 
 	// 10. Start Background Periodic Expired Tokens Cleanup (Every 24 hours)

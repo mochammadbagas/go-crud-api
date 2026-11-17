@@ -53,6 +53,7 @@ The **Go REST API Starter Kit** is structured around the principles of **Clean A
 - Instantiates database connection pools, repositories, services, and HTTP handlers.
 - Mounts routes and middleware chains.
 - Spawns background workers (e.g., periodic expired token purger).
+- Registers deep health and readiness probes (`/health`, `/health/live`, `/health/ready`) integrated with database connectivity pinging.
 - Manages graceful shutdown via operating system signal trapping (`SIGINT`, `SIGTERM`).
 
 ### 2.2. HTTP Presentation Layer (`internal/handlers/`)

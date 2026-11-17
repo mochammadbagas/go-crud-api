@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 
@@ -25,10 +24,10 @@ func Init(cfg *config.Config, fresh bool) (*sql.DB, error) {
 	}
 
 	// Connection Pool configuration
-	db.SetMaxIdleConns(10)
-	db.SetMaxOpenConns(100)
-	db.SetConnMaxLifetime(time.Hour)
-	db.SetConnMaxIdleTime(10 * time.Minute)
+	db.SetMaxIdleConns(cfg.DBMaxIdleConns)
+	db.SetMaxOpenConns(cfg.DBMaxOpenConns)
+	db.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
+	db.SetConnMaxIdleTime(cfg.DBConnMaxIdleTime)
 
 	// Verify connection
 	if err := db.Ping(); err != nil {

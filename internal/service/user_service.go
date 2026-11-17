@@ -235,11 +235,11 @@ func (s *UserService) ConfirmEmailChange(ctx context.Context, input models.Confi
 		return ErrEmailExists
 	}
 
-	// Update email and mark email as verified
-	if err := s.userRepo.UpdateEmail(ctx, storedToken.UserID, newEmail); err != nil {
+	// Mark token as used to prevent concurrency race
+	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
 		return err
 	}
 
-	// Mark token as used
-	return s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID)
+	// Update email and mark email as verified
+	return s.userRepo.UpdateEmail(ctx, storedToken.UserID, newEmail)
 }

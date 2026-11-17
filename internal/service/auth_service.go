@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
@@ -50,6 +51,7 @@ type AuthService struct {
 	roleRepo         repository.RoleRepository
 	mailer           mailer.Mailer
 	cfg              *config.Config
+	rotationMu       sync.Mutex
 }
 
 func NewAuthService(
@@ -148,9 +150,16 @@ func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) 
 		return nil, fmt.Errorf("failed to register user atomically: %w", err)
 	}
 
-	// 8. Send initial email verification in background
+	// 8. Send initial email verification in background with bounded timeout and error logging
 	go func() {
-		_ = s.SendVerification(context.Background(), user.ID)
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.SendVerification(bgCtx, user.ID); err != nil {
+			slog.Error("Failed to send initial email verification in background",
+				slog.String("user_id", user.ID),
+				slog.Any("error", err),
+			)
+		}
 	}()
 
 	return user, nil
@@ -241,6 +250,9 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 		return nil, ErrUnauthorized
 	}
 
+	s.rotationMu.Lock()
+	defer s.rotationMu.Unlock()
+
 	tokenHash := utils.HashToken(rawRefreshToken)
 	storedToken, err := s.refreshTokenRepo.GetByHash(ctx, tokenHash)
 	if err != nil {
@@ -327,12 +339,14 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 		return nil, err
 	}
 
-	return &models.TokenResponse{
+	tokenResp := &models.TokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: newRawRefreshToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(s.cfg.JWTAccessTTL.Seconds()),
-	}, nil
+	}
+
+	return tokenResp, nil
 }
 
 func (s *AuthService) Logout(ctx context.Context, rawRefreshToken string) error {
@@ -456,6 +470,12 @@ func (s *AuthService) ResetPassword(ctx context.Context, input models.ResetPassw
 		return ErrAuthTokenInvalid
 	}
 
+	// Invalidate token before password hashing to prevent concurrency race condition
+	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
+		slog.Error("Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
+		return err
+	}
+
 	// Hash new password
 	newHash, err := argon2id.CreateHash(input.NewPassword, argon2id.DefaultParams)
 	if err != nil {
@@ -465,11 +485,6 @@ func (s *AuthService) ResetPassword(ctx context.Context, input models.ResetPassw
 	// Update user's password
 	if err := s.userRepo.UpdatePassword(ctx, storedToken.UserID, newHash); err != nil {
 		return err
-	}
-
-	// Mark token as used
-	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
-		slog.Error("Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
 	}
 
 	// Revoke all active sessions
@@ -542,13 +557,13 @@ func (s *AuthService) VerifyEmail(ctx context.Context, input models.VerifyEmailI
 		return ErrAuthTokenInvalid
 	}
 
-	// Update user email_verified_at and activate status
-	if err := s.userRepo.VerifyEmail(ctx, storedToken.UserID); err != nil {
+	// Mark token as used to prevent concurrency race
+	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
 		return err
 	}
 
-	// Mark token as used
-	return s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID)
+	// Update user email_verified_at and activate status
+	return s.userRepo.VerifyEmail(ctx, storedToken.UserID)
 }
 
 func (s *AuthService) ResendVerification(ctx context.Context, input models.ResendVerificationInput) error {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 )
@@ -226,6 +227,7 @@ func (s *AdminUserService) AssignUserRoles(ctx context.Context, id string, input
 	if err := s.userRepo.SetRoles(ctx, id, input.RoleIDs); err != nil {
 		return nil, err
 	}
+	middleware.ClearUserPermissionCache(id)
 
 	return s.GetUserDetail(ctx, id)
 }

@@ -28,6 +28,7 @@ A production-grade, modular, and security-hardened RESTful API starter kit built
   - [Directory Layout](#directory-layout)
   - [Database Schema \& Data Models](#database-schema--data-models)
   - [API Reference](#api-reference)
+    - [0. System Health \& Probes (`/health`)](#0-system-health--probes-health)
     - [1. Authentication (`/api/v1/auth`)](#1-authentication-apiv1auth)
     - [2. User Profile Management (`/api/v1/users`)](#2-user-profile-management-apiv1users)
     - [3. Public Content (`/api/v1/posts` \& `/api/v1/categories`)](#3-public-content-apiv1posts--apiv1categories)
@@ -252,6 +253,14 @@ All primary and foreign keys utilize `CHAR(26)` UTF-8 strings representing ULID 
 
 ## API Reference
 
+### 0. System Health & Probes (`/health`)
+
+| Method | Endpoint        | Authorization | Description                                                                        |
+| :----- | :-------------- | :------------ | :--------------------------------------------------------------------------------- |
+| `GET`  | `/health`       | Public        | Deep health probe with MySQL connection verification (returns 200 OK / 503 error). |
+| `GET`  | `/health/live`  | Public        | Instant liveness probe for container lifecycle managers (Kubernetes / Docker).     |
+| `GET`  | `/health/ready` | Public        | Readiness probe for ingress traffic routing.                                       |
+
 ### 1. Authentication (`/api/v1/auth`)
 
 | Method | Endpoint                           | Authorization         | Description                                                                      |
@@ -362,12 +371,16 @@ PORT=8080
 APP_ENV=development
 FRONTEND_URL=http://localhost:3000
 
-# Database Configuration
+# Database Configuration & Pool Settings
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=go_crud_api
+DB_MAX_OPEN_CONNS=100
+DB_MAX_IDLE_CONNS=10
+DB_CONN_MAX_LIFETIME_MINUTES=60
+DB_CONN_MAX_IDLE_TIME_MINUTES=10
 
 # Initial Administrator Credentials (used during -fresh seed)
 ADMIN_NAME=Administrator

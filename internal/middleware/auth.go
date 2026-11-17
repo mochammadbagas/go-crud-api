@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
@@ -16,6 +18,28 @@ const (
 	UserIDContextKey contextKey = "auth_user_id"
 	RoleContextKey   contextKey = "auth_role"
 )
+
+type permCacheEntry struct {
+	perms     []string
+	expiresAt time.Time
+}
+
+var (
+	userPermCache    sync.Map
+	userPermCacheTTL = 1 * time.Minute
+)
+
+// ClearUserPermissionCache clears cached permissions for a specific user (or all users if userID is empty).
+func ClearUserPermissionCache(userID string) {
+	if userID == "" {
+		userPermCache.Range(func(key, _ interface{}) bool {
+			userPermCache.Delete(key)
+			return true
+		})
+		return
+	}
+	userPermCache.Delete(userID)
+}
 
 // JWTAuthMiddleware verifies the JWT Bearer access token.
 func JWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
@@ -98,10 +122,28 @@ func RequirePermission(permission string, userRepo repository.UserRepository) fu
 				return
 			}
 
-			perms, err := userRepo.GetUserPermissions(r.Context(), claims.UserID)
-			if err != nil {
-				utils.ErrorCode(w, http.StatusForbidden, "PERMISSION_VERIFICATION_FAILED", "forbidden: failed to verify permissions")
-				return
+			// Check in-memory cache first to eliminate repetitive database queries
+			var perms []string
+			if cached, ok := userPermCache.Load(claims.UserID); ok {
+				entry := cached.(permCacheEntry)
+				if time.Now().Before(entry.expiresAt) {
+					perms = entry.perms
+				} else {
+					userPermCache.Delete(claims.UserID)
+				}
+			}
+
+			if perms == nil {
+				var err error
+				perms, err = userRepo.GetUserPermissions(r.Context(), claims.UserID)
+				if err != nil {
+					utils.ErrorCode(w, http.StatusForbidden, "PERMISSION_VERIFICATION_FAILED", "forbidden: failed to verify permissions")
+					return
+				}
+				userPermCache.Store(claims.UserID, permCacheEntry{
+					perms:     perms,
+					expiresAt: time.Now().Add(userPermCacheTTL),
+				})
 			}
 
 			hasPerm := false

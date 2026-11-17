@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 )
@@ -134,7 +135,11 @@ func (s *RBACService) AssignPermissionsToRole(ctx context.Context, roleID string
 		return err
 	}
 
-	return s.roleRepo.AssignPermissions(ctx, roleID, input.PermissionIDs)
+	if err := s.roleRepo.AssignPermissions(ctx, roleID, input.PermissionIDs); err != nil {
+		return err
+	}
+	middleware.ClearUserPermissionCache("")
+	return nil
 }
 
 func (s *RBACService) CreatePermission(ctx context.Context, input models.CreatePermissionInput) (*models.Permission, error) {

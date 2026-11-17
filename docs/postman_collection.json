@@ -54,6 +54,68 @@
 	],
 	"item": [
 		{
+			"name": "0. System Health & Probes",
+			"description": "Endpoint health check sistem, liveness probe, dan readiness probe (terkoneksi langsung dengan status MySQL database).",
+			"item": [
+				{
+					"name": "0.1 Full System Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Pemeriksaan kesehatan sistem menyeluruh termasuk verifikasi koneksi dan query ping ke MySQL database."
+					},
+					"response": []
+				},
+				{
+					"name": "0.2 Liveness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health/live",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health",
+								"live"
+							]
+						},
+						"description": "Liveness probe instan untuk orkestrator kontainer (Kubernetes / Docker) untuk memverifikasi proses server berjalan."
+					},
+					"response": []
+				},
+				{
+					"name": "0.3 Readiness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health/ready",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health",
+								"ready"
+							]
+						},
+						"description": "Readiness probe untuk ingress load balancer untuk memastikan server dan database siap menerima lalu lintas HTTP."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "1. Authentication",
 			"description": "Endpoint Autentikasi Pengguna & Admin (Register, Login, Refresh Token RTR, Logout, Change Password).",
 			"item": [

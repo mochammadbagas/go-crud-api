@@ -27,9 +27,10 @@ func NewAdminUploadHandler(cfg *config.Config, store storage.Storage) *AdminUplo
 
 // Upload handles POST /api/v1/admin/upload for storing cover images via pluggable storage (Local/R2/S3)
 func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	// 10 MB max memory
+	// Enforce 10 MB maximum request stream size to prevent disk/memory exhaustion DoS
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		utils.Error(w, http.StatusBadRequest, "file is too large or invalid multipart format")
+		utils.Error(w, http.StatusBadRequest, "file is too large (max 10MB) or invalid multipart format")
 		return
 	}
 
