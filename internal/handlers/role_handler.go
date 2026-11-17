@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -53,8 +52,8 @@ func (h *RoleHandler) GetRole(w http.ResponseWriter, r *http.Request) {
 // CreateRole handles POST /api/v1/admin/roles
 func (h *RoleHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	var input models.CreateRoleInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -75,8 +74,8 @@ func (h *RoleHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 func (h *RoleHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.UpdateRoleInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -120,8 +119,8 @@ func (h *RoleHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.AssignPermissionsInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -179,8 +178,8 @@ func (h *RoleHandler) GetPermission(w http.ResponseWriter, r *http.Request) {
 // CreatePermission handles POST /api/v1/admin/permissions
 func (h *RoleHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	var input models.CreatePermissionInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -201,8 +200,8 @@ func (h *RoleHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 func (h *RoleHandler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input models.UpdatePermissionInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 

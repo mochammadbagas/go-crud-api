@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -36,8 +35,8 @@ func (h *AdminCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/admin/categories
 func (h *AdminCategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input models.CategoryInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -63,8 +62,8 @@ func (h *AdminCategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input models.CategoryInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 

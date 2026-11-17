@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -62,8 +61,8 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input models.UpdateProfileInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -215,8 +214,8 @@ func (h *UserHandler) UpdateUsername(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input models.UpdateUsernameInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -268,8 +267,8 @@ func (h *UserHandler) RequestEmailChange(w http.ResponseWriter, r *http.Request)
 	}
 
 	var input models.RequestEmailChangeInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -292,7 +291,7 @@ func (h *UserHandler) ConfirmEmailChange(w http.ResponseWriter, r *http.Request)
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		var input models.ConfirmEmailChangeInput
-		_ = json.NewDecoder(r.Body).Decode(&input)
+		_ = utils.DecodeJSON(w, r, &input)
 		token = input.Token
 	}
 

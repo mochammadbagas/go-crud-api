@@ -41,6 +41,7 @@ func Setup(
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 
 	// Unified JSON 404 & 405 error handlers
@@ -198,6 +199,36 @@ func clientIPKey(r *http.Request) (string, error) {
 	return httprate.CanonicalizeIP(ip), nil
 }
 
+// noDirListingFS wraps an http.FileSystem to prevent directory browsing.
+// If an index.html does not exist in the requested directory, Open returns os.ErrNotExist.
+type noDirListingFS struct {
+	fs http.FileSystem
+}
+
+func (nfs noDirListingFS) Open(path string) (http.File, error) {
+	f, err := nfs.fs.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+
+	if s.IsDir() {
+		// Attempt to open index.html inside the directory
+		indexPath := filepath.Join(path, "index.html")
+		if _, err := nfs.fs.Open(indexPath); err != nil {
+			_ = f.Close()
+			return nil, os.ErrNotExist
+		}
+	}
+
+	return f, nil
+}
+
 func fileServer(r chi.Router, path string, root http.FileSystem) {
 	if path != "/" && path[len(path)-1] != '/' {
 		r.Get(path, http.RedirectHandler(path+"/", http.StatusMovedPermanently).ServeHTTP)
@@ -205,10 +236,12 @@ func fileServer(r chi.Router, path string, root http.FileSystem) {
 	}
 	path += "*"
 
+	restrictedFS := noDirListingFS{fs: root}
+
 	r.Get(path, func(w http.ResponseWriter, r *http.Request) {
 		rctx := chi.RouteContext(r.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
-		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
+		fs := http.StripPrefix(pathPrefix, http.FileServer(restrictedFS))
 		fs.ServeHTTP(w, r)
 	})
 }

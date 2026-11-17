@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -30,8 +29,8 @@ func NewAuthHandler(authSvc service.AuthServiceInterface, cfg *config.Config) *A
 // Register handles POST /api/v1/auth/register
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var input models.RegisterInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -65,8 +64,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // Login handles POST /api/v1/auth/login
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var input models.LoginInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -159,8 +158,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input models.ChangePasswordInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -180,8 +179,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // ForgotPassword handles POST /api/v1/auth/forgot-password
 func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var input models.ForgotPasswordInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -199,8 +198,8 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 // ResetPassword handles POST /api/v1/auth/reset-password
 func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var input models.ResetPasswordInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -229,7 +228,7 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		var input models.VerifyEmailInput
-		_ = json.NewDecoder(r.Body).Decode(&input)
+		_ = utils.DecodeJSON(w, r, &input)
 		token = input.Token
 	}
 
@@ -259,8 +258,8 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 // ResendVerification handles POST /api/v1/auth/resend-verification
 func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 	var input models.ResendVerificationInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		utils.Error(w, http.StatusBadRequest, "invalid request body format")
+	if err := utils.DecodeJSON(w, r, &input); err != nil {
+		utils.HandleDecodeError(w, err)
 		return
 	}
 
@@ -291,7 +290,7 @@ func (h *AuthHandler) extractRefreshToken(r *http.Request) string {
 
 	// 3. Try reading from JSON body
 	var bodyInput models.RefreshTokenInput
-	if err := json.NewDecoder(r.Body).Decode(&bodyInput); err == nil && strings.TrimSpace(bodyInput.RefreshToken) != "" {
+	if err := utils.DecodeJSON(nil, r, &bodyInput); err == nil && strings.TrimSpace(bodyInput.RefreshToken) != "" {
 		return strings.TrimSpace(bodyInput.RefreshToken)
 	}
 
