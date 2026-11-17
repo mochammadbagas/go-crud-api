@@ -37,6 +37,7 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*models.User, error)
 	GetByID(ctx context.Context, id string) (*models.User, error)
 	Create(ctx context.Context, user *models.User) error
+	CreateWithProfileAndRole(ctx context.Context, user *models.User, profile *models.UserProfile, roleID string) error
 	UpdatePassword(ctx context.Context, id string, passwordHash string) error
 	UpdateUsername(ctx context.Context, id string, username string) error
 	UpdateStatus(ctx context.Context, id string, status string) error
@@ -223,6 +224,114 @@ func (r *sqlUserRepository) Create(ctx context.Context, user *models.User) error
 		}
 		return err
 	}
+	return nil
+}
+
+func (r *sqlUserRepository) CreateWithProfileAndRole(ctx context.Context, user *models.User, profile *models.UserProfile, roleID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	qtx := r.q.WithTx(tx)
+
+	now := time.Now().UTC()
+	if user.ID == "" {
+		user.ID = utils.NewULID()
+	}
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = now
+	}
+	if user.UpdatedAt.IsZero() {
+		user.UpdatedAt = now
+	}
+	if user.Role == "" {
+		user.Role = models.RoleUser
+	}
+	if user.Status == "" {
+		user.Status = models.StatusActive
+	}
+
+	var emailVerifiedAt sql.NullTime
+	if user.EmailVerifiedAt != nil {
+		emailVerifiedAt = sql.NullTime{Time: *user.EmailVerifiedAt, Valid: true}
+	}
+
+	// 1. Create User
+	err = qtx.CreateUser(ctx, sqlc.CreateUserParams{
+		ID:              user.ID,
+		Username:        user.Username,
+		Email:           user.Email,
+		PasswordHash:    user.PasswordHash,
+		Role:            sqlc.UsersRole(user.Role),
+		Status:          sqlc.UsersStatus(user.Status),
+		EmailVerifiedAt: emailVerifiedAt,
+		CreatedAt:       user.CreatedAt,
+		UpdatedAt:       user.UpdatedAt,
+	})
+	if err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrDuplicate
+		}
+		return fmt.Errorf("failed to insert user: %w", err)
+	}
+
+	// 2. Create User Profile
+	if profile != nil {
+		if profile.UserID == "" {
+			profile.UserID = user.ID
+		}
+		if profile.CreatedAt.IsZero() {
+			profile.CreatedAt = user.CreatedAt
+		}
+		if profile.UpdatedAt.IsZero() {
+			profile.UpdatedAt = user.UpdatedAt
+		}
+
+		var bio, phone, avatar sql.NullString
+		if profile.Bio != nil {
+			bio = sql.NullString{String: *profile.Bio, Valid: true}
+		}
+		if profile.PhoneNumber != nil {
+			phone = sql.NullString{String: *profile.PhoneNumber, Valid: true}
+		}
+		if profile.AvatarURL != nil {
+			avatar = sql.NullString{String: *profile.AvatarURL, Valid: true}
+		}
+
+		err = qtx.CreateUserProfile(ctx, sqlc.CreateUserProfileParams{
+			UserID:      profile.UserID,
+			FullName:    profile.FullName,
+			Bio:         bio,
+			PhoneNumber: phone,
+			AvatarUrl:   avatar,
+			CreatedAt:   profile.CreatedAt,
+			UpdatedAt:   profile.UpdatedAt,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to insert user profile: %w", err)
+		}
+	}
+
+	// 3. Assign Role (if roleID is provided)
+	if roleID != "" {
+		err = qtx.AssignRoleToUser(ctx, sqlc.AssignRoleToUserParams{
+			UserID:    user.ID,
+			RoleID:    roleID,
+			CreatedAt: user.CreatedAt,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to assign user role: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 

@@ -64,6 +64,16 @@ func (m *mockUserRepo) Create(ctx context.Context, user *models.User) error {
 	return nil
 }
 
+func (m *mockUserRepo) CreateWithProfileAndRole(ctx context.Context, user *models.User, profile *models.UserProfile, roleID string) error {
+	m.usersByID[user.ID] = user
+	m.usersByEmail[user.Email] = user
+	m.usersByUsername[user.Username] = user
+	if roleID != "" {
+		m.userRoleIDs[user.ID] = append(m.userRoleIDs[user.ID], roleID)
+	}
+	return nil
+}
+
 func (m *mockUserRepo) UpdatePassword(ctx context.Context, id string, passwordHash string) error {
 	if u, ok := m.usersByID[id]; ok {
 		u.PasswordHash = passwordHash

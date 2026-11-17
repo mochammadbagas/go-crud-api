@@ -105,7 +105,17 @@ func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) 
 		return nil, err
 	}
 
-	// 4. Create User entity
+	// 4. Resolve default role 'user' ID
+	var roleID string
+	var roleName = models.RoleUser
+	if s.roleRepo != nil {
+		if defaultRole, err := s.roleRepo.GetByName(ctx, models.RoleUser); err == nil && defaultRole != nil {
+			roleID = defaultRole.ID
+			roleName = defaultRole.Name
+		}
+	}
+
+	// 5. Build User entity
 	user := &models.User{
 		ID:           utils.NewULID(),
 		Username:     input.Username,
@@ -115,39 +125,30 @@ func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) 
 		Status:       models.StatusActive,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
+		Roles:        []string{roleName},
 	}
 
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		if errors.Is(err, repository.ErrDuplicate) {
-			return nil, ErrEmailExists
-		}
-		return nil, err
-	}
-
-	// 5. Create default user profile
+	// 6. Build default user profile
 	fullName := input.FullName
 	if fullName == "" {
 		fullName = input.Username
 	}
-	_ = s.profileRepo.Create(ctx, &models.UserProfile{
+	profile := &models.UserProfile{
 		UserID:    user.ID,
 		FullName:  fullName,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
-	})
+	}
 
-	// 6. Assign default role 'user'
-	if s.roleRepo != nil {
-		if defaultRole, err := s.roleRepo.GetByName(ctx, models.RoleUser); err == nil && defaultRole != nil {
-			_ = s.userRepo.AssignRole(ctx, user.ID, defaultRole.ID)
-			user.Roles = []string{defaultRole.Name}
+	// 7. Atomic transaction: create user, profile, and role mapping
+	if err := s.userRepo.CreateWithProfileAndRole(ctx, user, profile, roleID); err != nil {
+		if errors.Is(err, repository.ErrDuplicate) {
+			return nil, ErrEmailExists
 		}
-	}
-	if len(user.Roles) == 0 {
-		user.Roles = []string{user.Role}
+		return nil, fmt.Errorf("failed to register user atomically: %w", err)
 	}
 
-	// 7. Send initial email verification in background
+	// 8. Send initial email verification in background
 	go func() {
 		_ = s.SendVerification(context.Background(), user.ID)
 	}()

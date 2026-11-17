@@ -28,6 +28,7 @@ func Init(cfg *config.Config, fresh bool) (*sql.DB, error) {
 	db.SetMaxIdleConns(10)
 	db.SetMaxOpenConns(100)
 	db.SetConnMaxLifetime(time.Hour)
+	db.SetConnMaxIdleTime(10 * time.Minute)
 
 	// Verify connection
 	if err := db.Ping(); err != nil {

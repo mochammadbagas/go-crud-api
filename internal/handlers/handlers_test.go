@@ -72,6 +72,15 @@ func (r *testUserRepo) Create(ctx context.Context, user *models.User) error {
 	r.usersByUsername[user.Username] = user
 	return nil
 }
+func (r *testUserRepo) CreateWithProfileAndRole(ctx context.Context, user *models.User, profile *models.UserProfile, roleID string) error {
+	r.usersByID[user.ID] = user
+	r.usersByEmail[user.Email] = user
+	r.usersByUsername[user.Username] = user
+	if roleID != "" {
+		r.userRoleIDs[user.ID] = append(r.userRoleIDs[user.ID], roleID)
+	}
+	return nil
+}
 func (r *testUserRepo) UpdatePassword(ctx context.Context, id string, passwordHash string) error {
 	if u, ok := r.usersByID[id]; ok {
 		u.PasswordHash = passwordHash
