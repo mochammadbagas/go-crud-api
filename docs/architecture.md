@@ -261,9 +261,10 @@ The database connection is managed via `internal/database/database.go` with ente
 
 ```go
 // Connection Pool tuning
-db.SetMaxIdleConns(10)          // Retains idle connections ready for instant reuse
-db.SetMaxOpenConns(100)         // Caps total concurrent connections to prevent DB exhaustion
-db.SetConnMaxLifetime(time.Hour)// Refreshes stale connections gracefully
+db.SetMaxIdleConns(10)               // Retains idle connections ready for instant reuse
+db.SetMaxOpenConns(100)              // Caps total concurrent connections to prevent DB exhaustion
+db.SetConnMaxLifetime(time.Hour)     // Refreshes stale connections gracefully
+db.SetConnMaxIdleTime(10 * time.Minute) // Closes idle connections before remote dropouts
 ```
 
 All migrations are run sequentially on startup using `golang-migrate` embedded into the Go binary (`//go:embed`), guaranteeing zero schema drift across environments.

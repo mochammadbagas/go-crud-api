@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrInvalidToken = errors.New("token tidak valid atau telah kedaluwarsa")
+	ErrInvalidToken = errors.New("invalid or expired token")
 )
 
 // JWTClaims represents custom claims inside the JWT Access Token.
@@ -72,7 +72,7 @@ func GenerateAccessToken(secret string, ttl time.Duration, userID, username, ema
 func ValidateAccessToken(secret string, tokenStr string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("metode penandatanganan tidak valid: %v", t.Header["alg"])
+			return nil, fmt.Errorf("invalid signing method: %v", t.Header["alg"])
 		}
 		return []byte(secret), nil
 	})

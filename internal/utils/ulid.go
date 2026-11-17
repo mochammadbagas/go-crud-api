@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrInvalidULID = errors.New("format ULID tidak valid, harus 26 karakter Crockford Base32")
+	ErrInvalidULID = errors.New("invalid ULID format, must be 26 Crockford Base32 characters")
 )
 
 // NewULID generates a new cryptographically secure ULID string.

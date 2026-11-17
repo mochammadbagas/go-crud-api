@@ -392,7 +392,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, input models.ForgotPas
 	if err != nil {
 		// Anti user-enumeration: return success even if user not found
 		if errors.Is(err, repository.ErrNotFound) {
-			slog.Info("Forgot password diminta untuk email yang tidak terdaftar (anti-enumeration diterapkan)", slog.String("email", input.Email))
+			slog.Info("Password reset requested for unregistered email (anti-enumeration applied)", slog.String("email", input.Email))
 			return nil
 		}
 		return err

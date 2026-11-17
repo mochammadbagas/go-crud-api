@@ -162,4 +162,20 @@ Content modules supporting Markdown rendering (e.g. posts and articles) utilize 
 ### 5.3. Storage Security & Path Traversal Guards
 - **Magic Bytes Sniffing**: Rather than trusting client-provided `Content-Type` headers or file extensions, uploads are inspected via `http.DetectContentType` to verify binary image headers (`image/jpeg`, `image/png`, `image/webp`).
 - **Zero-Leakage ULID Renaming**: Client-supplied filenames (e.g., `../../etc/passwd` or `shell.php`) are discarded entirely. The file is assigned a randomized ULID (`avatar_<ULID>.<ext>`), eliminating path traversal vulnerabilities.
+- **Directory Browsing Prevention**: The local static file server wraps the filesystem with a restricted filesystem (`noDirListingFS`) returning HTTP 404 on directory paths without `index.html`, eliminating unauthorized asset discovery.
 - **Automated Orphan Cleanup**: Mutating an avatar or deleting a post automatically purges the obsolete file from storage, preventing orphaned file accumulation.
+
+---
+
+## 6. HTTP Hardening & Denial of Service (DoS) Defense
+
+### 6.1. Request Body Size Limiting (`http.MaxBytesReader`)
+All JSON request bodies are processed through `utils.DecodeJSON`, which wraps the request reader in `http.MaxBytesReader(w, r.Body, 1<<20)`. This enforces a hard **1 MB limit** per request, preventing memory exhaustion (OOM DoS) attacks via malicious payload streaming. Payload overflows return HTTP 413 `PAYLOAD_TOO_LARGE`.
+
+### 6.2. OWASP Security Headers Middleware
+All HTTP responses carry standard OWASP security headers injected via `middleware.SecurityHeaders()`:
+- `X-Content-Type-Options: nosniff`: Prevents MIME type sniffing.
+- `X-Frame-Options: DENY`: Prevents clickjacking by forbidding iframe framing.
+- `Referrer-Policy: strict-origin-when-cross-origin`: Restricts referrer leaks.
+- `X-XSS-Protection: 1; mode=block`: Activates browser reflected XSS filters.
+- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`: Rejects framing and unauthorized execution.

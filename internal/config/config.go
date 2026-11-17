@@ -12,6 +12,7 @@ import (
 
 // Config represents all application configuration loaded at runtime.
 type Config struct {
+	AppEnv         string
 	Port           string
 	DBHost         string
 	DBPort         string
@@ -41,12 +42,16 @@ type Config struct {
 	S3PublicURL       string
 }
 
+// DefaultInsecureJWTSecret is the fallback secret used during local development.
+const DefaultInsecureJWTSecret = "super-secret-starter-kit-jwt-key-change-in-production"
+
 // Load loads configuration from environment variables or .env file.
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
-		slog.Info("Catatan: File .env tidak ditemukan, menggunakan nilai environment bawaan/sistem.")
+		slog.Info("Notice: .env file not found, falling back to system environment variables.")
 	}
 
+	appEnv := strings.ToLower(strings.TrimSpace(getEnv("APP_ENV", "development")))
 	cookieSecure, _ := strconv.ParseBool(getEnv("COOKIE_SECURE", "false"))
 
 	originsRaw := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
@@ -68,7 +73,20 @@ func Load() *Config {
 		refreshTTLDays = 7
 	}
 
+	jwtSecret := getEnv("JWT_SECRET", DefaultInsecureJWTSecret)
+	if appEnv == "production" {
+		if jwtSecret == DefaultInsecureJWTSecret {
+			slog.Error("FATAL: Default insecure JWT_SECRET detected while APP_ENV is set to production. Please set a strong, unique JWT_SECRET!")
+			os.Exit(1)
+		}
+		if len(jwtSecret) < 32 {
+			slog.Error("FATAL: JWT_SECRET is too short (< 32 characters) for production environment. Minimum 32 characters required!")
+			os.Exit(1)
+		}
+	}
+
 	return &Config{
+		AppEnv:         appEnv,
 		Port:           getEnv("PORT", "8080"),
 		DBHost:         getEnv("DB_HOST", "127.0.0.1"),
 		DBPort:         getEnv("DB_PORT", "3306"),
@@ -82,7 +100,7 @@ func Load() *Config {
 		AdminEmail:     getEnv("ADMIN_EMAIL", "admin@mmdbconnect.com"),
 		AdminPassword:  getEnv("ADMIN_PASSWORD", "adminpassword123"),
 		AllowedOrigins: allowedOrigins,
-		JWTSecret:      getEnv("JWT_SECRET", "super-secret-starter-kit-jwt-key-change-in-production"),
+		JWTSecret:      jwtSecret,
 		JWTAccessTTL:   time.Duration(accessTTLMin) * time.Minute,
 		JWTRefreshTTL:  time.Duration(refreshTTLDays) * 24 * time.Hour,
 		MailerDriver:      strings.ToLower(strings.TrimSpace(getEnv("MAILER_DRIVER", "log"))),

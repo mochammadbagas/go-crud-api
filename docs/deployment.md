@@ -10,7 +10,7 @@
 
 Before exposing the API to public traffic, ensure the following items are verified:
 
-- [ ] **Generate High-Entropy Secret Key**: Set `JWT_SECRET` to a 64+ character random string.
+- [ ] **Generate High-Entropy Secret Key**: Set `JWT_SECRET` to a 64+ character random string (minimum 32 characters enforced by application fail-fast validation in `APP_ENV=production`).
 - [ ] **Configure Production Database**: Enable SSL/TLS encryption for database connections (`tls=true`).
 - [ ] **Enforce CORS Allowed Origins**: Set `CORS_ALLOWED_ORIGINS` to your production frontend domain (e.g., `https://app.yourdomain.com`). Never leave it as `*`.
 - [ ] **Switch Mailer Driver**: Set `MAILER_DRIVER=resend` and configure a verified sender domain.
