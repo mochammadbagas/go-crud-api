@@ -13,8 +13,10 @@
 @sampleToken = 
 
 # Replace with actual ULID when testing detail / update / delete endpoints:
-@samplePostId = 01ARZ3NDEKTSV4RRFFQ69G5FAV
+@sampleArticleId = 01ARZ3NDEKTSV4RRFFQ69G5FAV
 @sampleCategoryId = 01ARZ3NDEKTSV4RRFFQ69G5FC1
+@sampleTagId = 01M7TAG0000000000000000001
+@sampleMediaId = 01M7MED0000000000000000001
 @sampleRoleId = 01M7ECAYAE7NB3X6BT4BK3DKAQ
 @samplePermissionId = 01M7ECAYAE7NB3X6BT4BK3DKB1
 @sampleUserId = 01M7ECBRK61JN9T5ANTCF1THVP
@@ -208,109 +210,198 @@ Content-Type: application/json
 
 
 ### =========================================================================
-### 3. PUBLIC CONTENT (Read-Only)
+### 3. PUBLIC ARTICLES & TAXONOMY (Read-Only & Event Ingestion)
 ### =========================================================================
 
-### 3.1 List Published Content
-GET {{baseUrl}}/api/v1/posts
+### 3.1 List Published Articles (Pagination, Filters & Search)
+GET {{baseUrl}}/api/v1/articles?page=1&per_page=10&search=&category=&tag=&is_featured=
 
-### 3.2 Filter Content (Type, Tag, Featured, Pagination)
-GET {{baseUrl}}/api/v1/posts?type=article&tag=Go&featured=true&page=1&limit=5
+### 3.2 Article Detail by Slug
+GET {{baseUrl}}/api/v1/articles/building-rest-apis-with-go
 
-### 3.3 Content Detail by Slug (Increments Views)
-GET {{baseUrl}}/api/v1/posts/building-rest-apis-with-go
+### 3.3 Record Article Analytics Event (Idempotent via X-Event-ID or JSON)
+POST {{baseUrl}}/api/v1/articles/{{sampleArticleId}}/analytics
+Content-Type: application/json
+X-Event-ID: evt_01ARZ3NDEKTSV4RRFFQ69G5FA1
+X-Session-ID: sess_987654321
+
+{
+  "event_id": "evt_01ARZ3NDEKTSV4RRFFQ69G5FA1",
+  "session_id": "sess_987654321",
+  "event_type": "view",
+  "reading_time_seconds": 45,
+  "scroll_depth": 75
+}
 
 ### 3.4 List All Public Categories
 GET {{baseUrl}}/api/v1/categories
 
-### 3.5 Posts by Category Slug
-GET {{baseUrl}}/api/v1/categories/tutorials-tech/posts
+### 3.5 Articles by Category Slug
+GET {{baseUrl}}/api/v1/categories/tutorials-tech/articles?page=1&per_page=10
 
-### 3.6 SEO-Friendly URL Aliases
+### 3.6 List All Public Tags
+GET {{baseUrl}}/api/v1/tags
+
+### 3.7 Public Tag Detail by Slug
+GET {{baseUrl}}/api/v1/tags/golang
+
+### 3.8 SEO-Friendly URL Alias
 GET {{baseUrl}}/articles/building-rest-apis-with-go
 
-GET {{baseUrl}}/blog/my-development-journey
-
-GET {{baseUrl}}/journal/rust-vs-go-file-hashing
-
 
 ### =========================================================================
-### 4. ADMIN: CONTENT & CATEGORY MANAGEMENT (Role: Admin)
+### 4. ADMIN: ARTICLE, TAXONOMY, MEDIA & ANALYTICS MANAGEMENT
 ### =========================================================================
 
-### 4.1 List All Content (Draft & Published)
-GET {{baseUrl}}/api/v1/admin/posts
+### 4.1 List All Articles (Draft, Scheduled, Published, Archived)
+GET {{baseUrl}}/api/v1/admin/articles?page=1&per_page=10&status=&category_id=&author_id=&search=
 Authorization: Bearer {{accessToken}}
 
-### 4.2 Create New Content (Automatic ULID)
-POST {{baseUrl}}/api/v1/admin/posts
+### 4.2 Create New Article (XSS Cleaned HTML & Automatic ULID)
+POST {{baseUrl}}/api/v1/admin/articles
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "type": "article",
-  "title": "Database Query Optimization in Go Starter Kit",
-  "excerpt": "Practical guide on database indexing, connection pooling, and SQLC.",
-  "content": "# Database Query Optimization\n\nMySQL 8.0 and Go provide high throughput...",
+  "title": "Optimizing MySQL and Go REST Architecture",
+  "slug": "optimizing-mysql-and-go-rest-architecture",
+  "excerpt": "Comprehensive architectural guide covering ULID, connection pools, and SQLC.",
+  "content": "<h2>Architecture Deep Dive</h2><p>Here is an embedded diagram:</p><p><img src=\"http://localhost:8080/uploads/diag.png\" data-media-id=\"{{sampleMediaId}}\" alt=\"Architecture Diagram\" /></p>",
   "category_id": "{{sampleCategoryId}}",
-  "tags": ["Go", "MySQL", "Database"],
-  "meta_title": "Database Optimization - Go Starter Kit",
-  "meta_description": "Best practices for optimizing MySQL queries in Go REST APIs.",
+  "featured_image_id": "{{sampleMediaId}}",
+  "og_image_id": "{{sampleMediaId}}",
+  "tags": ["Go", "MySQL", "Clean Architecture"],
+  "related_ids": [],
+  "meta_title": "Optimizing MySQL and Go REST Architecture",
+  "meta_description": "Best practices for high-concurrency Go REST backends.",
   "is_featured": true,
+  "robots_index": true,
+  "robots_follow": true,
   "status": "published"
 }
 
-### 4.3 Content Detail by ULID
-GET {{baseUrl}}/api/v1/admin/posts/{{samplePostId}}
+### 4.3 Article Detail by ULID
+GET {{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}
 Authorization: Bearer {{accessToken}}
 
-### 4.4 Update Content by ULID
-PUT {{baseUrl}}/api/v1/admin/posts/{{samplePostId}}
+### 4.4 Update Article by ULID (Creates Revision Snapshot Automatically)
+PUT {{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "type": "article",
-  "title": "Building REST APIs with Go & Chi (Revised)",
-  "slug": "building-rest-apis-with-go",
-  "excerpt": "Comprehensive guide to building RESTful APIs with Go, Chi, ULID, and JWT.",
-  "content": "# Building REST APIs with Go\n\nRevised edition covering JWT RTR and ULID...",
+  "title": "Optimizing MySQL and Go REST Architecture (Revised Edition)",
+  "slug": "optimizing-mysql-and-go-rest-architecture",
+  "excerpt": "Comprehensive architectural guide covering ULID, connection pools, and SQLC.",
+  "content": "<h2>Architecture Deep Dive v2</h2><p>Revised content with updated benchmarks.</p>",
   "category_id": "{{sampleCategoryId}}",
-  "tags": ["Go", "Chi", "REST API", "Starter Kit"],
+  "featured_image_id": "{{sampleMediaId}}",
+  "tags": ["Go", "MySQL", "Performance"],
   "is_featured": true,
   "status": "published"
 }
 
-### 4.5 Delete Content by ULID
-DELETE {{baseUrl}}/api/v1/admin/posts/{{samplePostId}}
+### 4.5 Delete Article by ULID (Soft Delete)
+DELETE {{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}
 Authorization: Bearer {{accessToken}}
 
-### 4.6 List All Categories
+### 4.6 List Article Historical Revisions
+GET {{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}/revisions
+Authorization: Bearer {{accessToken}}
+
+### 4.7 List All Categories (Admin)
 GET {{baseUrl}}/api/v1/admin/categories
 Authorization: Bearer {{accessToken}}
 
-### 4.7 Create New Category
+### 4.7b Get Category by ULID (Admin)
+GET {{baseUrl}}/api/v1/admin/categories/{{sampleCategoryId}}
+Authorization: Bearer {{accessToken}}
+
+### 4.8 Create New Category
 POST {{baseUrl}}/api/v1/admin/categories
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
   "name": "Cloud & DevOps",
-  "slug": "cloud-devops"
+  "slug": "cloud-devops",
+  "description": "Cloud computing, infrastructure as code, and container orchestration."
 }
 
-### 4.8 Update Category by ULID
+### 4.9 Update Category by ULID
 PUT {{baseUrl}}/api/v1/admin/categories/{{sampleCategoryId}}
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
   "name": "Cloud Architecture & DevOps",
-  "slug": "cloud-architecture-devops"
+  "slug": "cloud-architecture-devops",
+  "description": "Enterprise cloud architecture and DevOps practices."
 }
 
-### 4.9 Delete Category by ULID
+### 4.10 Delete Category by ULID (Protected if Category Has Articles)
 DELETE {{baseUrl}}/api/v1/admin/categories/{{sampleCategoryId}}
+Authorization: Bearer {{accessToken}}
+
+### 4.11 List All Tags (Admin)
+GET {{baseUrl}}/api/v1/admin/tags
+Authorization: Bearer {{accessToken}}
+
+### 4.12 Create New Tag
+POST {{baseUrl}}/api/v1/admin/tags
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Microservices",
+  "slug": "microservices"
+}
+
+### 4.13 Update Tag by ULID
+PUT {{baseUrl}}/api/v1/admin/tags/{{sampleTagId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Distributed Systems",
+  "slug": "distributed-systems"
+}
+
+### 4.14 Delete Tag by ULID
+DELETE {{baseUrl}}/api/v1/admin/tags/{{sampleTagId}}
+Authorization: Bearer {{accessToken}}
+
+### 4.15 Upload Media Asset (Image Sniffing, Renaming & Metadata Extraction)
+# Supports form field 'image' or 'file' (max 10MB)
+POST {{baseUrl}}/api/v1/admin/media
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="image"; filename="cover-banner.png"
+Content-Type: image/png
+
+< ./test_uploads/sample.png
+--WebAppBoundary--
+
+### 4.16 List Media Library (Paginated)
+GET {{baseUrl}}/api/v1/admin/media?page=1&per_page=20
+Authorization: Bearer {{accessToken}}
+
+### 4.17 Media Detail by ULID
+GET {{baseUrl}}/api/v1/admin/media/{{sampleMediaId}}
+Authorization: Bearer {{accessToken}}
+
+### 4.18 Delete Media by ULID (Protected if Media is In Use)
+DELETE {{baseUrl}}/api/v1/admin/media/{{sampleMediaId}}
+Authorization: Bearer {{accessToken}}
+
+### 4.19 Get Article Daily Analytics Report (Aggregated by Worker)
+GET {{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}/analytics?start_date=2026-01-01&end_date=2026-12-31
+Authorization: Bearer {{accessToken}}
+
+### 4.20 Get Global System Analytics Overview
+GET {{baseUrl}}/api/v1/admin/analytics/overview
 Authorization: Bearer {{accessToken}}
 
 

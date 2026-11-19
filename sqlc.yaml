@@ -11,3 +11,9 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_exact_table_names: true
+        overrides:
+          - column: "articles.meta"
+            go_type:
+              slice: true
+              type: "byte"
+

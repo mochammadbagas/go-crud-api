@@ -52,7 +52,10 @@ The **Go REST API Starter Kit** is structured around the principles of **Clean A
 - **Single Responsibility**: Bootstrap and wire all application dependencies.
 - Instantiates database connection pools, repositories, services, and HTTP handlers.
 - Mounts routes and middleware chains.
-- Spawns background workers (e.g., periodic expired token purger).
+- Spawns background workers with graceful shutdown contexts (`sync.WaitGroup`):
+  - **Token Pruning Worker**: Executes every 24 hours to clean up expired sessions and auth tokens.
+  - **Article Publisher Worker**: Executes every 1 minute to transition scheduled articles (`scheduled_at <= NOW()`) into `published`.
+  - **Analytics Aggregator & Pruning Worker**: Executes every 1 hour to aggregate daily engagement metrics and prune raw event rows older than 90 days.
 - Registers deep health and readiness probes (`/health`, `/health/live`, `/health/ready`) integrated with database connectivity pinging.
 - Manages graceful shutdown via operating system signal trapping (`SIGINT`, `SIGTERM`).
 
@@ -62,17 +65,18 @@ The **Go REST API Starter Kit** is structured around the principles of **Clean A
 - Decodes JSON request bodies, URL query parameters, and route parameters (`chi.URLParam`).
 - Triggers DTO validation via `input.Validate()`.
 - Maps domain sentinel errors into semantic HTTP status codes (`400`, `401`, `403`, `404`, `409`, `422`, `500`).
-- Emits standardized JSON responses using `utils.JSON()` and `utils.Error()`.
-- Executes post-action side effects (such as invoking asynchronous file deletions on obsolete avatar/cover images).
+- Emits standardized JSON responses using `utils.JSON()`, `utils.Error()`, and `utils.PaginatedResponse`.
+- Executes post-action side effects (such as invoking asynchronous file deletions on obsolete avatar images).
 
 ### 2.3. Domain & Service Layer (`internal/service/`)
 
 - **Single Responsibility**: Enforcement of business invariants, data transformation, and domain orchestration.
 - Generates entity ULIDs (`utils.NewULID()`).
-- Coordinates cryptographic operations (Argon2id password hashing, token generation).
+- Coordinates cryptographic operations (Argon2id password hashing, token generation, pseudonymized visitor hashing).
+- Cleans HTML payloads against XSS attacks using `bluemonday` UGC Policy and parses DOM nodes to track embedded media IDs.
 - Orchestrates multi-step workflows (e.g., registering an account, creating an auth token, and dispatching a verification email via the mailer interface).
-- Enforces system security rules, such as Refresh Token Rotation (RTR), reuse detection, and the **Super Admin Safeguard**.
-- Emits strongly-typed sentinel errors (e.g., `ErrNotFound`, `ErrDuplicate`, `ErrUnauthorized`).
+- Enforces system security rules, such as Refresh Token Rotation (RTR), reuse detection, the **Super Admin Safeguard**, and referential media in-use protections.
+- Emits strongly-typed sentinel errors (e.g., `ErrNotFound`, `ErrDuplicate`, `ErrUnauthorized`, `ErrMediaInUse`, `ErrCategoryHasArticles`).
 
 ### 2.4. Data Access Layer (`internal/repository/`)
 
@@ -158,38 +162,38 @@ Global Chi router 404 (Not Found) and 405 (Method Not Allowed) handlers are conf
 
 #### Application-Level Error Codes Dictionary
 
-| Code | HTTP Status | Description / Trigger Scenario |
-| :--- | :--- | :--- |
-| `TOKEN_REQUIRED` | 401 Unauthorized | Missing or malformed `Authorization: Bearer <token>` header |
-| `INVALID_OR_EXPIRED_TOKEN` | 401 Unauthorized | JWT access token is invalid, signature mismatch, or expired |
-| `INVALID_CREDENTIALS` | 401 Unauthorized | Incorrect email or password during login |
-| `TOKEN_EXPIRED` | 401 Unauthorized | Refresh token expired during token rotation |
-| `TOKEN_REUSED` | 401 Unauthorized | Refresh token reuse detected (session hijacking mitigation) |
-| `UNAUTHORIZED` | 401 Unauthorized | Generic authentication failure fallback |
-| `INSUFFICIENT_PERMISSIONS` | 403 Forbidden | Authenticated user lacks the required RBAC role or permission |
-| `ACCOUNT_INACTIVE` | 403 Forbidden | Account status is `inactive` or `suspended` |
-| `CANNOT_DELETE_LAST_SUPER_ADMIN` | 403 Forbidden | Invariant safeguard preventing deletion of the last Super Admin |
-| `CANNOT_DEACTIVATE_LAST_SUPER_ADMIN` | 403 Forbidden | Safeguard preventing deactivation of the last Super Admin |
-| `CANNOT_DEMOTE_LAST_SUPER_ADMIN` | 403 Forbidden | Safeguard preventing revoking Super Admin role from the last holder |
-| `CANNOT_DELETE_SYSTEM_ROLE` | 403 Forbidden | Protected system roles (`super_admin`, `admin`, `user`) cannot be deleted |
-| `NOT_FOUND` | 404 Not Found | Route endpoint not found or generic record missing |
-| `USER_NOT_FOUND` | 404 Not Found | Requested user ID does not exist in the database |
-| `CATEGORY_NOT_FOUND` | 404 Not Found | Requested category ID or slug does not exist |
-| `POST_NOT_FOUND` | 404 Not Found | Requested post ID or slug does not exist / not published |
-| `ROLE_NOT_FOUND` | 404 Not Found | Requested role ID does not exist |
-| `PERMISSION_NOT_FOUND` | 404 Not Found | Requested permission ID does not exist |
-| `CONFLICT` | 409 Conflict | Generic uniqueness constraint violation |
-| `EMAIL_ALREADY_EXISTS` | 409 Conflict | User registration or email update with an existing email |
-| `USERNAME_ALREADY_EXISTS` | 409 Conflict | User registration or username update with an existing username |
-| `CATEGORY_SLUG_EXISTS` | 409 Conflict | Category creation or update with an existing URL slug |
-| `POST_SLUG_EXISTS` | 409 Conflict | Post creation or update with an existing URL slug |
-| `ROLE_NAME_EXISTS` | 409 Conflict | Role creation with an existing system name |
-| `PERMISSION_NAME_EXISTS` | 409 Conflict | Permission creation with an existing resource-action name |
-| `EMAIL_ALREADY_VERIFIED` | 409 Conflict | Resending verification for an already verified email |
-| `BAD_REQUEST` | 400 Bad Request | Malformed JSON body or invalid route parameter |
-| `RATE_LIMIT_EXCEEDED` | 429 Too Many Requests | IP rate limit exceeded (e.g. max 10 auth requests/min) |
-| `METHOD_NOT_ALLOWED` | 405 Method Not Allowed | HTTP method is not allowed for the requested endpoint |
-| `INTERNAL_SERVER_ERROR` | 500 Internal Server Error | Unhandled server error or unexpected infrastructure failure |
+| Code                                 | HTTP Status               | Description / Trigger Scenario                                            |
+| :----------------------------------- | :------------------------ | :------------------------------------------------------------------------ |
+| `TOKEN_REQUIRED`                     | 401 Unauthorized          | Missing or malformed `Authorization: Bearer <token>` header               |
+| `INVALID_OR_EXPIRED_TOKEN`           | 401 Unauthorized          | JWT access token is invalid, signature mismatch, or expired               |
+| `INVALID_CREDENTIALS`                | 401 Unauthorized          | Incorrect email or password during login                                  |
+| `TOKEN_EXPIRED`                      | 401 Unauthorized          | Refresh token expired during token rotation                               |
+| `TOKEN_REUSED`                       | 401 Unauthorized          | Refresh token reuse detected (session hijacking mitigation)               |
+| `UNAUTHORIZED`                       | 401 Unauthorized          | Generic authentication failure fallback                                   |
+| `INSUFFICIENT_PERMISSIONS`           | 403 Forbidden             | Authenticated user lacks the required RBAC role or permission             |
+| `ACCOUNT_INACTIVE`                   | 403 Forbidden             | Account status is `inactive` or `suspended`                               |
+| `CANNOT_DELETE_LAST_SUPER_ADMIN`     | 403 Forbidden             | Invariant safeguard preventing deletion of the last Super Admin           |
+| `CANNOT_DEACTIVATE_LAST_SUPER_ADMIN` | 403 Forbidden             | Safeguard preventing deactivation of the last Super Admin                 |
+| `CANNOT_DEMOTE_LAST_SUPER_ADMIN`     | 403 Forbidden             | Safeguard preventing revoking Super Admin role from the last holder       |
+| `CANNOT_DELETE_SYSTEM_ROLE`          | 403 Forbidden             | Protected system roles (`super_admin`, `admin`, `user`) cannot be deleted |
+| `NOT_FOUND`                          | 404 Not Found             | Route endpoint not found or generic record missing                        |
+| `USER_NOT_FOUND`                     | 404 Not Found             | Requested user ID does not exist in the database                          |
+| `CATEGORY_NOT_FOUND`                 | 404 Not Found             | Requested category ID or slug does not exist                              |
+| `POST_NOT_FOUND`                     | 404 Not Found             | Requested post ID or slug does not exist / not published                  |
+| `ROLE_NOT_FOUND`                     | 404 Not Found             | Requested role ID does not exist                                          |
+| `PERMISSION_NOT_FOUND`               | 404 Not Found             | Requested permission ID does not exist                                    |
+| `CONFLICT`                           | 409 Conflict              | Generic uniqueness constraint violation                                   |
+| `EMAIL_ALREADY_EXISTS`               | 409 Conflict              | User registration or email update with an existing email                  |
+| `USERNAME_ALREADY_EXISTS`            | 409 Conflict              | User registration or username update with an existing username            |
+| `CATEGORY_SLUG_EXISTS`               | 409 Conflict              | Category creation or update with an existing URL slug                     |
+| `POST_SLUG_EXISTS`                   | 409 Conflict              | Post creation or update with an existing URL slug                         |
+| `ROLE_NAME_EXISTS`                   | 409 Conflict              | Role creation with an existing system name                                |
+| `PERMISSION_NAME_EXISTS`             | 409 Conflict              | Permission creation with an existing resource-action name                 |
+| `EMAIL_ALREADY_VERIFIED`             | 409 Conflict              | Resending verification for an already verified email                      |
+| `BAD_REQUEST`                        | 400 Bad Request           | Malformed JSON body or invalid route parameter                            |
+| `RATE_LIMIT_EXCEEDED`                | 429 Too Many Requests     | IP rate limit exceeded (e.g. max 10 auth requests/min)                    |
+| `METHOD_NOT_ALLOWED`                 | 405 Method Not Allowed    | HTTP method is not allowed for the requested endpoint                     |
+| `INTERNAL_SERVER_ERROR`              | 500 Internal Server Error | Unhandled server error or unexpected infrastructure failure               |
 
 ### 3.2. Multi-Input Field Validation
 
@@ -228,17 +232,17 @@ When errors exist, `utils.ValidationError(w, err)` formats the response into a s
 
 Exported constants in `internal/utils/validation.go`:
 
-| Code Constant | Machine Code (`code`) | Meaning / Purpose | Example Triggers |
-| :--- | :--- | :--- | :--- |
-| `ErrCodeRequired` | `REQUIRED` | Mandatory field is absent, empty, or whitespace-only | `full_name is required`, `email is required` |
-| `ErrCodeTooShort` | `TOO_SHORT` | Input string length is below the minimum allowed bound | `password must be at least 8 characters long` |
-| `ErrCodeTooLong` | `TOO_LONG` | Input string length exceeds the maximum allowed bound (e.g., 128 chars for passwords to prevent Argon2id CPU exhaustion DoS) | `password must not exceed 128 characters`, `bio must not exceed 500 characters` |
-| `ErrCodeInvalidFormat` | `INVALID_FORMAT` | String fails regular expression or character set requirements | `username can only contain alphanumeric, underscore, hyphen`, `slug must be url-safe` |
-| `ErrCodeInvalidEmail` | `INVALID_EMAIL` | Email fails RFC 5321 length rules (max 254 chars, local-part max 64 chars) or lacks a valid TLD (min 2 alphabetic chars) | `user@domain`, `user@localhost`, `user..test@example.com` |
-| `ErrCodeReserved` | `RESERVED` | Input uses protected system identifiers | `admin`, `root`, `system`, `api`, `support`, `superuser` |
-| `ErrCodeInvalidID` | `INVALID_ID` | Foreign key or relational ID is not a syntactically valid 26-character Crockford Base32 ULID | `category_id must be a valid 26-character ULID`, `permission_ids must contain valid ULIDs` |
-| `ErrCodeInvalidStatus` | `INVALID_STATUS` | Value does not belong to the allowed enumeration set for status | `status must be one of: draft, published` |
-| `ErrCodeInvalidValue` | `INVALID_VALUE` | Relational value contradiction or disallowed payload combination | `new password cannot be the same as old password`, non-negative numeric constraints |
+| Code Constant          | Machine Code (`code`) | Meaning / Purpose                                                                                                            | Example Triggers                                                                           |
+| :--------------------- | :-------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------- |
+| `ErrCodeRequired`      | `REQUIRED`            | Mandatory field is absent, empty, or whitespace-only                                                                         | `full_name is required`, `email is required`                                               |
+| `ErrCodeTooShort`      | `TOO_SHORT`           | Input string length is below the minimum allowed bound                                                                       | `password must be at least 8 characters long`                                              |
+| `ErrCodeTooLong`       | `TOO_LONG`            | Input string length exceeds the maximum allowed bound (e.g., 128 chars for passwords to prevent Argon2id CPU exhaustion DoS) | `password must not exceed 128 characters`, `bio must not exceed 500 characters`            |
+| `ErrCodeInvalidFormat` | `INVALID_FORMAT`      | String fails regular expression or character set requirements                                                                | `username can only contain alphanumeric, underscore, hyphen`, `slug must be url-safe`      |
+| `ErrCodeInvalidEmail`  | `INVALID_EMAIL`       | Email fails RFC 5321 length rules (max 254 chars, local-part max 64 chars) or lacks a valid TLD (min 2 alphabetic chars)     | `user@domain`, `user@localhost`, `user..test@example.com`                                  |
+| `ErrCodeReserved`      | `RESERVED`            | Input uses protected system identifiers                                                                                      | `admin`, `root`, `system`, `api`, `support`, `superuser`                                   |
+| `ErrCodeInvalidID`     | `INVALID_ID`          | Foreign key or relational ID is not a syntactically valid 26-character Crockford Base32 ULID                                 | `category_id must be a valid 26-character ULID`, `permission_ids must contain valid ULIDs` |
+| `ErrCodeInvalidStatus` | `INVALID_STATUS`      | Value does not belong to the allowed enumeration set for status                                                              | `status must be one of: draft, published`                                                  |
+| `ErrCodeInvalidValue`  | `INVALID_VALUE`       | Relational value contradiction or disallowed payload combination                                                             | `new password cannot be the same as old password`, non-negative numeric constraints        |
 
 ---
 

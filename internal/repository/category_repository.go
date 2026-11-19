@@ -11,6 +11,10 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
+var (
+	ErrCategoryHasArticles = errors.New("category cannot be deleted because it is still used by one or more articles")
+)
+
 type CategoryRepository interface {
 	List(ctx context.Context) ([]models.Category, error)
 	GetByID(ctx context.Context, id string) (*models.Category, error)
@@ -19,6 +23,7 @@ type CategoryRepository interface {
 	Update(ctx context.Context, cat *models.Category) error
 	Delete(ctx context.Context, id string) error
 	Count(ctx context.Context) (int64, error)
+	CountArticlesByCategoryID(ctx context.Context, categoryID string) (int64, error)
 }
 
 type sqlCategoryRepository struct {
@@ -39,13 +44,19 @@ func (r *sqlCategoryRepository) List(ctx context.Context) ([]models.Category, er
 
 	result := make([]models.Category, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, models.Category{
-			ID:        row.ID,
-			Name:      row.Name,
-			Slug:      row.Slug,
-			CreatedAt: row.CreatedAt,
-			UpdatedAt: row.UpdatedAt,
-		})
+		c := models.Category{
+			ID:           row.ID,
+			Name:         row.Name,
+			Slug:         row.Slug,
+			ArticleCount: row.ArticleCount,
+			CreatedAt:    row.CreatedAt,
+			UpdatedAt:    row.UpdatedAt,
+		}
+		if row.Description.Valid {
+			desc := row.Description.String
+			c.Description = &desc
+		}
+		result = append(result, c)
 	}
 	return result, nil
 }
@@ -59,13 +70,18 @@ func (r *sqlCategoryRepository) GetByID(ctx context.Context, id string) (*models
 		return nil, err
 	}
 
-	return &models.Category{
+	c := &models.Category{
 		ID:        row.ID,
 		Name:      row.Name,
 		Slug:      row.Slug,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
-	}, nil
+	}
+	if row.Description.Valid {
+		desc := row.Description.String
+		c.Description = &desc
+	}
+	return c, nil
 }
 
 func (r *sqlCategoryRepository) GetBySlug(ctx context.Context, slug string) (*models.Category, error) {
@@ -77,59 +93,56 @@ func (r *sqlCategoryRepository) GetBySlug(ctx context.Context, slug string) (*mo
 		return nil, err
 	}
 
-	return &models.Category{
+	c := &models.Category{
 		ID:        row.ID,
 		Name:      row.Name,
 		Slug:      row.Slug,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
-	}, nil
+	}
+	if row.Description.Valid {
+		desc := row.Description.String
+		c.Description = &desc
+	}
+	return c, nil
 }
 
 func (r *sqlCategoryRepository) Create(ctx context.Context, cat *models.Category) error {
-	now := time.Now().UTC()
 	if cat.ID == "" {
 		cat.ID = utils.NewULID()
 	}
-	if cat.CreatedAt.IsZero() {
-		cat.CreatedAt = now
-	}
-	if cat.UpdatedAt.IsZero() {
-		cat.UpdatedAt = now
-	}
+	now := time.Now().UTC()
+	cat.CreatedAt = now
+	cat.UpdatedAt = now
 
-	err := r.q.CreateCategory(ctx, sqlc.CreateCategoryParams{
+	params := sqlc.CreateCategoryParams{
 		ID:        cat.ID,
 		Name:      cat.Name,
 		Slug:      cat.Slug,
 		CreatedAt: cat.CreatedAt,
 		UpdatedAt: cat.UpdatedAt,
-	})
-	if err != nil {
-		if IsDuplicateKeyError(err) {
-			return ErrDuplicate
-		}
-		return err
+	}
+	if cat.Description != nil {
+		params.Description = sql.NullString{String: *cat.Description, Valid: true}
 	}
 
-	return nil
+	return r.q.CreateCategory(ctx, params)
 }
 
 func (r *sqlCategoryRepository) Update(ctx context.Context, cat *models.Category) error {
 	cat.UpdatedAt = time.Now().UTC()
-	err := r.q.UpdateCategory(ctx, sqlc.UpdateCategoryParams{
+
+	params := sqlc.UpdateCategoryParams{
+		ID:        cat.ID,
 		Name:      cat.Name,
 		Slug:      cat.Slug,
 		UpdatedAt: cat.UpdatedAt,
-		ID:        cat.ID,
-	})
-	if err != nil {
-		if IsDuplicateKeyError(err) {
-			return ErrDuplicate
-		}
-		return err
 	}
-	return nil
+	if cat.Description != nil {
+		params.Description = sql.NullString{String: *cat.Description, Valid: true}
+	}
+
+	return r.q.UpdateCategory(ctx, params)
 }
 
 func (r *sqlCategoryRepository) Delete(ctx context.Context, id string) error {
@@ -138,4 +151,8 @@ func (r *sqlCategoryRepository) Delete(ctx context.Context, id string) error {
 
 func (r *sqlCategoryRepository) Count(ctx context.Context) (int64, error) {
 	return r.q.CountCategories(ctx)
+}
+
+func (r *sqlCategoryRepository) CountArticlesByCategoryID(ctx context.Context, categoryID string) (int64, error) {
+	return r.q.CountArticlesByCategoryID(ctx, sql.NullString{String: categoryID, Valid: true})
 }

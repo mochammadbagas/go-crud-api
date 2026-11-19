@@ -22,40 +22,40 @@ Before exposing the API to public traffic, ensure the following items are verifi
 
 ## 2. Environment Variables Reference
 
-| Variable                 | Description                               | Development Default              | Production Recommended                          |
-| :----------------------- | :---------------------------------------- | :------------------------------- | :---------------------------------------------- |
-| `PORT`                   | HTTP port the server listens on           | `8080`                           | `8080` (behind reverse proxy)                   |
-| `APP_ENV`                | Application runtime environment           | `development`                    | `production`                                    |
-| `FRONTEND_URL`           | Base URL used for email action links      | `http://localhost:3000`          | `https://app.yourdomain.com`                    |
-| `DB_HOST`                | MySQL hostname or IP address              | `127.0.0.1`                      | Cloud MySQL host / Docker network               |
-| `DB_PORT`                | MySQL connection port                     | `3306`                           | `3306`                                          |
-| `DB_USER`                | MySQL database user                       | `root`                           | Dedicated application user                      |
-| `DB_PASSWORD`            | MySQL user password                       | `""`                             | Strong entropy password                         |
-| `DB_NAME`                    | MySQL database schema name                | `go_crud_api`                    | `production_db_name`                            |
-| `DB_MAX_OPEN_CONNS`          | Maximum open database connections         | `100`                            | `50` - `200` (based on DB instance RAM)         |
-| `DB_MAX_IDLE_CONNS`          | Maximum idle database connections         | `10`                             | `10` - `50`                                     |
-| `DB_CONN_MAX_LIFETIME_MINUTES`| Connection maximum lifetime duration     | `60`                             | `60`                                            |
-| `DB_CONN_MAX_IDLE_TIME_MINUTES`| Connection idle timeout duration         | `10`                             | `10`                                            |
-| `COOKIE_SECURE`              | Enable Secure flag on HTTP cookies        | `false`                          | `true` (enforces HTTPS)                         |
-| `COOKIE_DOMAIN`              | Domain attribute for cookies              | `""`                             | `.yourdomain.com`                               |
-| `ADMIN_NAME`                 | Initial administrator display name        | `Administrator`                  | `Your Admin Name`                               |
-| `ADMIN_EMAIL`                | Initial administrator login email         | `admin@mmdbconnect.com`          | `admin@yourdomain.com`                          |
-| `ADMIN_PASSWORD`             | Initial administrator password            | `adminpassword123`               | Strong 16+ char password                        |
-| `JWT_SECRET`                 | HMAC SHA-256 signing key                  | `super-secret-key...`            | `openssl rand -hex 64`                          |
-| `JWT_ACCESS_TTL_MINUTES`     | Access token lifespan                     | `15`                             | `15`                                            |
-| `JWT_REFRESH_TTL_DAYS`       | Refresh token lifespan                    | `7`                              | `7` (or `30`)                                   |
-| `ALLOWED_ORIGINS`            | Comma-separated allowed origins           | `http://localhost:3000`          | `https://yourdomain.com`                        |
-| `MAILER_DRIVER`          | Active email driver (`log` / `resend`)    | `log`                            | `resend`                                        |
-| `RESEND_API_KEY`         | Resend REST API authentication key        | `""`                             | `re_xxxxxxxxxxxx`                               |
-| `MAIL_FROM`              | RFC 5322 sender display and address       | `Go Kit <onboarding@resend.dev>` | `AppName <noreply@yourdomain.com>`              |
-| `STORAGE_DRIVER`         | Active storage driver (`local`/`r2`/`s3`) | `local`                          | `r2` or `s3`                                    |
-| `UPLOAD_DIR`             | Local disk directory for uploads          | `./uploads`                      | `./uploads`                                     |
-| `S3_BUCKET`              | S3 / R2 bucket name                       | `""`                             | `app-production-media`                          |
-| `S3_REGION`              | S3 region code (`auto` for R2)            | `auto`                           | `auto` (or AWS region e.g. `us-east-1`)         |
-| `S3_ENDPOINT`            | Custom endpoint URL for Cloudflare R2     | `""`                             | `https://<account_id>.r2.cloudflarestorage.com` |
-| `S3_ACCESS_KEY_ID`       | Cloudflare R2 / AWS Access Key ID         | `""`                             | `your_access_key_id`                            |
-| `S3_SECRET_ACCESS_KEY`   | Cloudflare R2 / AWS Secret Access Key     | `""`                             | `your_secret_access_key`                        |
-| `S3_PUBLIC_URL`          | Public CDN base URL for uploaded files    | `""`                             | `https://media.yourdomain.com`                  |
+| Variable                        | Description                               | Development Default              | Production Recommended                          |
+| :------------------------------ | :---------------------------------------- | :------------------------------- | :---------------------------------------------- |
+| `PORT`                          | HTTP port the server listens on           | `8080`                           | `8080` (behind reverse proxy)                   |
+| `APP_ENV`                       | Application runtime environment           | `development`                    | `production`                                    |
+| `FRONTEND_URL`                  | Base URL used for email action links      | `http://localhost:3000`          | `https://app.yourdomain.com`                    |
+| `DB_HOST`                       | MySQL hostname or IP address              | `127.0.0.1`                      | Cloud MySQL host / Docker network               |
+| `DB_PORT`                       | MySQL connection port                     | `3306`                           | `3306`                                          |
+| `DB_USER`                       | MySQL database user                       | `root`                           | Dedicated application user                      |
+| `DB_PASSWORD`                   | MySQL user password                       | `""`                             | Strong entropy password                         |
+| `DB_NAME`                       | MySQL database schema name                | `go_crud_api`                    | `production_db_name`                            |
+| `DB_MAX_OPEN_CONNS`             | Maximum open database connections         | `100`                            | `50` - `200` (based on DB instance RAM)         |
+| `DB_MAX_IDLE_CONNS`             | Maximum idle database connections         | `10`                             | `10` - `50`                                     |
+| `DB_CONN_MAX_LIFETIME_MINUTES`  | Connection maximum lifetime duration      | `60`                             | `60`                                            |
+| `DB_CONN_MAX_IDLE_TIME_MINUTES` | Connection idle timeout duration          | `10`                             | `10`                                            |
+| `COOKIE_SECURE`                 | Enable Secure flag on HTTP cookies        | `false`                          | `true` (enforces HTTPS)                         |
+| `COOKIE_DOMAIN`                 | Domain attribute for cookies              | `""`                             | `.yourdomain.com`                               |
+| `ADMIN_NAME`                    | Initial administrator display name        | `Administrator`                  | `Your Admin Name`                               |
+| `ADMIN_EMAIL`                   | Initial administrator login email         | `admin@mmdbconnect.com`          | `admin@yourdomain.com`                          |
+| `ADMIN_PASSWORD`                | Initial administrator password            | `adminpassword123`               | Strong 16+ char password                        |
+| `JWT_SECRET`                    | HMAC SHA-256 signing key                  | `super-secret-key...`            | `openssl rand -hex 64`                          |
+| `JWT_ACCESS_TTL_MINUTES`        | Access token lifespan                     | `15`                             | `15`                                            |
+| `JWT_REFRESH_TTL_DAYS`          | Refresh token lifespan                    | `7`                              | `7` (or `30`)                                   |
+| `ALLOWED_ORIGINS`               | Comma-separated allowed origins           | `http://localhost:3000`          | `https://yourdomain.com`                        |
+| `MAILER_DRIVER`                 | Active email driver (`log` / `resend`)    | `log`                            | `resend`                                        |
+| `RESEND_API_KEY`                | Resend REST API authentication key        | `""`                             | `re_xxxxxxxxxxxx`                               |
+| `MAIL_FROM`                     | RFC 5322 sender display and address       | `Go Kit <onboarding@resend.dev>` | `AppName <noreply@yourdomain.com>`              |
+| `STORAGE_DRIVER`                | Active storage driver (`local`/`r2`/`s3`) | `local`                          | `r2` or `s3`                                    |
+| `UPLOAD_DIR`                    | Local disk directory for uploads          | `./uploads`                      | `./uploads`                                     |
+| `S3_BUCKET`                     | S3 / R2 bucket name                       | `""`                             | `app-production-media`                          |
+| `S3_REGION`                     | S3 region code (`auto` for R2)            | `auto`                           | `auto` (or AWS region e.g. `us-east-1`)         |
+| `S3_ENDPOINT`                   | Custom endpoint URL for Cloudflare R2     | `""`                             | `https://<account_id>.r2.cloudflarestorage.com` |
+| `S3_ACCESS_KEY_ID`              | Cloudflare R2 / AWS Access Key ID         | `""`                             | `your_access_key_id`                            |
+| `S3_SECRET_ACCESS_KEY`          | Cloudflare R2 / AWS Secret Access Key     | `""`                             | `your_secret_access_key`                        |
+| `S3_PUBLIC_URL`                 | Public CDN base URL for uploaded files    | `""`                             | `https://media.yourdomain.com`                  |
 
 ---
 

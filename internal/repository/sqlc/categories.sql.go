@@ -7,8 +7,21 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
+
+const countArticlesByCategoryID = `-- name: CountArticlesByCategoryID :one
+SELECT COUNT(*) FROM articles
+WHERE category_id = ? AND deleted_at IS NULL
+`
+
+func (q *Queries) CountArticlesByCategoryID(ctx context.Context, categoryID sql.NullString) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countArticlesByCategoryID, categoryID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const countCategories = `-- name: CountCategories :one
 SELECT COUNT(*) FROM categories
@@ -22,16 +35,17 @@ func (q *Queries) CountCategories(ctx context.Context) (int64, error) {
 }
 
 const createCategory = `-- name: CreateCategory :exec
-INSERT INTO categories (id, name, slug, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO categories (id, name, slug, description, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreateCategoryParams struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
@@ -39,6 +53,7 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.ID,
 		arg.Name,
 		arg.Slug,
+		arg.Description,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -56,7 +71,7 @@ func (q *Queries) DeleteCategory(ctx context.Context, id string) error {
 }
 
 const getCategoryByID = `-- name: GetCategoryByID :one
-SELECT id, name, slug, created_at, updated_at
+SELECT id, name, slug, description, created_at, updated_at
 FROM categories
 WHERE id = ?
 LIMIT 1
@@ -69,6 +84,7 @@ func (q *Queries) GetCategoryByID(ctx context.Context, id string) (Categories, e
 		&i.ID,
 		&i.Name,
 		&i.Slug,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -76,7 +92,7 @@ func (q *Queries) GetCategoryByID(ctx context.Context, id string) (Categories, e
 }
 
 const getCategoryBySlug = `-- name: GetCategoryBySlug :one
-SELECT id, name, slug, created_at, updated_at
+SELECT id, name, slug, description, created_at, updated_at
 FROM categories
 WHERE slug = ?
 LIMIT 1
@@ -89,6 +105,7 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Categorie
 		&i.ID,
 		&i.Name,
 		&i.Slug,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -96,26 +113,42 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Categorie
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, name, slug, created_at, updated_at
-FROM categories
-ORDER BY name ASC
+SELECT 
+    c.id, c.name, c.slug, c.description, c.created_at, c.updated_at,
+    COUNT(a.id) AS article_count
+FROM categories c
+LEFT JOIN articles a ON c.id = a.category_id AND a.deleted_at IS NULL
+GROUP BY c.id
+ORDER BY c.name ASC
 `
 
-func (q *Queries) ListCategories(ctx context.Context) ([]Categories, error) {
+type ListCategoriesRow struct {
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	Slug         string         `json:"slug"`
+	Description  sql.NullString `json:"description"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	ArticleCount int64          `json:"article_count"`
+}
+
+func (q *Queries) ListCategories(ctx context.Context) ([]ListCategoriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCategories)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Categories{}
+	items := []ListCategoriesRow{}
 	for rows.Next() {
-		var i Categories
+		var i ListCategoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Slug,
+			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArticleCount,
 		); err != nil {
 			return nil, err
 		}
@@ -132,21 +165,23 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Categories, error) {
 
 const updateCategory = `-- name: UpdateCategory :exec
 UPDATE categories
-SET name = ?, slug = ?, updated_at = ?
+SET name = ?, slug = ?, description = ?, updated_at = ?
 WHERE id = ?
 `
 
 type UpdateCategoryParams struct {
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	UpdatedAt time.Time `json:"updated_at"`
-	ID        string    `json:"id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	ID          string         `json:"id"`
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) error {
 	_, err := q.db.ExecContext(ctx, updateCategory,
 		arg.Name,
 		arg.Slug,
+		arg.Description,
 		arg.UpdatedAt,
 		arg.ID,
 	)

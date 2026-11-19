@@ -9,17 +9,20 @@ import (
 
 // Category represents a content category.
 type Category struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Slug         string    `json:"slug"`
+	Description  *string   `json:"description,omitempty"`
+	ArticleCount int64     `json:"article_count,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // CategoryInput is the payload for creating or updating a category.
 type CategoryInput struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+	Description *string `json:"description,omitempty"`
 }
 
 // Validate validates CategoryInput.
@@ -42,6 +45,10 @@ func (i CategoryInput) Validate() error {
 		} else if !utils.IsValidSlug(slug) {
 			v.Add("slug", utils.ErrCodeInvalidFormat, "slug must contain only lowercase alphanumeric characters and hyphens")
 		}
+	}
+
+	if i.Description != nil && len(*i.Description) > 1000 {
+		v.Add("description", utils.ErrCodeTooLong, "description must not exceed 1000 characters")
 	}
 
 	if v.HasErrors() {

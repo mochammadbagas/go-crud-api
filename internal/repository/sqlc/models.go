@@ -12,6 +12,50 @@ import (
 	"time"
 )
 
+type ArticlesStatus string
+
+const (
+	ArticlesStatusDraft     ArticlesStatus = "draft"
+	ArticlesStatusScheduled ArticlesStatus = "scheduled"
+	ArticlesStatusPublished ArticlesStatus = "published"
+	ArticlesStatusArchived  ArticlesStatus = "archived"
+)
+
+func (e *ArticlesStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ArticlesStatus(s)
+	case string:
+		*e = ArticlesStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ArticlesStatus: %T", src)
+	}
+	return nil
+}
+
+type NullArticlesStatus struct {
+	ArticlesStatus ArticlesStatus `json:"articles_status"`
+	Valid          bool           `json:"valid"` // Valid is true if ArticlesStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullArticlesStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ArticlesStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ArticlesStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullArticlesStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ArticlesStatus), nil
+}
+
 type AuthTokensTokenType string
 
 const (
@@ -53,91 +97,6 @@ func (ns NullAuthTokensTokenType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.AuthTokensTokenType), nil
-}
-
-type PostsStatus string
-
-const (
-	PostsStatusDraft     PostsStatus = "draft"
-	PostsStatusPublished PostsStatus = "published"
-)
-
-func (e *PostsStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = PostsStatus(s)
-	case string:
-		*e = PostsStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for PostsStatus: %T", src)
-	}
-	return nil
-}
-
-type NullPostsStatus struct {
-	PostsStatus PostsStatus `json:"posts_status"`
-	Valid       bool        `json:"valid"` // Valid is true if PostsStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullPostsStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.PostsStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.PostsStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullPostsStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.PostsStatus), nil
-}
-
-type PostsType string
-
-const (
-	PostsTypeBlog    PostsType = "blog"
-	PostsTypeArticle PostsType = "article"
-	PostsTypeJournal PostsType = "journal"
-)
-
-func (e *PostsType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = PostsType(s)
-	case string:
-		*e = PostsType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for PostsType: %T", src)
-	}
-	return nil
-}
-
-type NullPostsType struct {
-	PostsType PostsType `json:"posts_type"`
-	Valid     bool      `json:"valid"` // Valid is true if PostsType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullPostsType) Scan(value interface{}) error {
-	if value == nil {
-		ns.PostsType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.PostsType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullPostsType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.PostsType), nil
 }
 
 type UsersRole string
@@ -227,6 +186,82 @@ func (ns NullUsersStatus) Value() (driver.Value, error) {
 	return string(ns.UsersStatus), nil
 }
 
+type ArticleAnalyticsEvents struct {
+	ID                 int64     `json:"id"`
+	ArticleID          string    `json:"article_id"`
+	EventID            string    `json:"event_id"`
+	VisitorID          string    `json:"visitor_id"`
+	SessionID          string    `json:"session_id"`
+	EventType          string    `json:"event_type"`
+	ReadingTimeSeconds int32     `json:"reading_time_seconds"`
+	ScrollDepth        int32     `json:"scroll_depth"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+type ArticleDailyAnalytics struct {
+	ID                 int64     `json:"id"`
+	ArticleID          string    `json:"article_id"`
+	AnalyticsDate      time.Time `json:"analytics_date"`
+	TotalViews         int64     `json:"total_views"`
+	UniqueVisitors     int64     `json:"unique_visitors"`
+	TotalShares        int64     `json:"total_shares"`
+	TotalReadingTime   int64     `json:"total_reading_time"`
+	AverageScrollDepth string    `json:"average_scroll_depth"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+type ArticleMedia struct {
+	ArticleID string    `json:"article_id"`
+	MediaID   string    `json:"media_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ArticleRelated struct {
+	ArticleID        string    `json:"article_id"`
+	RelatedArticleID string    `json:"related_article_id"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+type ArticleRevisions struct {
+	ID        string          `json:"id"`
+	ArticleID string          `json:"article_id"`
+	UserID    string          `json:"user_id"`
+	Snapshot  json.RawMessage `json:"snapshot"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+type ArticleTags struct {
+	ArticleID string    `json:"article_id"`
+	TagID     string    `json:"tag_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Articles struct {
+	ID              string         `json:"id"`
+	AuthorID        string         `json:"author_id"`
+	CategoryID      sql.NullString `json:"category_id"`
+	FeaturedImageID sql.NullString `json:"featured_image_id"`
+	OgImageID       sql.NullString `json:"og_image_id"`
+	Title           string         `json:"title"`
+	Slug            string         `json:"slug"`
+	Excerpt         sql.NullString `json:"excerpt"`
+	Content         string         `json:"content"`
+	Status          ArticlesStatus `json:"status"`
+	IsFeatured      bool           `json:"is_featured"`
+	ScheduledAt     sql.NullTime   `json:"scheduled_at"`
+	PublishedAt     sql.NullTime   `json:"published_at"`
+	MetaTitle       sql.NullString `json:"meta_title"`
+	MetaDescription sql.NullString `json:"meta_description"`
+	CanonicalUrl    sql.NullString `json:"canonical_url"`
+	RobotsIndex     bool           `json:"robots_index"`
+	RobotsFollow    bool           `json:"robots_follow"`
+	Meta            []byte         `json:"meta"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       sql.NullTime   `json:"deleted_at"`
+}
+
 type AuthTokens struct {
 	ID        string              `json:"id"`
 	UserID    string              `json:"user_id"`
@@ -239,11 +274,27 @@ type AuthTokens struct {
 }
 
 type Categories struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
+type Media struct {
+	ID          string        `json:"id"`
+	UploadedBy  string        `json:"uploaded_by"`
+	Filename    string        `json:"filename"`
+	StorageDisk string        `json:"storage_disk"`
+	StorageKey  string        `json:"storage_key"`
+	Url         string        `json:"url"`
+	MimeType    string        `json:"mime_type"`
+	Size        int64         `json:"size"`
+	Width       sql.NullInt32 `json:"width"`
+	Height      sql.NullInt32 `json:"height"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
 }
 
 type Permissions struct {
@@ -252,32 +303,6 @@ type Permissions struct {
 	Description sql.NullString `json:"description"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
-}
-
-type PostViews struct {
-	ID        string    `json:"id"`
-	PostID    string    `json:"post_id"`
-	Views     uint64    `json:"views"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type Posts struct {
-	ID              string          `json:"id"`
-	Type            PostsType       `json:"type"`
-	Title           string          `json:"title"`
-	Slug            string          `json:"slug"`
-	Excerpt         sql.NullString  `json:"excerpt"`
-	Content         string          `json:"content"`
-	CoverImage      sql.NullString  `json:"cover_image"`
-	CategoryID      sql.NullString  `json:"category_id"`
-	Tags            json.RawMessage `json:"tags"`
-	MetaTitle       sql.NullString  `json:"meta_title"`
-	MetaDescription sql.NullString  `json:"meta_description"`
-	IsFeatured      bool            `json:"is_featured"`
-	Status          PostsStatus     `json:"status"`
-	PublishedAt     sql.NullTime    `json:"published_at"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type RefreshTokens struct {
@@ -307,6 +332,21 @@ type Roles struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+type Settings struct {
+	ID           string          `json:"id"`
+	SettingKey   string          `json:"setting_key"`
+	SettingValue json.RawMessage `json:"setting_value"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+type Tags struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type UserProfiles struct {
 	UserID      string         `json:"user_id"`
 	FullName    string         `json:"full_name"`
@@ -328,9 +368,9 @@ type Users struct {
 	Username        string       `json:"username"`
 	Email           string       `json:"email"`
 	PasswordHash    string       `json:"password_hash"`
+	Role            UsersRole    `json:"role"`
+	Status          UsersStatus  `json:"status"`
 	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
 	CreatedAt       time.Time    `json:"created_at"`
 	UpdatedAt       time.Time    `json:"updated_at"`
-	Role            UsersRole    `json:"role"`
-	Status          UsersStatus  `json:"status"`
 }

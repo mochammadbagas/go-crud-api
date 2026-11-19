@@ -3,11 +3,13 @@
 **Document Type:** Historical Build-Phase Specification (Archived)  
 **Status:** Archived / Superseded by Active Documentation  
 **Active Documentation References:**
+
 - For current architecture and layering, see [docs/architecture.md](../architecture.md).
 - For step-by-step module extension, see [docs/how_to_add_new_module.md](../how_to_add_new_module.md).
 - For security, JWT RTR, and RBAC, see [docs/security_and_rbac.md](../security_and_rbac.md).
 - For production deployment, see [docs/deployment.md](../deployment.md).
 - For Go idioms and educational walkthrough, see [docs/learning_guide.md](../learning_guide.md).
+- For the completed Article Management System refactor specification, see [docs/specs/article_management_refactor_plan.md](article_management_refactor_plan.md).
 
 ---
 
@@ -16,6 +18,7 @@
 This document consolidates the original technical requirements, database design, and architecture decisions made during the initial build phase of the **Go REST API Starter Kit (`go-crud-api`)**.
 
 The initial project goal was to build a production-grade, enterprise-ready Go RESTful backend boilerplate providing:
+
 - **Decentralized Entity Identity (ULID)**: Standardizing on 26-character Crockford Base32 identifiers across all tables (`CHAR(26)`), avoiding auto-increment sequence locks, sequential scraping, and 53-bit JavaScript number truncation.
 - **Modern Authentication**: JWT Access Tokens (HS256) paired with stateful Refresh Token Rotation (RTR) and Token Family tracking for automatic session reuse detection.
 - **Granular RBAC**: Role-Based Access Control supporting multi-role assignment per user, `resource.action` syntax, and wildcard bypass for super administrators.
@@ -135,7 +138,9 @@ CREATE TABLE IF NOT EXISTS user_roles (
     CONSTRAINT fk_ur_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 4. Reference Content Management Module
+-- 4. Reference Content Management Module (Historical - Superseded by Migration 000004 & article_management_refactor_plan.md)
+-- Note: 'posts' was renamed to 'articles', 'post_views' was replaced by GDPR-compliant analytics events,
+-- and dedicated tables were added for 'tags', 'media', 'article_tags', 'article_media', 'article_revisions', 'article_related', and 'settings'.
 CREATE TABLE IF NOT EXISTS categories (
     id CHAR(26) NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -188,13 +193,13 @@ CREATE TABLE IF NOT EXISTS post_views (
 
 ## 3. Technology Stack Decisions
 
-| Decision | Selected Technology | Primary Architectural Justification |
-| :--- | :--- | :--- |
-| **Language** | Go (Golang) 1.25+ | Compiled execution speed, low memory footprint, first-class standard library concurrency. |
-| **Routing** | Chi Router v5 | Idiomatic compatibility with standard `net/http`, lightweight sub-routing, zero global state. |
-| **SQL Handling** | SQLC | Compile-time type-safety from pure SQL without the runtime reflection or N+1 queries of ORMs. |
-| **Identity** | ULID | 128-bit sortable identity without sequential integer enumeration or UUID index fragmentation. |
-| **Auth Cryptography** | Argon2id + HS256 JWT | RFC 9106 memory-hard password protection combined with stateless bearer token verification. |
-| **Database Migrations** | golang-migrate | Embedded migration scripts (`//go:embed`) executing automatically on application startup. |
-| **Media Storage** | Pluggable Adapter (Local / S3 / R2) | Clean isolation behind a single `Storage` interface with automated orphan file cleanup. |
-| **Transactional Email** | Pluggable Adapter (Log / Resend) | Zero-configuration console development mode with seamless production API switching. |
+| Decision                | Selected Technology                 | Primary Architectural Justification                                                           |
+| :---------------------- | :---------------------------------- | :-------------------------------------------------------------------------------------------- |
+| **Language**            | Go (Golang) 1.25+                   | Compiled execution speed, low memory footprint, first-class standard library concurrency.     |
+| **Routing**             | Chi Router v5                       | Idiomatic compatibility with standard `net/http`, lightweight sub-routing, zero global state. |
+| **SQL Handling**        | SQLC                                | Compile-time type-safety from pure SQL without the runtime reflection or N+1 queries of ORMs. |
+| **Identity**            | ULID                                | 128-bit sortable identity without sequential integer enumeration or UUID index fragmentation. |
+| **Auth Cryptography**   | Argon2id + HS256 JWT                | RFC 9106 memory-hard password protection combined with stateless bearer token verification.   |
+| **Database Migrations** | golang-migrate                      | Embedded migration scripts (`//go:embed`) executing automatically on application startup.     |
+| **Media Storage**       | Pluggable Adapter (Local / S3 / R2) | Clean isolation behind a single `Storage` interface with automated orphan file cleanup.       |
+| **Transactional Email** | Pluggable Adapter (Log / Resend)    | Zero-configuration console development mode with seamless production API switching.           |

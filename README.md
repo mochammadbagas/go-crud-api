@@ -23,7 +23,8 @@ A production-grade, modular, and security-hardened RESTful API starter kit built
     - [4. Administrative Safeguards](#4-administrative-safeguards)
     - [5. Multi-Input Field-Level Validation](#5-multi-input-field-level-validation)
     - [6. Pluggable Infrastructure Adapters](#6-pluggable-infrastructure-adapters)
-    - [7. Background Maintenance \& Hardening](#7-background-maintenance--hardening)
+    - [7. Zero-Redis Background Workers \& Hardening](#7-zero-redis-background-workers--hardening)
+    - [8. Enterprise Article Management \& Analytics Engine](#8-enterprise-article-management--analytics-engine)
   - [Technology Stack](#technology-stack)
   - [Directory Layout](#directory-layout)
   - [Database Schema \& Data Models](#database-schema--data-models)
@@ -31,8 +32,8 @@ A production-grade, modular, and security-hardened RESTful API starter kit built
     - [0. System Health \& Probes (`/health`)](#0-system-health--probes-health)
     - [1. Authentication (`/api/v1/auth`)](#1-authentication-apiv1auth)
     - [2. User Profile Management (`/api/v1/users`)](#2-user-profile-management-apiv1users)
-    - [3. Public Content (`/api/v1/posts` \& `/api/v1/categories`)](#3-public-content-apiv1posts--apiv1categories)
-    - [4. Content Administration (`/api/v1/admin`)](#4-content-administration-apiv1admin)
+    - [3. Public Articles \& Taxonomy (`/api/v1/articles`, `/categories`, `/tags`)](#3-public-articles--taxonomy-apiv1articles-categories-tags)
+    - [4. Article \& Content Administration (`/api/v1/admin`)](#4-article--content-administration-apiv1admin)
     - [5. Role-Based Access Control (`/api/v1/admin/roles` \& `/permissions`)](#5-role-based-access-control-apiv1adminroles--permissions)
     - [6. User Administration (`/api/v1/admin/users`)](#6-user-administration-apiv1adminusers)
   - [Getting Started](#getting-started)
@@ -110,7 +111,7 @@ This project follows Clean Architecture and Domain-Driven Design (DDD) principle
 ### 3. Granular Role-Based Access Control (RBAC)
 
 - Multi-role association per user (`users` -> `user_roles` -> `roles`).
-- Fine-grained permission model structured as `resource.action` (e.g., `users.read`, `roles.create`, `posts.delete`).
+- Fine-grained permission model structured as `resource.action` (e.g., `users.read`, `roles.create`, `articles.create`, `articles.delete`, `tags.manage`, `media.upload`, `analytics.read`).
 - Automatic wildcard bypass (`*`) for accounts holding the `super_admin` role.
 - Modular middleware decorators: `RequireRole`, `RequireRoles`, and `PermissionMiddleware`.
 
@@ -163,11 +164,22 @@ This project follows Clean Architecture and Domain-Driven Design (DDD) principle
   - `log`: Console dev mailer outputting formatted terminal inspection boxes without requiring network access or third-party accounts.
   - `resend`: Production-ready transactional email engine leveraging Resend's REST API for verification and password reset workflows.
 
-### 7. Background Maintenance & Hardening
+### 7. Zero-Redis Background Workers & Hardening
 
-- **Automated Token Pruning**: Background worker executes every 24 hours to delete expired refresh tokens and consumed auth tokens.
+- **Scheduled Article Publishing Worker**: Native Go goroutine running every 1 minute to automatically publish scheduled articles (`scheduled_at <= NOW()`).
+- **Daily Analytics Aggregation & Pruning Worker**: Native Go goroutine running every 1 hour to aggregate daily engagement metrics and prune raw analytics events older than 90 days.
+- **Automated Token Pruning**: Background worker running every 24 hours to delete expired refresh tokens and consumed auth tokens.
+- **Graceful Shutdown**: All background workers register with cancellation contexts and `sync.WaitGroup` to ensure clean exit upon receiving `SIGINT`/`SIGTERM`.
 - **Rate Limiting**: Configured IP rate limiting (10 requests/minute) protecting sensitive endpoints against brute-force attacks.
 - **Argon2id Hashing**: Password hashing compliant with OWASP guidelines and RFC 9106.
+
+### 8. Enterprise Article Management & Analytics Engine
+
+- **Strict HTML XSS Sanitization**: Content stored as clean HTML `LONGTEXT` purified using `bluemonday` UGC Policy before persistence.
+- **Embedded Media Relationship Synchronization**: Native HTML tokenizer (`golang.org/x/net/html`) automatically extracts embedded `<img data-media-id="...">` tags and maintains transactional referential integrity in `article_media`.
+- **Historical Revision Snapshots**: Every article update automatically creates a historical version snapshot in `article_revisions`.
+- **Media Asset Management**: Multipart image uploads with automatic dimension sniffing (`image.Config`), magic byte inspection, and referential protection preventing deletion of in-use media.
+- **Privacy-Preserving Visitor Analytics**: GDPR-compliant visitor tracking using pseudonymized salted hashes (`SHA-256(IP + UserAgent + MonthlySalt)`) with zero cookie requirements.
 
 ---
 
@@ -185,7 +197,8 @@ This project follows Clean Architecture and Domain-Driven Design (DDD) principle
 | Password Encryption   | Argon2id          | -       | Modern memory-hard key derivation                          |
 | Rate Limiter          | httprate          | v0.15.1 | In-memory token bucket rate limiting                       |
 | Cloud Object Storage  | AWS SDK for Go v2 | v2.x    | S3 / Cloudflare R2 API compatibility                       |
-| Markdown Processor    | Goldmark          | v1.7.16 | Standards-compliant Markdown parser with HTML sanitization |
+| HTML Sanitizer        | Bluemonday        | v1.0.27 | UGC-compliant HTML sanitization for article content        |
+| HTML Parser           | x/net/html        | -       | DOM tokenizer for embedded media synchronization           |
 | Hot Reloading         | Air               | v1.62.0 | Development file watcher and binary rebuilder              |
 
 ---
@@ -233,21 +246,29 @@ This project follows Clean Architecture and Domain-Driven Design (DDD) principle
 
 ## Database Schema & Data Models
 
-All primary and foreign keys utilize `CHAR(26)` UTF-8 strings representing ULID values.
+All primary and relational foreign keys utilize `CHAR(26)` UTF-8 strings representing ULID values (with `BIGINT AUTO_INCREMENT` used strictly for high-frequency internal analytics events).
 
-| Table              | Purpose                                        | Key Attributes                                                                    |
-| :----------------- | :--------------------------------------------- | :-------------------------------------------------------------------------------- |
-| `users`            | Core user identity & credentials               | `id`, `username`, `email`, `password_hash`, `role`, `status`, `email_verified_at` |
-| `user_profiles`    | Extended personal profile data                 | `user_id` (PK/FK), `full_name`, `bio`, `phone_number`, `avatar_url`               |
-| `refresh_tokens`   | Stateful session lifecycle tracking            | `id`, `user_id`, `token_hash`, `token_family`, `is_revoked`, `expires_at`         |
-| `auth_tokens`      | Ephemeral tokens (Verify, Reset, Email Change) | `id`, `user_id`, `token_hash`, `token_type`, `payload`, `is_used`, `expires_at`   |
-| `roles`            | RBAC role definitions                          | `id`, `name`, `display_name`, `description`                                       |
-| `permissions`      | RBAC granular permissions                      | `id`, `name`, `description` (format: `resource.action`)                           |
-| `role_permissions` | Pivot table for role-to-permission mapping     | `role_id`, `permission_id`                                                        |
-| `user_roles`       | Pivot table for user multi-role assignment     | `user_id`, `role_id`                                                              |
-| `categories`       | Content classification blueprint               | `id`, `name`, `slug`                                                              |
-| `posts`            | Content management blueprint                   | `id`, `type`, `title`, `slug`, `content`, `category_id`, `status`, `published_at` |
-| `post_views`       | Post view counters                             | `id`, `post_id`, `views`                                                          |
+| Table                      | Purpose                                        | Key Attributes                                                                                                                |
+| :------------------------- | :--------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------- |
+| `users`                    | Core user identity & credentials               | `id`, `username`, `email`, `password_hash`, `role`, `status`, `email_verified_at`                                             |
+| `user_profiles`            | Extended personal profile data                 | `user_id` (PK/FK), `full_name`, `bio`, `phone_number`, `avatar_url`                                                           |
+| `refresh_tokens`           | Stateful session lifecycle tracking            | `id`, `user_id`, `token_hash`, `token_family`, `is_revoked`, `expires_at`                                                     |
+| `auth_tokens`              | Ephemeral tokens (Verify, Reset, Email Change) | `id`, `user_id`, `token_hash`, `token_type`, `payload`, `is_used`, `expires_at`                                               |
+| `roles`                    | RBAC role definitions                          | `id`, `name`, `display_name`, `description`                                                                                   |
+| `permissions`              | RBAC granular permissions                      | `id`, `name`, `description` (format: `resource.action`)                                                                       |
+| `role_permissions`         | Pivot table for role-to-permission mapping     | `role_id`, `permission_id`                                                                                                    |
+| `user_roles`               | Pivot table for user multi-role assignment     | `user_id`, `role_id`                                                                                                          |
+| `categories`               | Article classification blueprint               | `id`, `name`, `slug`, `description`                                                                                           |
+| `tags`                     | Tag taxonomy blueprint                         | `id`, `name`, `slug`                                                                                                          |
+| `media`                    | Centralized media asset storage catalog        | `id`, `uploaded_by`, `filename`, `storage_disk`, `storage_key`, `url`, `mime_type`, `size`, `width`, `height`                |
+| `articles`                 | Article content management core                | `id`, `author_id`, `category_id`, `featured_image_id`, `og_image_id`, `title`, `slug`, `excerpt`, `content` (HTML), `status`  |
+| `article_tags`             | Pivot table for article many-to-many tags      | `article_id`, `tag_id`                                                                                                        |
+| `article_media`            | Pivot table for embedded media tracking        | `article_id`, `media_id`                                                                                                      |
+| `article_revisions`        | Full version snapshot history per update       | `id`, `article_id`, `author_id`, `title`, `slug`, `excerpt`, `content`, `revision_number`                                     |
+| `article_related`          | Manual curated related articles                | `article_id`, `related_article_id`                                                                                            |
+| `article_analytics_events` | Raw GDPR-compliant visitor engagement events   | `id`, `article_id`, `event_id`, `visitor_id` (salted hash), `session_id`, `event_type`, `reading_time_seconds`, `scroll_depth`|
+| `article_daily_analytics`  | Aggregated daily engagement metrics            | `id`, `article_id`, `analytics_date`, `total_views`, `unique_visitors`, `total_shares`, `total_reading_time`                  |
+| `settings`                 | Global application configuration key-value     | `key_name`, `value_text`                                                                                                      |
 
 ---
 
@@ -290,32 +311,43 @@ All primary and foreign keys utilize `CHAR(26)` UTF-8 strings representing ULID 
 | `GET`    | `/api/v1/users/email/confirm-change` | Public        | Confirms email change via browser link (`?token=...`).                        |
 | `POST`   | `/api/v1/users/email/confirm-change` | Public        | Confirms email change via JSON payload.                                       |
 
-### 3. Public Content (`/api/v1/posts` & `/api/v1/categories`)
+### 3. Public Articles & Taxonomy (`/api/v1/articles`, `/categories`, `/tags`)
 
-| Method | Endpoint                          | Authorization | Description                                                                        |
-| :----- | :-------------------------------- | :------------ | :--------------------------------------------------------------------------------- |
-| `GET`  | `/api/v1/posts`                   | Public        | Lists published posts with filtering (`type`, `tag`, `featured`, `page`, `limit`). |
-| `GET`  | `/api/v1/posts/{slug}`            | Public        | Retrieves post by slug and increments view counter.                                |
-| `GET`  | `/api/v1/categories`              | Public        | Lists all content categories.                                                      |
-| `GET`  | `/api/v1/categories/{slug}/posts` | Public        | Lists published posts associated with a category slug.                             |
-| `GET`  | `/articles/{slug}`                | Public        | SEO vanity alias for articles.                                                     |
-| `GET`  | `/blog/{slug}`                    | Public        | SEO vanity alias for blog posts.                                                   |
-| `GET`  | `/journal/{slug}`                 | Public        | SEO vanity alias for journal posts.                                                |
+| Method | Endpoint                                | Authorization | Description                                                                                    |
+| :----- | :-------------------------------------- | :------------ | :--------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/articles`                      | Public        | Lists published articles with filters (`category`, `tag`, `is_featured`, `search`, `page`).   |
+| `GET`  | `/api/v1/articles/{slug}`               | Public        | Retrieves published article details by slug with category, tags, and media relations.         |
+| `POST` | `/api/v1/articles/{id}/analytics`       | Public        | Ingests visitor engagement event (`view`, `read`, `scroll`, `share`) with idempotency header.  |
+| `GET`  | `/api/v1/categories`                    | Public        | Lists all public categories with article count.                                                |
+| `GET`  | `/api/v1/categories/{slug}/articles`    | Public        | Lists published articles under a specific category slug.                                       |
+| `GET`  | `/api/v1/tags`                          | Public        | Lists all public tags with article count.                                                      |
+| `GET`  | `/api/v1/tags/{slug}`                   | Public        | Retrieves tag details by slug.                                                                 |
+| `GET`  | `/articles/{slug}`                      | Public        | SEO vanity route directly mapping to article details.                                         |
 
-### 4. Content Administration (`/api/v1/admin`)
+### 4. Article & Content Administration (`/api/v1/admin`)
 
-| Method   | Endpoint                        | Permission Required | Description                                                  |
-| :------- | :------------------------------ | :------------------ | :----------------------------------------------------------- |
-| `GET`    | `/api/v1/admin/posts`           | `posts.read`        | Lists all posts (draft and published).                       |
-| `POST`   | `/api/v1/admin/posts`           | `posts.create`      | Creates a new post with automatic slug generation.           |
-| `GET`    | `/api/v1/admin/posts/{id}`      | `posts.read`        | Retrieves post details by ULID.                              |
-| `PUT`    | `/api/v1/admin/posts/{id}`      | `posts.update`      | Updates post; cleans up obsolete cover images automatically. |
-| `DELETE` | `/api/v1/admin/posts/{id}`      | `posts.delete`      | Deletes post record and associated storage file.             |
-| `GET`    | `/api/v1/admin/categories`      | `categories.manage` | Lists all categories.                                        |
-| `POST`   | `/api/v1/admin/categories`      | `categories.manage` | Creates a new category.                                      |
-| `PUT`    | `/api/v1/admin/categories/{id}` | `categories.manage` | Updates category by ULID.                                    |
-| `DELETE` | `/api/v1/admin/categories/{id}` | `categories.manage` | Deletes category by ULID.                                    |
-| `POST`   | `/api/v1/admin/upload`          | Role: `admin`       | Uploads generic image asset to storage.                      |
+| Method   | Endpoint                                   | Permission Required | Description                                                                        |
+| :------- | :----------------------------------------- | :------------------ | :--------------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/admin/articles`                   | `articles.read`     | Lists all articles across all statuses (draft, scheduled, published, archived).    |
+| `POST`   | `/api/v1/admin/articles`                   | `articles.create`   | Creates a new article with XSS HTML sanitization and automated tag/media sync.     |
+| `GET`    | `/api/v1/admin/articles/{id}`              | `articles.read`     | Retrieves article details by ULID.                                                 |
+| `PUT`    | `/api/v1/admin/articles/{id}`              | `articles.update`   | Updates article and automatically creates a snapshot in `article_revisions`.       |
+| `DELETE` | `/api/v1/admin/articles/{id}`              | `articles.delete`   | Soft-deletes article (`deleted_at = NOW()`).                                       |
+| `GET`    | `/api/v1/admin/articles/{id}/revisions`    | `articles.read`     | Retrieves historical revision snapshots for an article.                            |
+| `GET`    | `/api/v1/admin/categories`                 | `categories.manage` | Lists all categories with metadata and article counts.                             |
+| `POST`   | `/api/v1/admin/categories`                 | `categories.manage` | Creates a new category.                                                            |
+| `PUT`    | `/api/v1/admin/categories/{id}`            | `categories.manage` | Updates category name, slug, or description by ULID.                               |
+| `DELETE` | `/api/v1/admin/categories/{id}`            | `categories.manage` | Deletes category (protected if category currently holds articles, HTTP 409).       |
+| `GET`    | `/api/v1/admin/tags`                       | `tags.read`         | Lists all tags.                                                                    |
+| `POST`   | `/api/v1/admin/tags`                       | `tags.manage`       | Creates a new tag.                                                                 |
+| `PUT`    | `/api/v1/admin/tags/{id}`                  | `tags.manage`       | Updates tag name or slug by ULID.                                                  |
+| `DELETE` | `/api/v1/admin/tags/{id}`                  | `tags.manage`       | Deletes tag by ULID.                                                               |
+| `POST`   | `/api/v1/admin/media`                      | `media.upload`      | Uploads image asset (JPG, PNG, WEBP, GIF, max 10MB) with auto dimension sniffing.  |
+| `GET`    | `/api/v1/admin/media`                      | `media.read`        | Lists media library assets with pagination.                                        |
+| `GET`    | `/api/v1/admin/media/{id}`                 | `media.read`        | Retrieves media metadata by ULID.                                                  |
+| `DELETE` | `/api/v1/admin/media/{id}`                 | `media.delete`      | Deletes media asset (protected if media is currently used in articles, HTTP 409).  |
+| `GET`    | `/api/v1/admin/articles/{id}/analytics`    | `analytics.read`    | Retrieves daily engagement analytics report for an article by date range.          |
+| `GET`    | `/api/v1/admin/analytics/overview`         | `analytics.read`    | Retrieves global total engagement analytics metrics across the platform.          |
 
 ### 5. Role-Based Access Control (`/api/v1/admin/roles` & `/permissions`)
 
@@ -470,6 +502,7 @@ For complete production deployment instructions, Docker Compose setup, reverse p
 ## Documentation & Extended Guides
 
 - **Adding New Modules**: Read the practical walkthrough on building new features in [docs/how_to_add_new_module.md](docs/how_to_add_new_module.md).
+- **Postman Testing Guide**: Complete step-by-step testing walkthrough with sequential workflows and automated scripts in [docs/postman_testing_guide.md](docs/postman_testing_guide.md).
 - **System Architecture**: Read the architectural design principles and layer breakdown in [docs/architecture.md](docs/architecture.md).
 - **Security & Authorization**: In-depth details on JWT RTR, session reuse detection, and RBAC in [docs/security_and_rbac.md](docs/security_and_rbac.md).
 - **Production Deployment**: Guide for Docker, Resend email, and Cloudflare R2 / AWS S3 in [docs/deployment.md](docs/deployment.md).
@@ -480,8 +513,8 @@ For complete production deployment instructions, Docker Compose setup, reverse p
 
 ## API Testing & Tooling
 
+- **Postman Testing Guide & Collection**: Import [postman_collection.json](docs/postman_collection.json) and follow the step-by-step testing instructions in [docs/postman_testing_guide.md](docs/postman_testing_guide.md). Features automated post-response test scripts that automatically capture and inject Bearer tokens into your collection environment.
 - **VS Code REST Client**: Open [api.http](api.http) to send requests directly from your code editor. Variables (`@accessToken`, `@refreshToken`, `@sampleToken`) allow complete step-by-step end-to-end testing without external applications.
-- **Postman Collection**: Import [postman_collection.json](docs/postman_collection.json) into Postman. Includes automated post-response test scripts that automatically capture and populate Bearer tokens into your collection environment.
 
 ---
 

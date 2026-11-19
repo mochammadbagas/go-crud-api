@@ -19,6 +19,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/routes"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
 	"github.com/mochammadbagas/go-crud-api/internal/storage"
+	"github.com/mochammadbagas/go-crud-api/internal/worker"
 )
 
 func main() {
@@ -47,7 +48,10 @@ func main() {
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
 	authTokenRepo := repository.NewAuthTokenRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
-	postRepo := repository.NewPostRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	mediaRepo := repository.NewMediaRepository(db)
+	articleRepo := repository.NewArticleRepository(db)
+	analyticsRepo := repository.NewAnalyticsRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 	permRepo := repository.NewPermissionRepository(db)
 
@@ -58,22 +62,26 @@ func main() {
 	storageSvc := storage.New(cfg)
 
 	// 8. Initialize Services (Business Logic Layer)
-	markdownSvc := service.NewMarkdownService()
 	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
 	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(categoryRepo)
-	postSvc := service.NewPostService(postRepo, categoryRepo, markdownSvc)
+	tagSvc := service.NewTagService(tagRepo)
+	mediaSvc := service.NewMediaService(mediaRepo, storageSvc, cfg)
+	articleSvc := service.NewArticleService(articleRepo, categoryRepo, tagRepo)
+	analyticsSvc := service.NewAnalyticsService(analyticsRepo, articleRepo, cfg.JWTSecret)
 	rbacSvc := service.NewRBACService(roleRepo, permRepo)
 	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
 
 	// 9. Initialize HTTP Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
 	userHandler := handlers.NewUserHandler(userSvc, cfg, storageSvc)
-	adminPostHandler := handlers.NewAdminPostHandler(postSvc, storageSvc)
+	adminArticleHandler := handlers.NewAdminArticleHandler(articleSvc)
+	publicArticleHandler := handlers.NewPublicArticleHandler(articleSvc)
 	adminCategoryHandler := handlers.NewAdminCategoryHandler(categorySvc)
-	adminUploadHandler := handlers.NewAdminUploadHandler(cfg, storageSvc)
-	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
-	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
+	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, articleSvc)
+	tagHandler := handlers.NewTagHandler(tagSvc)
+	mediaHandler := handlers.NewMediaHandler(mediaSvc)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsSvc)
 	roleHandler := handlers.NewRoleHandler(rbacSvc)
 	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc, storageSvc)
 
@@ -82,23 +90,33 @@ func main() {
 		cfg,
 		authHandler,
 		userHandler,
-		adminPostHandler,
+		adminArticleHandler,
+		publicArticleHandler,
 		adminCategoryHandler,
-		adminUploadHandler,
-		publicPostHandler,
 		publicCategoryHandler,
+		tagHandler,
+		mediaHandler,
+		analyticsHandler,
 		roleHandler,
 		adminUserHandler,
 		userRepo,
 		db,
 	)
 
-	// 10. Start Background Periodic Expired Tokens Cleanup (Every 24 hours)
+	// 11. Start Background Concurrency Workers with Graceful Shutdown
 	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
 	defer stopCleanup()
+
+	// Token cleanup (every 24 hours)
 	go startTokenCleanup(cleanupCtx, refreshTokenRepo, authTokenRepo, 24*time.Hour)
 
-	// 11. Run HTTP Server with Graceful Shutdown
+	// Scheduled article publisher (every 1 minute)
+	go worker.StartScheduledPublisher(cleanupCtx, articleRepo, 1*time.Minute)
+
+	// Daily analytics aggregator (every 1 hour)
+	go worker.StartAnalyticsAggregator(cleanupCtx, analyticsSvc, 1*time.Hour)
+
+	// 12. Run HTTP Server with Graceful Shutdown
 	runServer(router, cfg.Port)
 }
 

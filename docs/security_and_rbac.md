@@ -107,8 +107,12 @@ Permissions follow a standardized dot-notated syntax:
 - `users.read`, `users.create`, `users.update`, `users.delete`
 - `roles.read`, `roles.create`, `roles.update`, `roles.delete`
 - `permissions.read`, `permissions.create`, `permissions.update`, `permissions.delete`
-- `posts.read`, `posts.create`, `posts.update`, `posts.delete`
+- `articles.read`, `articles.create`, `articles.update`, `articles.delete`
 - `categories.manage`
+- `tags.read`, `tags.manage`
+- `media.upload`, `media.read`, `media.delete`
+- `analytics.read`
+- `settings.manage`
 
 ### 3.2. Authorization Middleware Pipeline
 
@@ -130,6 +134,7 @@ r.With(middleware.RequirePermission("users.delete", userRepo)).Delete("/admin/us
 Accounts possessing the `super_admin` role automatically bypass granular permission lookups. The `PermissionMiddleware` detects the `super_admin` role claim in the JWT and allows the request through without querying the database.
 
 ### 3.4. In-Memory Permission Caching with Automatic Invalidation
+
 To eliminate redundant database lookups on high-frequency admin endpoints, `middleware.RequirePermission` caches user permissions in an in-memory thread-safe `sync.Map` with a 1-minute TTL. Whenever an administrator modifies role assignments (`AssignUserRoles`) or permission bindings (`AssignPermissionsToRole`), `middleware.ClearUserPermissionCache` is called immediately, ensuring authorization changes take effect instantly across the system.
 
 ---
@@ -157,29 +162,36 @@ This invariant guarantees that a system can never be rendered administrator-less
 ## 5. Injection Defense & File Security
 
 ### 5.1. SQL Injection Prevention via SQLC
+
 The application avoids raw string concatenation in SQL queries. All database operations are compiled via **SQLC** into prepared statements with parameterized inputs (`?`). Even dynamic administrative filtering queries use parameterized argument binding, neutralizing SQL injection vectors.
 
 ### 5.2. Cross-Site Scripting (XSS) Sanitization
-Content modules supporting Markdown rendering (e.g. posts and articles) utilize the **Goldmark** parser with HTML sanitization enabled. Raw `<script>` tags, dangerous event handlers (`onload`, `onerror`), and unsafe URI schemes (`javascript:`) are automatically stripped before HTML output generation.
+
+Content modules supporting rich text HTML (e.g. articles) utilize the **Bluemonday** sanitization library configured with the strict User-Generated Content (`UGCPolicy()`). Raw `<script>` tags, inline dangerous event handlers (`onload`, `onclick`, `onerror`), and unsafe URI pseudo-protocols (`javascript:`, `data:`) are automatically stripped before HTML persistence into database `LONGTEXT` columns.
 
 ### 5.3. Storage Security & Path Traversal Guards
-- **Magic Bytes Sniffing**: Rather than trusting client-provided `Content-Type` headers or file extensions, uploads are inspected via `http.DetectContentType` to verify binary image headers (`image/jpeg`, `image/png`, `image/webp`).
-- **Zero-Leakage ULID Renaming**: Client-supplied filenames (e.g., `../../etc/passwd` or `shell.php`) are discarded entirely. The file is assigned a randomized ULID (`avatar_<ULID>.<ext>`), eliminating path traversal vulnerabilities.
+
+- **Magic Bytes Sniffing**: Rather than trusting client-provided `Content-Type` headers or file extensions, uploads are inspected via `http.DetectContentType` to verify binary image headers (`image/jpeg`, `image/png`, `image/webp`, `image/gif`).
+- **Zero-Leakage ULID Renaming**: Client-supplied filenames (e.g., `../../etc/passwd` or `shell.php`) are discarded entirely. The file is assigned a randomized ULID (`<ULID>.<ext>`), eliminating path traversal vulnerabilities.
 - **Directory Browsing Prevention**: The local static file server wraps the filesystem with a restricted filesystem (`noDirListingFS`) returning HTTP 404 on directory paths without `index.html`, eliminating unauthorized asset discovery.
-- **Automated Orphan Cleanup**: Mutating an avatar or deleting a post automatically purges the obsolete file from storage, preventing orphaned file accumulation.
+- **Automated Orphan Cleanup & In-Use Protection**: Mutating an avatar automatically purges the obsolete file from storage. For media library assets, database relations in `articles` and `article_media` enforce referential safety, preventing active media from accidental deletion.
 
 ---
 
 ## 6. HTTP Hardening & Denial of Service (DoS) Defense
 
 ### 6.1. Request Body Size Limiting (`http.MaxBytesReader`)
+
 All incoming HTTP request bodies are strictly bounded using `http.MaxBytesReader` to prevent memory exhaustion and disk-filling Denial of Service (DoS) attacks:
+
 - **JSON Request Payloads**: Enforces a hard **1 MB limit** (`1 << 20`) via `utils.DecodeJSON`. Payload overflows return HTTP 413 `PAYLOAD_TOO_LARGE`.
 - **User Avatar Uploads**: Enforces a hard **5 MB limit** (`5 << 20`) on multipart streams before parsing in `user_handler.go`.
-- **Content Media / Cover Uploads**: Enforces a hard **10 MB limit** (`10 << 20`) on multipart streams in `admin_upload_handler.go`.
+- **Media Library Uploads**: Enforces a hard **10 MB limit** (`10 << 20`) on multipart streams in `media_handler.go`.
 
 ### 6.2. OWASP Security Headers Middleware
+
 All HTTP responses carry standard OWASP security headers injected via `middleware.SecurityHeaders()`:
+
 - `X-Content-Type-Options: nosniff`: Prevents MIME type sniffing.
 - `X-Frame-Options: DENY`: Prevents clickjacking by forbidding iframe framing.
 - `Referrer-Policy: strict-origin-when-cross-origin`: Restricts referrer leaks.

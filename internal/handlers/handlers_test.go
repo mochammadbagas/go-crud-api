@@ -621,85 +621,234 @@ func (r *testCategoryRepo) Delete(ctx context.Context, id string) error {
 func (r *testCategoryRepo) Count(ctx context.Context) (int64, error) {
 	return int64(len(r.categories)), nil
 }
-
-type testPostRepo struct {
-	posts  map[string]*models.Post
-	bySlug map[string]*models.Post
+func (r *testCategoryRepo) CountArticlesByCategoryID(ctx context.Context, categoryID string) (int64, error) {
+	return 0, nil
 }
 
-func newTestPostRepo() *testPostRepo {
-	return &testPostRepo{
-		posts:  make(map[string]*models.Post),
-		bySlug: make(map[string]*models.Post),
+type testTagRepo struct {
+	tags   map[string]*models.Tag
+	bySlug map[string]*models.Tag
+}
+
+func newTestTagRepo() *testTagRepo {
+	return &testTagRepo{
+		tags:   make(map[string]*models.Tag),
+		bySlug: make(map[string]*models.Tag),
 	}
 }
 
-func (r *testPostRepo) Create(ctx context.Context, post *models.Post) error {
-	if post.ID == "" {
-		post.ID = utils.NewULID()
+func (r *testTagRepo) List(ctx context.Context) ([]models.Tag, error) {
+	var list []models.Tag
+	for _, t := range r.tags {
+		list = append(list, *t)
 	}
-	r.posts[post.ID] = post
-	r.bySlug[post.Slug] = post
+	return list, nil
+}
+func (r *testTagRepo) GetByID(ctx context.Context, id string) (*models.Tag, error) {
+	if t, ok := r.tags[id]; ok {
+		c := *t
+		return &c, nil
+	}
+	return nil, repository.ErrTagNotFound
+}
+func (r *testTagRepo) GetBySlug(ctx context.Context, slug string) (*models.Tag, error) {
+	if t, ok := r.bySlug[slug]; ok {
+		c := *t
+		return &c, nil
+	}
+	return nil, repository.ErrTagNotFound
+}
+func (r *testTagRepo) GetByName(ctx context.Context, name string) (*models.Tag, error) {
+	for _, t := range r.tags {
+		if t.Name == name {
+			c := *t
+			return &c, nil
+		}
+	}
+	return nil, repository.ErrTagNotFound
+}
+func (r *testTagRepo) Create(ctx context.Context, tag *models.Tag) error {
+	if tag.ID == "" {
+		tag.ID = utils.NewULID()
+	}
+	r.tags[tag.ID] = tag
+	r.bySlug[tag.Slug] = tag
 	return nil
 }
-func (r *testPostRepo) Update(ctx context.Context, post *models.Post) error {
-	r.posts[post.ID] = post
-	r.bySlug[post.Slug] = post
+func (r *testTagRepo) Update(ctx context.Context, tag *models.Tag) error {
+	r.tags[tag.ID] = tag
+	r.bySlug[tag.Slug] = tag
 	return nil
 }
-func (r *testPostRepo) Delete(ctx context.Context, id string) error {
-	if p, ok := r.posts[id]; ok {
-		delete(r.bySlug, p.Slug)
-		delete(r.posts, id)
+func (r *testTagRepo) Delete(ctx context.Context, id string) error {
+	if t, ok := r.tags[id]; ok {
+		delete(r.bySlug, t.Slug)
+		delete(r.tags, id)
 		return nil
 	}
-	return repository.ErrNotFound
+	return repository.ErrTagNotFound
 }
-func (r *testPostRepo) GetByID(ctx context.Context, id string) (*models.Post, error) {
-	if p, ok := r.posts[id]; ok {
-		copy := *p
-		return &copy, nil
+func (r *testTagRepo) Count(ctx context.Context) (int64, error) {
+	return int64(len(r.tags)), nil
+}
+func (r *testTagRepo) GetOrCreateTags(ctx context.Context, tagNames []string) ([]models.Tag, error) {
+	var list []models.Tag
+	for _, name := range tagNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		slug := utils.GenerateSlug(name)
+		if t, ok := r.bySlug[slug]; ok {
+			list = append(list, *t)
+		} else {
+			tag := &models.Tag{ID: utils.NewULID(), Name: name, Slug: slug}
+			_ = r.Create(ctx, tag)
+			list = append(list, *tag)
+		}
 	}
-	return nil, repository.ErrNotFound
+	return list, nil
 }
-func (r *testPostRepo) GetBySlug(ctx context.Context, slug string) (*models.Post, error) {
-	if p, ok := r.bySlug[slug]; ok {
-		copy := *p
-		return &copy, nil
+
+type testMediaRepo struct {
+	medias map[string]*models.Media
+}
+
+func newTestMediaRepo() *testMediaRepo {
+	return &testMediaRepo{medias: make(map[string]*models.Media)}
+}
+func (r *testMediaRepo) Create(ctx context.Context, m *models.Media) error {
+	if m.ID == "" {
+		m.ID = utils.NewULID()
 	}
-	return nil, repository.ErrNotFound
+	r.medias[m.ID] = m
+	return nil
 }
-func (r *testPostRepo) GetPublishedBySlug(ctx context.Context, slug string) (*models.Post, error) {
-	if p, ok := r.bySlug[slug]; ok && p.Status == models.StatusPublished {
-		copy := *p
-		return &copy, nil
+func (r *testMediaRepo) GetByID(ctx context.Context, id string) (*models.Media, error) {
+	if m, ok := r.medias[id]; ok {
+		c := *m
+		return &c, nil
 	}
-	return nil, repository.ErrNotFound
+	return nil, repository.ErrMediaNotFound
 }
-func (r *testPostRepo) ListPublic(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error) {
-	var list []models.Post
-	for _, p := range r.posts {
-		if p.Status == models.StatusPublished {
-			list = append(list, *p)
+func (r *testMediaRepo) List(ctx context.Context, limit, offset int32) ([]models.Media, int64, error) {
+	var list []models.Media
+	for _, m := range r.medias {
+		list = append(list, *m)
+	}
+	return list, int64(len(list)), nil
+}
+func (r *testMediaRepo) Delete(ctx context.Context, id string) error {
+	if _, ok := r.medias[id]; ok {
+		delete(r.medias, id)
+		return nil
+	}
+	return repository.ErrMediaNotFound
+}
+func (r *testMediaRepo) IsInUse(ctx context.Context, id string) (bool, error) {
+	return false, nil
+}
+
+type testAnalyticsRepo struct{}
+
+func newTestAnalyticsRepo() *testAnalyticsRepo { return &testAnalyticsRepo{} }
+func (r *testAnalyticsRepo) RecordEvent(ctx context.Context, articleID string, input models.AnalyticsEventInput, visitorID string) error {
+	return nil
+}
+func (r *testAnalyticsRepo) GetArticleDailyAnalytics(ctx context.Context, articleID string, startDate, endDate time.Time) ([]models.ArticleDailyAnalytics, error) {
+	return []models.ArticleDailyAnalytics{}, nil
+}
+func (r *testAnalyticsRepo) GetUniqueVisitorsByRange(ctx context.Context, articleID string, startDate, endDate time.Time) (int64, error) {
+	return 1, nil
+}
+func (r *testAnalyticsRepo) AggregateDaily(ctx context.Context, date time.Time) error {
+	return nil
+}
+func (r *testAnalyticsRepo) PruneRawEvents(ctx context.Context, before time.Time) error {
+	return nil
+}
+func (r *testAnalyticsRepo) GetOverview(ctx context.Context) (*models.AnalyticsOverview, error) {
+	return &models.AnalyticsOverview{GlobalViews: 10, GlobalUniqueVisitors: 5, GlobalShares: 2, GlobalReadingTime: 120}, nil
+}
+
+type testArticleRepo struct {
+	articles map[string]*models.Article
+	bySlug   map[string]*models.Article
+}
+
+func newTestArticleRepo() *testArticleRepo {
+	return &testArticleRepo{
+		articles: make(map[string]*models.Article),
+		bySlug:   make(map[string]*models.Article),
+	}
+}
+
+func (r *testArticleRepo) Create(ctx context.Context, a *models.Article, tagIDs, mediaIDs, relatedIDs []string) error {
+	if a.ID == "" {
+		a.ID = utils.NewULID()
+	}
+	r.articles[a.ID] = a
+	r.bySlug[a.Slug] = a
+	return nil
+}
+func (r *testArticleRepo) Update(ctx context.Context, a *models.Article, tagIDs, mediaIDs, relatedIDs []string, userID string) error {
+	r.articles[a.ID] = a
+	r.bySlug[a.Slug] = a
+	return nil
+}
+func (r *testArticleRepo) Delete(ctx context.Context, id string) error {
+	if a, ok := r.articles[id]; ok {
+		delete(r.bySlug, a.Slug)
+		delete(r.articles, id)
+		return nil
+	}
+	return repository.ErrArticleNotFound
+}
+func (r *testArticleRepo) GetByID(ctx context.Context, id string) (*models.Article, error) {
+	if a, ok := r.articles[id]; ok {
+		c := *a
+		return &c, nil
+	}
+	return nil, repository.ErrArticleNotFound
+}
+func (r *testArticleRepo) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
+	if a, ok := r.bySlug[slug]; ok {
+		c := *a
+		return &c, nil
+	}
+	return nil, repository.ErrArticleNotFound
+}
+func (r *testArticleRepo) GetPublishedBySlug(ctx context.Context, slug string) (*models.Article, error) {
+	if a, ok := r.bySlug[slug]; ok && a.Status == models.StatusPublished {
+		c := *a
+		return &c, nil
+	}
+	return nil, repository.ErrArticleNotFound
+}
+func (r *testArticleRepo) ListPublic(ctx context.Context, filter models.ArticleFilter) ([]models.Article, int64, error) {
+	var list []models.Article
+	for _, a := range r.articles {
+		if a.Status == models.StatusPublished {
+			list = append(list, *a)
 		}
 	}
 	return list, int64(len(list)), nil
 }
-func (r *testPostRepo) ListAdmin(ctx context.Context, filter models.PostFilter) ([]models.Post, int64, error) {
-	var list []models.Post
-	for _, p := range r.posts {
-		list = append(list, *p)
+func (r *testArticleRepo) ListAdmin(ctx context.Context, filter models.ArticleFilter) ([]models.Article, int64, error) {
+	var list []models.Article
+	for _, a := range r.articles {
+		list = append(list, *a)
 	}
 	return list, int64(len(list)), nil
 }
-func (r *testPostRepo) IncrementViews(ctx context.Context, postID string) error {
-	if p, ok := r.posts[postID]; ok {
-		p.Views++
-	}
+func (r *testArticleRepo) PublishScheduled(ctx context.Context) error {
 	return nil
 }
-func (r *testPostRepo) Count(ctx context.Context) (int64, error) {
-	return int64(len(r.posts)), nil
+func (r *testArticleRepo) Count(ctx context.Context) (int64, error) {
+	return int64(len(r.articles)), nil
+}
+func (r *testArticleRepo) ListRevisions(ctx context.Context, articleID string) ([]models.ArticleRevision, error) {
+	return []models.ArticleRevision{}, nil
 }
 
 func setupTestServer(t *testing.T) (http.Handler, string, string) {
@@ -733,7 +882,10 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	refreshTokenRepo := newTestRefreshTokenRepo()
 	authTokenRepo := newTestAuthTokenRepo()
 	catRepo := newTestCategoryRepo()
-	postRepo := newTestPostRepo()
+	tagRepo := newTestTagRepo()
+	mediaRepo := newTestMediaRepo()
+	articleRepo := newTestArticleRepo()
+	analyticsRepo := newTestAnalyticsRepo()
 	roleRepo := newTestRoleRepo()
 	permRepo := newTestPermRepo()
 
@@ -750,47 +902,50 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	}
 
 	mailSvc := mailer.NewLogMailer()
-	markdownSvc := service.NewMarkdownService()
 	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
 	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(catRepo)
-	postSvc := service.NewPostService(postRepo, catRepo, markdownSvc)
-	rbacSvc := service.NewRBACService(roleRepo, permRepo)
-	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
-
-	now := time.Now().UTC()
-	_ = postRepo.Create(context.Background(), &models.Post{
-		Type:        models.TypeArticle,
-		Title:       "Published Go Article",
-		Slug:        "published-go-article",
-		Content:     "# Welcome\n\nThis is a published post.",
-		Status:      models.StatusPublished,
-		PublishedAt: &now,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	})
-
-	_ = postRepo.Create(context.Background(), &models.Post{
-		Type:      models.TypeJournal,
-		Title:     "Draft Journal Entry",
-		Slug:      "draft-journal-entry",
-		Content:   "Secret WIP journal entry.",
-		Status:    models.StatusDraft,
-		CreatedAt: now,
-		UpdatedAt: now,
-	})
+	tagSvc := service.NewTagService(tagRepo)
+	articleSvc := service.NewArticleService(articleRepo, catRepo, tagRepo)
 
 	tempUploadDir := t.TempDir()
 	cfg.UploadDir = tempUploadDir
 	testStorage := storage.NewLocalStorage(tempUploadDir)
+	mediaSvc := service.NewMediaService(mediaRepo, testStorage, cfg)
+	analyticsSvc := service.NewAnalyticsService(analyticsRepo, articleRepo, cfg.JWTSecret)
+
+	rbacSvc := service.NewRBACService(roleRepo, permRepo)
+	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
+
+	now := time.Now().UTC()
+	_ = articleRepo.Create(context.Background(), &models.Article{
+		Title:       "Published Go Article",
+		Slug:        "published-go-article",
+		Content:     "<h1>Welcome</h1><p>This is a published article.</p>",
+		Status:      models.StatusPublished,
+		PublishedAt: &now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}, nil, nil, nil)
+
+	_ = articleRepo.Create(context.Background(), &models.Article{
+		Title:     "Draft Journal Entry",
+		Slug:      "draft-journal-entry",
+		Content:   "<p>Secret WIP article entry.</p>",
+		Status:    models.StatusDraft,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil, nil, nil)
 
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
 	userHandler := handlers.NewUserHandler(userSvc, cfg, testStorage)
-	adminPostHandler := handlers.NewAdminPostHandler(postSvc, testStorage)
+	adminArticleHandler := handlers.NewAdminArticleHandler(articleSvc)
+	publicArticleHandler := handlers.NewPublicArticleHandler(articleSvc)
 	adminCategoryHandler := handlers.NewAdminCategoryHandler(categorySvc)
-	adminUploadHandler := handlers.NewAdminUploadHandler(cfg, testStorage)
-	publicPostHandler := handlers.NewPublicPostHandler(postSvc)
-	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, postSvc)
+	publicCategoryHandler := handlers.NewPublicCategoryHandler(categorySvc, articleSvc)
+	tagHandler := handlers.NewTagHandler(tagSvc)
+	mediaHandler := handlers.NewMediaHandler(mediaSvc)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsSvc)
 	roleHandler := handlers.NewRoleHandler(rbacSvc)
 	adminUserHandler := handlers.NewAdminUserHandler(adminUserSvc, testStorage)
 
@@ -798,11 +953,13 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 		cfg,
 		authHandler,
 		userHandler,
-		adminPostHandler,
+		adminArticleHandler,
+		publicArticleHandler,
 		adminCategoryHandler,
-		adminUploadHandler,
-		publicPostHandler,
 		publicCategoryHandler,
+		tagHandler,
+		mediaHandler,
+		analyticsHandler,
 		roleHandler,
 		adminUserHandler,
 		userRepo,
@@ -828,28 +985,28 @@ func TestPublicEndpoints(t *testing.T) {
 		t.Errorf("expected 200 for /health, got %d", rec.Code)
 	}
 
-	// 2. Public posts list
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/posts", nil)
+	// 2. Public articles list
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/articles", nil)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200 for /api/v1/posts, got %d", rec.Code)
+		t.Errorf("expected 200 for /api/v1/articles, got %d", rec.Code)
 	}
 
-	// 3. Public get published post by slug
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/posts/published-go-article", nil)
+	// 3. Public get published article by slug
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/articles/published-go-article", nil)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200 for published post, got %d", rec.Code)
+		t.Errorf("expected 200 for published article, got %d", rec.Code)
 	}
 
-	// 4. Draft post must return 404 on public route
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/posts/draft-journal-entry", nil)
+	// 4. Draft article must return 404 on public route
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/articles/draft-journal-entry", nil)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("expected 404 for draft post accessed publicly, got %d", rec.Code)
+		t.Errorf("expected 404 for draft article accessed publicly, got %d", rec.Code)
 	}
 }
 
@@ -990,31 +1147,105 @@ func TestAdminEndpointsWithJWT(t *testing.T) {
 		t.Errorf("expected 26-char ULID for category ID, got %q", createdCat.ID)
 	}
 
-	// 2. Create Post as Admin with ULID Category
-	postPayload := `{
-		"type": "article",
+	// 2. Create Article as Admin with ULID Category
+	articlePayload := `{
 		"title": "Mastering ULID in Go",
-		"content": "Why ULID is better than auto increment.",
+		"content": "<p>Why ULID is better than auto increment.</p>",
 		"category_id": "` + createdCat.ID + `",
 		"status": "published"
 	}`
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/posts", bytes.NewBufferString(postPayload))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/articles", bytes.NewBufferString(articlePayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201 for admin create post, got %d (%s)", rec.Code, rec.Body.String())
+		t.Fatalf("expected 201 for admin create article, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
-	var createdPost models.Post
-	_ = json.NewDecoder(rec.Body).Decode(&createdPost)
-	if createdPost.ID == "" || len(createdPost.ID) != 26 {
-		t.Errorf("expected 26-char ULID for post ID, got %q", createdPost.ID)
+	var createdArticle models.Article
+	_ = json.NewDecoder(rec.Body).Decode(&createdArticle)
+	if createdArticle.ID == "" || len(createdArticle.ID) != 26 {
+		t.Errorf("expected 26-char ULID for article ID, got %q", createdArticle.ID)
+	}
+
+	// 2b. Get Category by ID as Admin
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/categories/"+createdCat.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin get category by ID, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// 2c. Get Category with invalid ID
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/categories/invalid-id", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid category ID, got %d", rec.Code)
+	}
+
+	// 2d. Tags CRUD as Admin
+	tagPayload := `{"name":"Golang"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/tags", bytes.NewBufferString(tagPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for admin create tag, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	var createdTag models.Tag
+	_ = json.NewDecoder(rec.Body).Decode(&createdTag)
+	if createdTag.ID == "" || len(createdTag.ID) != 26 {
+		t.Errorf("expected 26-char ULID for tag ID, got %q", createdTag.ID)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/tags/"+createdTag.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin get tag by ID, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tags", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for public get tags, got %d", rec.Code)
+	}
+
+	// 2e. Analytics & Revisions
+	analyticsPayload := `{"event_id":"evt-test-1","event_type":"view"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/articles/"+createdArticle.ID+"/analytics", bytes.NewBufferString(analyticsPayload))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Errorf("expected 202 for public record analytics event, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/analytics/overview", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin analytics overview, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/articles/"+createdArticle.ID+"/revisions", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin get article revisions, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
 	// 3. Unauthorized access without token
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/posts", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/articles", nil)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -1035,7 +1266,7 @@ func TestUploadEndpoints(t *testing.T) {
 	_, _ = part.Write(make([]byte, 100))
 	writer.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/upload", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/media", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	rec := httptest.NewRecorder()
@@ -1044,15 +1275,15 @@ func TestUploadEndpoints(t *testing.T) {
 		t.Errorf("expected 201 for admin upload, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
-	var uploadResp map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &uploadResp); err != nil {
+	var createdMedia models.Media
+	if err := json.Unmarshal(rec.Body.Bytes(), &createdMedia); err != nil {
 		t.Fatalf("failed to decode upload response: %v", err)
 	}
-
-	// Verify that filename is completely renamed without preserving original filename
-	if strings.Contains(uploadResp["filename"], "test") {
-		t.Errorf("uploaded filename should be completely renamed and not contain 'test': %s", uploadResp["filename"])
+	if createdMedia.ID == "" {
+		t.Fatalf("expected media id in response, got %+v", createdMedia)
 	}
+	mediaID := createdMedia.ID
+	mediaURL := createdMedia.URL
 
 	// Test user avatar upload with complete renaming
 	avatarBody := &bytes.Buffer{}
@@ -1140,50 +1371,29 @@ func TestUploadEndpoints(t *testing.T) {
 		t.Errorf("expected 404 for avatar2 after DELETE (auto-cleanup), got %d", checkRec2Again.Code)
 	}
 
-	// 4. Test Post Cover Image Auto-cleanup on Delete Post
-	coverImageURL := uploadResp["url"]
-	createPostPayload := fmt.Sprintf(`{
-		"type": "article",
-		"title": "Post With Cover",
-		"slug": "post-with-cover",
-		"content": "Article body content",
-		"cover_image": "%s",
+	// 4. Test Article Creation with Featured Media
+	createArticlePayload := fmt.Sprintf(`{
+		"title": "Article With Featured Media",
+		"slug": "article-with-featured-media",
+		"content": "<h1>Article body content</h1>",
+		"featured_image_id": "%s",
 		"status": "published"
-	}`, coverImageURL)
-	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/posts", bytes.NewBufferString(createPostPayload))
-	postReq.Header.Set("Content-Type", "application/json")
-	postReq.Header.Set("Authorization", "Bearer "+adminToken)
-	postRec := httptest.NewRecorder()
-	router.ServeHTTP(postRec, postReq)
-	if postRec.Code != http.StatusCreated {
-		t.Fatalf("expected 201 for create post, got %d (%s)", postRec.Code, postRec.Body.String())
-	}
-	var createdPost models.Post
-	_ = json.Unmarshal(postRec.Body.Bytes(), &createdPost)
-
-	// Verify cover image exists before post deletion
-	coverReq := httptest.NewRequest(http.MethodGet, coverImageURL, nil)
-	coverRec := httptest.NewRecorder()
-	router.ServeHTTP(coverRec, coverReq)
-	if coverRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for post cover image, got %d", coverRec.Code)
+	}`, mediaID)
+	artReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/articles", bytes.NewBufferString(createArticlePayload))
+	artReq.Header.Set("Content-Type", "application/json")
+	artReq.Header.Set("Authorization", "Bearer "+adminToken)
+	artRec := httptest.NewRecorder()
+	router.ServeHTTP(artRec, artReq)
+	if artRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for create article, got %d (%s)", artRec.Code, artRec.Body.String())
 	}
 
-	// Delete post -> cover image should be auto-cleaned up
-	delPostReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/posts/"+createdPost.ID, nil)
-	delPostReq.Header.Set("Authorization", "Bearer "+adminToken)
-	delPostRec := httptest.NewRecorder()
-	router.ServeHTTP(delPostRec, delPostReq)
-	if delPostRec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204 for delete post, got %d", delPostRec.Code)
-	}
-
-	// Auto-cleanup check: cover image must be deleted from storage (404)
-	coverReqAfterDel := httptest.NewRequest(http.MethodGet, coverImageURL, nil)
-	coverRecAfterDel := httptest.NewRecorder()
-	router.ServeHTTP(coverRecAfterDel, coverReqAfterDel)
-	if coverRecAfterDel.Code != http.StatusNotFound {
-		t.Errorf("expected 404 for post cover image after delete post (auto-cleanup), got %d", coverRecAfterDel.Code)
+	// Verify media is still accessible
+	mediaCheckReq := httptest.NewRequest(http.MethodGet, mediaURL, nil)
+	mediaCheckRec := httptest.NewRecorder()
+	router.ServeHTTP(mediaCheckRec, mediaCheckReq)
+	if mediaCheckRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for media, got %d", mediaCheckRec.Code)
 	}
 }
 
@@ -1452,27 +1662,27 @@ func TestFieldLevelValidationResponse(t *testing.T) {
 		t.Errorf("expected email and password validation errors, got %v", loginResp.Errors)
 	}
 
-	// 3. POST /api/v1/admin/posts with empty fields
-	postPayload := `{}`
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/posts", bytes.NewBufferString(postPayload))
+	// 3. POST /api/v1/admin/articles with empty fields
+	artPayload := `{}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/articles", bytes.NewBufferString(artPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for empty post creation, got %d", rec.Code)
+		t.Fatalf("expected 400 for empty article creation, got %d", rec.Code)
 	}
 
-	var postResp utils.ErrorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&postResp); err != nil {
-		t.Fatalf("failed to decode post error response: %v", err)
+	var artResp utils.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&artResp); err != nil {
+		t.Fatalf("failed to decode article error response: %v", err)
 	}
-	if postResp.Error != "validation failed" {
-		t.Errorf("expected 'validation failed', got %q", postResp.Error)
+	if artResp.Error != "validation failed" {
+		t.Errorf("expected 'validation failed', got %q", artResp.Error)
 	}
-	if postResp.Errors["type"].Code == "" || postResp.Errors["title"].Code == "" || postResp.Errors["content"].Code == "" {
-		t.Errorf("expected type, title, and content validation errors, got %v", postResp.Errors)
+	if artResp.Errors["title"].Code == "" || artResp.Errors["content"].Code == "" {
+		t.Errorf("expected title and content validation errors, got %v", artResp.Errors)
 	}
 }
 

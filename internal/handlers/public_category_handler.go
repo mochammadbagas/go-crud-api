@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
@@ -14,13 +15,13 @@ import (
 
 type PublicCategoryHandler struct {
 	categorySvc service.CategoryServiceInterface
-	postSvc     service.PostServiceInterface
+	articleSvc  service.ArticleServiceInterface
 }
 
-func NewPublicCategoryHandler(categorySvc service.CategoryServiceInterface, postSvc service.PostServiceInterface) *PublicCategoryHandler {
+func NewPublicCategoryHandler(categorySvc service.CategoryServiceInterface, articleSvc service.ArticleServiceInterface) *PublicCategoryHandler {
 	return &PublicCategoryHandler{
 		categorySvc: categorySvc,
-		postSvc:     postSvc,
+		articleSvc:  articleSvc,
 	}
 }
 
@@ -29,53 +30,52 @@ func (h *PublicCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.categorySvc.List(r.Context())
 	if err != nil {
 		slog.Error("failed to fetch public categories", slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "failed to fetch categories")
+		utils.ErrorCode(w, http.StatusInternalServerError, "FETCH_ERROR", "failed to fetch categories")
 		return
 	}
 	utils.JSON(w, http.StatusOK, categories)
 }
 
-// ListPostsByCategory handles GET /api/v1/categories/{slug}/posts
-func (h *PublicCategoryHandler) ListPostsByCategory(w http.ResponseWriter, r *http.Request) {
-	slug := chi.URLParam(r, "slug")
+// ListArticlesByCategory handles GET /api/v1/categories/{slug}/articles
+func (h *PublicCategoryHandler) ListArticlesByCategory(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
 	if slug == "" {
-		utils.Error(w, http.StatusBadRequest, "category slug is required")
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_SLUG", "category slug is required")
 		return
 	}
 
-	page, limit := utils.ParsePagination(r, 10, 50)
-	q := r.URL.Query()
-
-	postType := strings.ToLower(strings.TrimSpace(q.Get("type")))
-	if err := models.ValidateType(postType); err != nil {
-		utils.Error(w, http.StatusBadRequest, err.Error())
-		return
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if perPage < 1 || perPage > 100 {
+		perPage = 10
 	}
 
-	filter := models.PostFilter{
+	filter := models.ArticleFilter{
 		CategorySlug: slug,
-		Type:         postType,
-		Tag:          q.Get("tag"),
+		TagSlug:      r.URL.Query().Get("tag"),
+		Search:       r.URL.Query().Get("search"),
 		Page:         page,
-		Limit:        limit,
+		PerPage:      perPage,
 	}
 
-	if q.Get("featured") != "" {
-		f := q.Get("featured") == "true" || q.Get("featured") == "1"
-		filter.Featured = &f
+	if featuredStr := r.URL.Query().Get("is_featured"); featuredStr != "" {
+		isFeatured := featuredStr == "true" || featuredStr == "1"
+		filter.IsFeatured = &isFeatured
 	}
 
-	posts, total, err := h.postSvc.ListPublic(r.Context(), filter)
+	articles, total, err := h.articleSvc.ListPublic(r.Context(), filter)
 	if err != nil {
-		slog.Error("failed to fetch posts by category", slog.String("slug", slug), slog.Any("error", err))
-		utils.Error(w, http.StatusInternalServerError, "failed to fetch category posts")
+		slog.Error("failed to fetch articles by category", slog.String("slug", slug), slog.Any("error", err))
+		utils.ErrorCode(w, http.StatusInternalServerError, "FETCH_ERROR", "failed to fetch category articles")
 		return
 	}
 
-	pagination := utils.BuildPagination(page, limit, total)
+	pagination := utils.BuildPagination(page, perPage, total)
 	utils.JSON(w, http.StatusOK, utils.PaginatedResponse{
-		Data:       posts,
+		Data:       articles,
 		Pagination: pagination,
 	})
 }
-

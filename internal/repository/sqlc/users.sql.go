@@ -71,21 +71,9 @@ WHERE email = ?
 LIMIT 1
 `
 
-type GetUserByEmailRow struct {
-	ID              string       `json:"id"`
-	Username        string       `json:"username"`
-	Email           string       `json:"email"`
-	PasswordHash    string       `json:"password_hash"`
-	Role            UsersRole    `json:"role"`
-	Status          UsersStatus  `json:"status"`
-	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
-}
-
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (Users, error) {
 	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
-	var i GetUserByEmailRow
+	var i Users
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -107,21 +95,9 @@ WHERE id = ?
 LIMIT 1
 `
 
-type GetUserByIDRow struct {
-	ID              string       `json:"id"`
-	Username        string       `json:"username"`
-	Email           string       `json:"email"`
-	PasswordHash    string       `json:"password_hash"`
-	Role            UsersRole    `json:"role"`
-	Status          UsersStatus  `json:"status"`
-	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
-}
-
-func (q *Queries) GetUserByID(ctx context.Context, id string) (GetUserByIDRow, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id string) (Users, error) {
 	row := q.db.QueryRowContext(ctx, getUserByID, id)
-	var i GetUserByIDRow
+	var i Users
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -143,21 +119,9 @@ WHERE username = ?
 LIMIT 1
 `
 
-type GetUserByUsernameRow struct {
-	ID              string       `json:"id"`
-	Username        string       `json:"username"`
-	Email           string       `json:"email"`
-	PasswordHash    string       `json:"password_hash"`
-	Role            UsersRole    `json:"role"`
-	Status          UsersStatus  `json:"status"`
-	EmailVerifiedAt sql.NullTime `json:"email_verified_at"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
-}
-
-func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error) {
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (Users, error) {
 	row := q.db.QueryRowContext(ctx, getUserByUsername, username)
-	var i GetUserByUsernameRow
+	var i Users
 	err := row.Scan(
 		&i.ID,
 		&i.Username,

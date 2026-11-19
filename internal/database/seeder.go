@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/alexedwards/argon2id"
 )
 
-// Seed populates the database with initial admin, roles, permissions, categories, and sample posts.
+// Seed populates the database with initial admin, roles, permissions, categories, tags, and sample articles.
 func Seed(db *sql.DB, cfg *config.Config) error {
 	now := time.Now().UTC()
 
@@ -78,145 +77,133 @@ func Seed(db *sql.DB, cfg *config.Config) error {
 		return err
 	}
 
-	// 3. Seed Categories & Posts if empty
+	// 3. Seed Categories, Tags & Articles if empty
 	if categoryCount == 0 {
-		slog.Info("Seeding initial categories and sample posts with ULID...")
+		slog.Info("Seeding initial categories, tags, and sample articles with ULID...")
 
 		cat1ID := utils.NewULID()
-		_, err := db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			cat1ID, "Software Engineering", "software-engineering", now, now)
+		_, err := db.Exec("INSERT INTO categories (id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			cat1ID, "Software Engineering", "software-engineering", "System design, distributed systems, and best practices.", now, now)
 		if err != nil {
 			return err
 		}
 
 		cat2ID := utils.NewULID()
-		_, err = db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			cat2ID, "Tutorials & Tech", "tutorials-tech", now, now)
+		_, err = db.Exec("INSERT INTO categories (id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			cat2ID, "Tutorials & Tech", "tutorials-tech", "Step-by-step programming guides and tutorials.", now, now)
 		if err != nil {
 			return err
 		}
 
 		cat3ID := utils.NewULID()
-		_, err = db.Exec("INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			cat3ID, "Personal Journey", "personal-journey", now, now)
+		_, err = db.Exec("INSERT INTO categories (id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			cat3ID, "Personal Journey", "personal-journey", "Reflections, career advice, and engineering notes.", now, now)
 		if err != nil {
 			return err
 		}
 
-		// Sample Posts
-		tags1, _ := json.Marshal([]string{"Go", "MySQL", "REST API", "Backend"})
-		tags2, _ := json.Marshal([]string{"Career", "Reflection", "Growth"})
-		tags3, _ := json.Marshal([]string{"Go", "Rust", "Benchmarking", "Performance"})
+		// Seed Sample Tags
+		tagMap := make(map[string]string)
+		initialTags := []string{"Go", "MySQL", "REST API", "Backend", "Career", "Performance"}
+		for _, tName := range initialTags {
+			tID := utils.NewULID()
+			tSlug := utils.GenerateSlug(tName)
+			_, _ = db.Exec("INSERT INTO tags (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+				tID, tName, tSlug, now, now)
+			tagMap[tName] = tID
+		}
 
-		// Article
+		// Sample Published Article 1
+		art1ID := utils.NewULID()
 		_, err = db.Exec(`
-			INSERT INTO posts (
-				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
-				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
+			INSERT INTO articles (
+				id, author_id, category_id, title, slug, excerpt, content,
+				status, is_featured, published_at, meta_title, meta_description,
+				robots_index, robots_follow, created_at, updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			utils.NewULID(),
-			"article",
-			"Building REST APIs with Go",
-			"building-rest-apis-with-go",
-			"Comprehensive guide to designing and building high-performance RESTful APIs using Go and Chi.",
-			"# Building REST APIs with Go\n\nGo is a highly efficient language for building modern web services...\n\n```go\npackage main\n\nfunc main() {\n    println(\"Hello, CMS!\")\n}\n```",
-			nil,
+			art1ID,
+			adminID,
 			cat2ID,
-			tags1,
+			"Building High Performance REST APIs with Go",
+			"building-high-performance-rest-apis-with-go",
+			"Comprehensive guide to designing and building high-performance RESTful APIs using Go, Chi, and MySQL.",
+			"<h1>Building High Performance REST APIs with Go</h1><p>Go is a highly efficient language for building modern cloud services...</p><pre><code>package main\n\nfunc main() {\n    println(\"Hello, Go!\")\n}</code></pre>",
+			"published",
+			true,
+			now,
 			"Building REST APIs with Go - Complete Guide",
 			"In-depth tutorial on building REST APIs with Go, MySQL, and clean modular architecture.",
 			true,
-			"published",
-			now,
+			true,
 			now,
 			now,
 		)
-		if err != nil {
-			return err
+		if err == nil {
+			for _, t := range []string{"Go", "REST API", "Backend"} {
+				if tID, ok := tagMap[t]; ok {
+					_, _ = db.Exec("INSERT INTO article_tags (article_id, tag_id, created_at) VALUES (?, ?, ?)", art1ID, tID, now)
+				}
+			}
 		}
 
-		// Blog
+		// Sample Published Article 2
+		art2ID := utils.NewULID()
 		_, err = db.Exec(`
-			INSERT INTO posts (
-				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
-				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
+			INSERT INTO articles (
+				id, author_id, category_id, title, slug, excerpt, content,
+				status, is_featured, published_at, meta_title, meta_description,
+				robots_index, robots_follow, created_at, updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			utils.NewULID(),
-			"blog",
-			"My Development Journey",
-			"my-development-journey",
-			"Reflections on the journey of building backend systems and products over the years.",
-			"# My Development Journey\n\nBeing a software engineer is a continuous learning journey...",
-			nil,
+			art2ID,
+			adminID,
 			cat3ID,
-			tags2,
-			nil,
-			nil,
-			false,
+			"My Software Development Journey",
+			"my-software-development-journey",
+			"Reflections on building backend architectures and products over the past decade.",
+			"<h1>My Software Development Journey</h1><p>Being a software engineer is a continuous learning and growing journey...</p>",
 			"published",
+			false,
 			now,
+			"My Software Development Journey - Reflections",
+			"Reflections on building systems and products.",
+			true,
+			true,
 			now,
 			now,
 		)
-		if err != nil {
-			return err
+		if err == nil {
+			if tID, ok := tagMap["Career"]; ok {
+				_, _ = db.Exec("INSERT INTO article_tags (article_id, tag_id, created_at) VALUES (?, ?, ?)", art2ID, tID, now)
+			}
 		}
 
-		// Journal
-		_, err = db.Exec(`
-			INSERT INTO posts (
-				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
-				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
+		// Sample Draft Article
+		art3ID := utils.NewULID()
+		_, _ = db.Exec(`
+			INSERT INTO articles (
+				id, author_id, category_id, title, slug, excerpt, content,
+				status, is_featured, published_at, meta_title, meta_description,
+				robots_index, robots_follow, created_at, updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			utils.NewULID(),
-			"journal",
-			"Rust vs Go File Hashing",
-			"rust-vs-go-file-hashing",
-			"Benchmark notes comparing large file hashing performance between Rust and Go.",
-			"# Rust vs Go File Hashing\n\nToday's experiment tests I/O throughput and CPU utilization...",
-			nil,
+			art3ID,
+			adminID,
 			cat1ID,
-			tags3,
-			nil,
-			nil,
-			false,
-			"published",
-			now,
-			now,
-			now,
-		)
-		if err != nil {
-			return err
-		}
-
-		// Draft Post
-		_, err = db.Exec(`
-			INSERT INTO posts (
-				id, type, title, slug, excerpt, content, cover_image, category_id, tags,
-				meta_title, meta_description, is_featured, status, published_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			utils.NewULID(),
-			"article",
 			"Upcoming: Event Driven Architecture in Go",
 			"upcoming-event-driven-architecture-in-go",
-			"Draft article exploring message queues and event streaming patterns.",
-			"# Event Driven Architecture\n\nThis content is currently in draft status...",
-			nil,
-			cat1ID,
-			tags1,
-			nil,
-			nil,
-			false,
+			"Draft article exploring message queues, streaming patterns, and idempotency.",
+			"<h1>Event Driven Architecture</h1><p>This article is currently in draft status...</p>",
 			"draft",
+			false,
 			nil,
+			nil,
+			nil,
+			true,
+			true,
 			now,
 			now,
 		)
-		if err != nil {
-			return err
-		}
 
-		slog.Info("Initial categories and sample posts seeded successfully.")
+		slog.Info("Initial categories, tags, and sample articles seeded successfully.")
 	}
 
 	return nil
@@ -239,7 +226,7 @@ func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
 	// 1. Roles
 	roles := []roleSeed{
 		{Name: "super_admin", DisplayName: "Super Admin", Description: "Full administrative access to all system resources"},
-		{Name: "admin", DisplayName: "Admin", Description: "Manages users, content, and categories based on granted permissions"},
+		{Name: "admin", DisplayName: "Admin", Description: "Manages users, content, categories, tags, and media"},
 		{Name: "user", DisplayName: "User", Description: "Standard application user"},
 	}
 
@@ -277,11 +264,25 @@ func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
 		{Name: "permissions.create", Description: "Create permissions"},
 		{Name: "permissions.update", Description: "Update permissions"},
 		{Name: "permissions.delete", Description: "Delete permissions"},
-		{Name: "posts.read", Description: "View posts"},
-		{Name: "posts.create", Description: "Create posts"},
-		{Name: "posts.update", Description: "Update posts"},
-		{Name: "posts.delete", Description: "Delete posts"},
+		{Name: "articles.read", Description: "View articles"},
+		{Name: "articles.create", Description: "Create articles"},
+		{Name: "articles.update", Description: "Update articles"},
+		{Name: "articles.delete", Description: "Delete articles"},
 		{Name: "categories.manage", Description: "Manage categories"},
+		{Name: "tags.read", Description: "View tags"},
+		{Name: "tags.create", Description: "Create tags"},
+		{Name: "tags.update", Description: "Update tags"},
+		{Name: "tags.delete", Description: "Delete tags"},
+		{Name: "media.read", Description: "View media library"},
+		{Name: "media.upload", Description: "Upload media files"},
+		{Name: "media.delete", Description: "Delete media files"},
+		{Name: "analytics.read", Description: "View analytics reports"},
+		{Name: "settings.manage", Description: "Manage system settings"},
+		// Legacy aliases for backward compatibility
+		{Name: "posts.read", Description: "Legacy view posts alias"},
+		{Name: "posts.create", Description: "Legacy create posts alias"},
+		{Name: "posts.update", Description: "Legacy update posts alias"},
+		{Name: "posts.delete", Description: "Legacy delete posts alias"},
 	}
 
 	permMap := make(map[string]string) // name -> ID
@@ -313,12 +314,17 @@ func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
 		}
 	}
 
-	// Admin gets users.read, posts.*, categories.manage
+	// Admin gets users.read, articles.*, categories.manage, tags.*, media.*, analytics.read, settings.manage
 	if adminRoleID, ok := roleMap["admin"]; ok {
 		adminPerms := []string{
 			"users.read",
+			"articles.read", "articles.create", "articles.update", "articles.delete",
 			"posts.read", "posts.create", "posts.update", "posts.delete",
 			"categories.manage",
+			"tags.read", "tags.create", "tags.update", "tags.delete",
+			"media.read", "media.upload", "media.delete",
+			"analytics.read",
+			"settings.manage",
 		}
 		for _, pName := range adminPerms {
 			if permID, ok := permMap[pName]; ok {
@@ -328,11 +334,13 @@ func seedRBAC(db *sql.DB, now time.Time) (map[string]string, error) {
 		}
 	}
 
-	// User gets posts.read
+	// User gets articles.read
 	if userRoleID, ok := roleMap["user"]; ok {
-		if permID, ok := permMap["posts.read"]; ok {
-			_, _ = db.Exec("INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at) VALUES (?, ?, ?)",
-				userRoleID, permID, now)
+		for _, pName := range []string{"articles.read", "posts.read"} {
+			if permID, ok := permMap[pName]; ok {
+				_, _ = db.Exec("INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at) VALUES (?, ?, ?)",
+					userRoleID, permID, now)
+			}
 		}
 	}
 

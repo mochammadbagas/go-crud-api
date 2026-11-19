@@ -27,6 +27,16 @@ func RunMigrations(sqlDB *sql.DB, dbName string, fresh bool) error {
 			DROP TABLE IF EXISTS refresh_tokens;
 			DROP TABLE IF EXISTS user_profiles;
 			DROP TABLE IF EXISTS sessions;
+			DROP TABLE IF EXISTS article_daily_analytics;
+			DROP TABLE IF EXISTS article_analytics_events;
+			DROP TABLE IF EXISTS article_related;
+			DROP TABLE IF EXISTS article_revisions;
+			DROP TABLE IF EXISTS article_media;
+			DROP TABLE IF EXISTS article_tags;
+			DROP TABLE IF EXISTS articles;
+			DROP TABLE IF EXISTS media;
+			DROP TABLE IF EXISTS tags;
+			DROP TABLE IF EXISTS settings;
 			DROP TABLE IF EXISTS post_views;
 			DROP TABLE IF EXISTS posts;
 			DROP TABLE IF EXISTS categories;

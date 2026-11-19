@@ -27,11 +27,13 @@ func Setup(
 	cfg *config.Config,
 	authHandler *handlers.AuthHandler,
 	userHandler *handlers.UserHandler,
-	adminPostHandler *handlers.AdminPostHandler,
+	adminArticleHandler *handlers.AdminArticleHandler,
+	publicArticleHandler *handlers.PublicArticleHandler,
 	adminCategoryHandler *handlers.AdminCategoryHandler,
-	adminUploadHandler *handlers.AdminUploadHandler,
-	publicPostHandler *handlers.PublicPostHandler,
 	publicCategoryHandler *handlers.PublicCategoryHandler,
+	tagHandler *handlers.TagHandler,
+	mediaHandler *handlers.MediaHandler,
+	analyticsHandler *handlers.AnalyticsHandler,
 	roleHandler *handlers.RoleHandler,
 	adminUserHandler *handlers.AdminUserHandler,
 	userRepo repository.UserRepository,
@@ -90,7 +92,7 @@ func Setup(
 		_, _ = w.Write([]byte(`{"status":"ready","database":"healthy"}`))
 	})
 
-	// Static file server for local image/avatar uploads
+	// Static file server for local image uploads
 	_ = os.MkdirAll(cfg.UploadDir, 0755)
 	uploadPath := cfg.UploadDir
 	if !filepath.IsAbs(uploadPath) {
@@ -101,26 +103,29 @@ func Setup(
 	fileServer(r, "/uploads", filesDir)
 
 	// SEO / URL Structure aliases
-	r.Get("/blog/{slug}", publicPostHandler.Get)
-	r.Get("/articles/{slug}", publicPostHandler.Get)
-	r.Get("/journal/{slug}", publicPostHandler.Get)
-	r.Get("/categories/{slug}", publicCategoryHandler.ListPostsByCategory)
+	r.Get("/blog/{slug}", publicArticleHandler.Get)
+	r.Get("/articles/{slug}", publicArticleHandler.Get)
+	r.Get("/journal/{slug}", publicArticleHandler.Get)
+	r.Get("/categories/{slug}", publicCategoryHandler.ListArticlesByCategory)
 
 	// API v1 Routes
 	r.Route("/api/v1", func(v1 chi.Router) {
 		// ---------------------------------------------------------------------
-		// 1. PUBLIC CONTENT ENDPOINTS
+		// 1. PUBLIC CONTENT & ANALYTICS ENDPOINTS
 		// ---------------------------------------------------------------------
-		v1.Get("/posts", publicPostHandler.List)
-		v1.Get("/posts/{slug}", publicPostHandler.Get)
+		v1.Get("/articles", publicArticleHandler.List)
+		v1.Get("/articles/{slug}", publicArticleHandler.Get)
+		v1.Post("/articles/{id}/analytics", analyticsHandler.RecordEvent)
+
 		v1.Get("/categories", publicCategoryHandler.List)
-		v1.Get("/categories/{slug}/posts", publicCategoryHandler.ListPostsByCategory)
+		v1.Get("/categories/{slug}/articles", publicCategoryHandler.ListArticlesByCategory)
+
+		v1.Get("/tags", tagHandler.List)
 
 		// ---------------------------------------------------------------------
 		// 2. AUTHENTICATION ENDPOINTS (/api/v1/auth)
 		// ---------------------------------------------------------------------
 		v1.Route("/auth", func(auth chi.Router) {
-			// Rate limiter for login & register (10 attempts/minute per IP)
 			authLimiter := httprate.LimitBy(
 				10,
 				time.Minute,
@@ -178,21 +183,37 @@ func Setup(
 			admin.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
 			admin.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleSuperAdmin))
 
-			// Posts CRUD
-			admin.With(middleware.RequirePermission("posts.read", userRepo)).Get("/posts", adminPostHandler.List)
-			admin.With(middleware.RequirePermission("posts.create", userRepo)).Post("/posts", adminPostHandler.Create)
-			admin.With(middleware.RequirePermission("posts.read", userRepo)).Get("/posts/{id}", adminPostHandler.Get)
-			admin.With(middleware.RequirePermission("posts.update", userRepo)).Put("/posts/{id}", adminPostHandler.Update)
-			admin.With(middleware.RequirePermission("posts.delete", userRepo)).Delete("/posts/{id}", adminPostHandler.Delete)
+			// Articles CRUD
+			admin.With(middleware.RequirePermission("articles.read", userRepo)).Get("/articles", adminArticleHandler.List)
+			admin.With(middleware.RequirePermission("articles.create", userRepo)).Post("/articles", adminArticleHandler.Create)
+			admin.With(middleware.RequirePermission("articles.read", userRepo)).Get("/articles/{id}", adminArticleHandler.Get)
+			admin.With(middleware.RequirePermission("articles.update", userRepo)).Put("/articles/{id}", adminArticleHandler.Update)
+			admin.With(middleware.RequirePermission("articles.delete", userRepo)).Delete("/articles/{id}", adminArticleHandler.Delete)
+			admin.With(middleware.RequirePermission("articles.read", userRepo)).Get("/articles/{id}/revisions", adminArticleHandler.ListRevisions)
+			admin.With(middleware.RequirePermission("analytics.read", userRepo)).Get("/articles/{id}/analytics", analyticsHandler.GetArticleAnalytics)
 
 			// Categories CRUD
 			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Get("/categories", adminCategoryHandler.List)
 			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Post("/categories", adminCategoryHandler.Create)
+			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Get("/categories/{id}", adminCategoryHandler.Get)
 			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Put("/categories/{id}", adminCategoryHandler.Update)
 			admin.With(middleware.RequirePermission("categories.manage", userRepo)).Delete("/categories/{id}", adminCategoryHandler.Delete)
 
-			// General file/image upload
-			admin.Post("/upload", adminUploadHandler.Upload)
+			// Tags CRUD
+			admin.With(middleware.RequirePermission("tags.read", userRepo)).Get("/tags", tagHandler.List)
+			admin.With(middleware.RequirePermission("tags.create", userRepo)).Post("/tags", tagHandler.Create)
+			admin.With(middleware.RequirePermission("tags.read", userRepo)).Get("/tags/{id}", tagHandler.Get)
+			admin.With(middleware.RequirePermission("tags.update", userRepo)).Put("/tags/{id}", tagHandler.Update)
+			admin.With(middleware.RequirePermission("tags.delete", userRepo)).Delete("/tags/{id}", tagHandler.Delete)
+
+			// Media Library Management (Replaces old /upload)
+			admin.With(middleware.RequirePermission("media.read", userRepo)).Get("/media", mediaHandler.List)
+			admin.With(middleware.RequirePermission("media.upload", userRepo)).Post("/media", mediaHandler.Upload)
+			admin.With(middleware.RequirePermission("media.read", userRepo)).Get("/media/{id}", mediaHandler.Get)
+			admin.With(middleware.RequirePermission("media.delete", userRepo)).Delete("/media/{id}", mediaHandler.Delete)
+
+			// Analytics Dashboard Overview
+			admin.With(middleware.RequirePermission("analytics.read", userRepo)).Get("/analytics/overview", analyticsHandler.GetOverview)
 
 			// Roles CRUD & Permissions assignment
 			admin.With(middleware.RequirePermission("roles.read", userRepo)).Get("/roles", roleHandler.ListRoles)
@@ -241,38 +262,37 @@ func (nfs noDirListingFS) Open(path string) (http.File, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	s, err := f.Stat()
 	if err != nil {
-		_ = f.Close()
+		f.Close()
 		return nil, err
 	}
-
 	if s.IsDir() {
-		// Attempt to open index.html inside the directory
-		indexPath := filepath.Join(path, "index.html")
-		if _, err := nfs.fs.Open(indexPath); err != nil {
-			_ = f.Close()
+		index := strings.TrimSuffix(path, "/") + "/index.html"
+		if _, err := nfs.fs.Open(index); err != nil {
+			f.Close()
 			return nil, os.ErrNotExist
 		}
 	}
-
 	return f, nil
 }
 
+// fileServer sets up a http.FileServer handler to serve static files from a http.FileSystem.
 func fileServer(r chi.Router, path string, root http.FileSystem) {
+	if strings.ContainsAny(path, "{}*") {
+		panic("fileServer does not permit any URL parameters.")
+	}
+
 	if path != "/" && path[len(path)-1] != '/' {
 		r.Get(path, http.RedirectHandler(path+"/", http.StatusMovedPermanently).ServeHTTP)
 		path += "/"
 	}
 	path += "*"
 
-	restrictedFS := noDirListingFS{fs: root}
-
 	r.Get(path, func(w http.ResponseWriter, r *http.Request) {
 		rctx := chi.RouteContext(r.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
-		fs := http.StripPrefix(pathPrefix, http.FileServer(restrictedFS))
+		fs := http.StripPrefix(pathPrefix, http.FileServer(noDirListingFS{fs: root}))
 		fs.ServeHTTP(w, r)
 	})
 }

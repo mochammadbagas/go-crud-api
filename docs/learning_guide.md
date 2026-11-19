@@ -3,7 +3,7 @@
 **Document Type:** Educational Architecture Walkthrough & Idiomatic Go Guide  
 **Target Audience:** Software Engineers, Backend Developers, and System Architects  
 **Prerequisites:** Basic understanding of Go syntax (structs, interfaces, goroutines)  
-**Standard:** Clean Architecture, Idiomatic Go Patterns  
+**Standard:** Clean Architecture, Idiomatic Go Patterns
 
 ---
 
@@ -11,20 +11,20 @@
 
 This guide explains the specific Go language idioms, concurrency patterns, and design principles implemented throughout the **Go REST API Starter Kit (`go-crud-api`)**.
 
-| Concept | Implementation Location | Architectural Purpose & Idiomatic Benefit |
-| :--- | :--- | :--- |
-| **Decentralized ULID Identity** | `internal/utils/ulid.go` | Uses 26-character Crockford Base32 strings (`CHAR(26)`) via `github.com/oklog/ulid/v2`. Prevents ID enumeration, ensures chronological sorting via millisecond timestamp prefixes, and prevents 53-bit JavaScript integer truncation. |
-| **Pluggable Adapter Pattern** | `internal/mailer/`, `internal/storage/` | Isolates external infrastructure behind clean Go interfaces (`Mailer` and `Storage`). Enables zero-config local development (`LogMailer`, `LocalStorage`) and seamless production switching (`ResendMailer`, Cloudflare R2 / AWS S3) via configuration flags. |
-| **Struct Pointers for Nullable Types** | `internal/models/` | Uses pointers (`*string`, `*time.Time`) to represent nullable database fields in Go structs, mapping cleanly to SQL `NULL` and JSON `null` / `omitempty`. |
-| **Multi-Input Field Validation** | `internal/utils/validation.go`, `internal/models/` | Replaces fail-fast early returns with a unified `ValidationErrors map[string]FieldError` collector implementing Go's standard `error` interface. Evaluates all field constraints simultaneously and returns structured errors with machine-readable `code` and human-readable `message` for client UI forms and i18n. |
-| **Dependency Inversion Principle (DIP)** | `internal/service/`, `internal/repository/` | Higher-level business services depend exclusively upon repository and infrastructure interfaces, enabling full modularity, loose coupling, and straightforward unit testing via in-memory mock repositories. |
-| **Compile-Time Type-Safe SQL** | `db/queries/`, `internal/repository/sqlc/` | Uses `sqlc` to compile raw SQL queries directly into type-safe Go code. Delivers native database performance and query visibility without the abstraction overhead or runtime reflection of traditional ORMs. |
-| **Embedded Binary Assets** | `db/embed.go` | Embeds migration DDL scripts directly into the compiled executable binary using Go's `//go:embed` directive, eliminating external migration script dependencies during deployment. |
-| **Concurrency & Synchronization** | `cmd/server/main.go` | Uses goroutines and channels to coordinate the HTTP server listener, periodic background token cleanup workers (`time.Ticker`), and OS termination signal interception (`os.Signal`). |
-| **Sentinel Error Architecture** | `internal/repository/`, `internal/service/` | Defines domain sentinel errors (`ErrNotFound`, `ErrDuplicate`, `ErrTokenReused`, `ErrUnauthorized`) compared using `errors.Is` across layer boundaries and translated into unified JSON error envelopes with machine-readable `code` and human-readable `message`. |
-| **Higher-Order Middleware Functions** | `internal/middleware/auth.go`, `internal/routes/routes.go` | Implements standard `func(http.Handler) http.Handler` middleware wrappers on the Chi router to enforce rate limiting, authentication, CORS, and RBAC authorization pipelines. |
-| **Context Propagation & Timeouts** | `cmd/server/main.go`, `internal/middleware/auth.go` | Leverages `context.Context` for request lifecycle management: `context.WithTimeout` for graceful shutdown, `context.WithCancel` for worker termination, and `context.WithValue` for propagating authenticated identity claims. |
-| **Comprehensive Test Automation** | `internal/handlers/handlers_test.go`, `internal/service/*_test.go` | Utilizes table-driven test patterns, in-memory mock repositories, and `net/http/httptest` to verify HTTP responses, status codes, and domain invariants without requiring a live database. |
+| Concept                                  | Implementation Location                                            | Architectural Purpose & Idiomatic Benefit                                                                                                                                                                                                                                                                             |
+| :--------------------------------------- | :----------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Decentralized ULID Identity**          | `internal/utils/ulid.go`                                           | Uses 26-character Crockford Base32 strings (`CHAR(26)`) via `github.com/oklog/ulid/v2`. Prevents ID enumeration, ensures chronological sorting via millisecond timestamp prefixes, and prevents 53-bit JavaScript integer truncation.                                                                                 |
+| **Pluggable Adapter Pattern**            | `internal/mailer/`, `internal/storage/`                            | Isolates external infrastructure behind clean Go interfaces (`Mailer` and `Storage`). Enables zero-config local development (`LogMailer`, `LocalStorage`) and seamless production switching (`ResendMailer`, Cloudflare R2 / AWS S3) via configuration flags.                                                         |
+| **Struct Pointers for Nullable Types**   | `internal/models/`                                                 | Uses pointers (`*string`, `*time.Time`) to represent nullable database fields in Go structs, mapping cleanly to SQL `NULL` and JSON `null` / `omitempty`.                                                                                                                                                             |
+| **Multi-Input Field Validation**         | `internal/utils/validation.go`, `internal/models/`                 | Replaces fail-fast early returns with a unified `ValidationErrors map[string]FieldError` collector implementing Go's standard `error` interface. Evaluates all field constraints simultaneously and returns structured errors with machine-readable `code` and human-readable `message` for client UI forms and i18n. |
+| **Dependency Inversion Principle (DIP)** | `internal/service/`, `internal/repository/`                        | Higher-level business services depend exclusively upon repository and infrastructure interfaces, enabling full modularity, loose coupling, and straightforward unit testing via in-memory mock repositories.                                                                                                          |
+| **Compile-Time Type-Safe SQL**           | `db/queries/`, `internal/repository/sqlc/`                         | Uses `sqlc` to compile raw SQL queries directly into type-safe Go code. Delivers native database performance and query visibility without the abstraction overhead or runtime reflection of traditional ORMs.                                                                                                         |
+| **Embedded Binary Assets**               | `db/embed.go`                                                      | Embeds migration DDL scripts directly into the compiled executable binary using Go's `//go:embed` directive, eliminating external migration script dependencies during deployment.                                                                                                                                    |
+| **Concurrency & Synchronization**        | `cmd/server/main.go`                                               | Uses goroutines and channels to coordinate the HTTP server listener, periodic background token cleanup workers (`time.Ticker`), and OS termination signal interception (`os.Signal`).                                                                                                                                 |
+| **Sentinel Error Architecture**          | `internal/repository/`, `internal/service/`                        | Defines domain sentinel errors (`ErrNotFound`, `ErrDuplicate`, `ErrTokenReused`, `ErrUnauthorized`) compared using `errors.Is` across layer boundaries and translated into unified JSON error envelopes with machine-readable `code` and human-readable `message`.                                                    |
+| **Higher-Order Middleware Functions**    | `internal/middleware/auth.go`, `internal/routes/routes.go`         | Implements standard `func(http.Handler) http.Handler` middleware wrappers on the Chi router to enforce rate limiting, authentication, CORS, and RBAC authorization pipelines.                                                                                                                                         |
+| **Context Propagation & Timeouts**       | `cmd/server/main.go`, `internal/middleware/auth.go`                | Leverages `context.Context` for request lifecycle management: `context.WithTimeout` for graceful shutdown, `context.WithCancel` for worker termination, and `context.WithValue` for propagating authenticated identity claims.                                                                                        |
+| **Comprehensive Test Automation**        | `internal/handlers/handlers_test.go`, `internal/service/*_test.go` | Utilizes table-driven test patterns, in-memory mock repositories, and `net/http/httptest` to verify HTTP responses, status codes, and domain invariants without requiring a live database.                                                                                                                            |
 
 ---
 
@@ -48,6 +48,7 @@ type UserProfile struct {
 ```
 
 **Benefits**:
+
 - Clean JSON serialization: If `Bio == nil`, `json:"bio,omitempty"` omits the key or serializes as `null`.
 - Zero database coupling: Domain models remain pure Go structs without importing `database/sql`.
 - Conversion to `sql.NullString` happens strictly at the repository boundary (`internal/repository/`).
@@ -107,6 +108,7 @@ func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRep
 ```
 
 **Why this is idiomatic**:
+
 - The `select` statement prevents busy-waiting and consumes zero CPU cycles while idle.
 - Passing `context.Context` allows graceful worker termination when the server shuts down.
 - `defer ticker.Stop()` releases the underlying runtime timer resource.

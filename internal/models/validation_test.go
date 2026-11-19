@@ -142,8 +142,8 @@ func TestChangePasswordInputValidation(t *testing.T) {
 	}
 }
 
-func TestCreatePostInputValidation(t *testing.T) {
-	input := CreatePostInput{}
+func TestCreateArticleInputValidation(t *testing.T) {
+	input := CreateArticleInput{}
 	err := input.Validate()
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
@@ -154,9 +154,6 @@ func TestCreatePostInputValidation(t *testing.T) {
 		t.Fatalf("expected error to be utils.ValidationErrors, got %T", err)
 	}
 
-	if _, ok := valErr["type"]; !ok {
-		t.Error("expected type error")
-	}
 	if _, ok := valErr["title"]; !ok {
 		t.Error("expected title error")
 	}
@@ -165,13 +162,12 @@ func TestCreatePostInputValidation(t *testing.T) {
 	}
 
 	// Valid input
-	valid := CreatePostInput{
-		Type:    TypeBlog,
+	valid := CreateArticleInput{
 		Title:   "Valid Title",
-		Content: "Valid content text here",
+		Content: "<h1>Valid content HTML here</h1>",
 	}
 	if err := valid.Validate(); err != nil {
-		t.Fatalf("expected valid post input to pass, got %v", err)
+		t.Fatalf("expected valid article input to pass, got %v", err)
 	}
 	if valid.Status != StatusDraft {
 		t.Errorf("expected default status to be draft, got %s", valid.Status)

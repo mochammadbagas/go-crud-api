@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrCategoryNotFound   = errors.New("category not found")
-	ErrCategorySlugExists = errors.New("category slug is already in use")
+	ErrCategoryNotFound    = errors.New("category not found")
+	ErrCategorySlugExists  = errors.New("category slug is already in use")
+	ErrCategoryHasArticles = repository.ErrCategoryHasArticles
 )
 
 // CategoryServiceInterface defines business actions for category management and retrieval.
@@ -77,8 +78,9 @@ func (s *CategoryService) Create(ctx context.Context, input models.CategoryInput
 	}
 
 	cat := &models.Category{
-		Name: strings.TrimSpace(input.Name),
-		Slug: slug,
+		Name:        strings.TrimSpace(input.Name),
+		Slug:        slug,
+		Description: input.Description,
 	}
 
 	if err := s.categoryRepo.Create(ctx, cat); err != nil {
@@ -120,6 +122,7 @@ func (s *CategoryService) Update(ctx context.Context, id string, input models.Ca
 
 	existing.Name = strings.TrimSpace(input.Name)
 	existing.Slug = slug
+	existing.Description = input.Description
 
 	if err := s.categoryRepo.Update(ctx, existing); err != nil {
 		if errors.Is(err, repository.ErrDuplicate) {
@@ -139,5 +142,14 @@ func (s *CategoryService) Delete(ctx context.Context, id string) error {
 		}
 		return err
 	}
+
+	articleCount, err := s.categoryRepo.CountArticlesByCategoryID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if articleCount > 0 {
+		return repository.ErrCategoryHasArticles
+	}
+
 	return s.categoryRepo.Delete(ctx, id)
 }

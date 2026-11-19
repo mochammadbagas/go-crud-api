@@ -16,7 +16,7 @@ func TestSecurityHeadersInRouter(t *testing.T) {
 		UploadDir: t.TempDir(),
 	}
 
-	router := routes.Setup(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := routes.Setup(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestStaticFiles_PreventDirectoryListing(t *testing.T) {
 		UploadDir: tempUploadDir,
 	}
 
-	router := routes.Setup(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := routes.Setup(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// 1. Direct file download should succeed
 	fileReq := httptest.NewRequest(http.MethodGet, "/uploads/sample.txt", nil)
