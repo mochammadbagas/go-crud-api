@@ -12,9 +12,11 @@ import (
 
 // Config represents all application configuration loaded at runtime.
 type Config struct {
-	AppEnv         string
-	Port           string
-	DBHost         string
+	AppEnv            string
+	Port              string
+	LogLevel          string
+	LogFormat         string
+	DBHost            string
 	DBPort         string
 	DBUser         string
 	DBPassword     string
@@ -57,6 +59,15 @@ func Load() *Config {
 
 	appEnv := strings.ToLower(strings.TrimSpace(getEnv("APP_ENV", "development")))
 	cookieSecure, _ := strconv.ParseBool(getEnv("COOKIE_SECURE", "false"))
+
+	defaultLogLevel := "debug"
+	defaultLogFormat := "text"
+	if appEnv == "production" {
+		defaultLogLevel = "info"
+		defaultLogFormat = "json"
+	}
+	logLevel := strings.ToLower(strings.TrimSpace(getEnv("LOG_LEVEL", defaultLogLevel)))
+	logFormat := strings.ToLower(strings.TrimSpace(getEnv("LOG_FORMAT", defaultLogFormat)))
 
 	originsRaw := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
 	var allowedOrigins []string
@@ -119,6 +130,8 @@ func Load() *Config {
 	return &Config{
 		AppEnv:            appEnv,
 		Port:              getEnv("PORT", "8080"),
+		LogLevel:          logLevel,
+		LogFormat:         logFormat,
 		DBHost:            getEnv("DB_HOST", "127.0.0.1"),
 		DBPort:            getEnv("DB_PORT", "3306"),
 		DBUser:            getEnv("DB_USER", "root"),

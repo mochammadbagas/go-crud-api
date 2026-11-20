@@ -18,6 +18,12 @@ func TestConfigLoad_DefaultDevelopment(t *testing.T) {
 	if cfg.JWTSecret != config.DefaultInsecureJWTSecret {
 		t.Fatalf("expected fallback JWTSecret in dev mode")
 	}
+	if cfg.LogLevel != "debug" {
+		t.Fatalf("expected LogLevel 'debug' in dev mode, got %s", cfg.LogLevel)
+	}
+	if cfg.LogFormat != "text" {
+		t.Fatalf("expected LogFormat 'text' in dev mode, got %s", cfg.LogFormat)
+	}
 }
 
 func TestConfigLoad_ProductionCustomSecret(t *testing.T) {
@@ -31,6 +37,12 @@ func TestConfigLoad_ProductionCustomSecret(t *testing.T) {
 	}
 	if cfg.JWTSecret != validSecret {
 		t.Fatalf("expected JWTSecret to match provided value")
+	}
+	if cfg.LogLevel != "info" {
+		t.Fatalf("expected LogLevel 'info' in prod mode, got %s", cfg.LogLevel)
+	}
+	if cfg.LogFormat != "json" {
+		t.Fatalf("expected LogFormat 'json' in prod mode, got %s", cfg.LogFormat)
 	}
 
 	// Cleanup

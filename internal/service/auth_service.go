@@ -269,7 +269,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 
 	// REUSE DETECTION: If token was already revoked, revoke the entire token family!
 	if storedToken.IsRevoked {
-		slog.Warn("Refresh token reuse detected! Revoking full token family",
+		slog.WarnContext(ctx, "Refresh token reuse detected! Revoking full token family",
 			slog.String("family", storedToken.TokenFamily),
 			slog.String("user_id", storedToken.UserID),
 		)
@@ -298,7 +298,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 		return nil, err
 	}
 	if !revoked {
-		slog.Warn("Concurrent refresh token rotation detected! Revoking full token family",
+		slog.WarnContext(ctx, "Concurrent refresh token rotation detected! Revoking full token family",
 			slog.String("family", storedToken.TokenFamily),
 			slog.String("user_id", storedToken.UserID),
 		)
@@ -420,7 +420,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, input models.ForgotPas
 	if err != nil {
 		// Anti user-enumeration: return success even if user not found
 		if errors.Is(err, repository.ErrNotFound) {
-			slog.Info("Password reset requested for unregistered email (anti-enumeration applied)", slog.String("email", input.Email))
+			slog.InfoContext(ctx, "Password reset requested for unregistered email (anti-enumeration applied)", slog.String("email", input.Email))
 			return nil
 		}
 		return err
@@ -455,7 +455,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, input models.ForgotPas
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.FrontendURL, rawToken)
 	if s.mailer != nil {
 		if err := s.mailer.SendResetPasswordEmail(ctx, user.Email, resetLink); err != nil {
-			slog.Error("Failed to send password reset email", slog.String("email", user.Email), slog.Any("error", err))
+			slog.ErrorContext(ctx, "Failed to send password reset email", slog.String("email", user.Email), slog.Any("error", err))
 		}
 	}
 
@@ -493,7 +493,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, input models.ResetPassw
 	// Atomic mark token as used to prevent TOCTOU race conditions
 	marked, err := s.authTokenRepo.MarkAsUsedAtomic(ctx, storedToken.ID)
 	if err != nil {
-		slog.Error("Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
+		slog.ErrorContext(ctx, "Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
 		return err
 	}
 	if !marked {
@@ -546,7 +546,7 @@ func (s *AuthService) SendVerification(ctx context.Context, userID string) error
 	verifyLink := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.FrontendURL, rawToken)
 	if s.mailer != nil {
 		if err := s.mailer.SendVerificationEmail(ctx, user.Email, verifyLink); err != nil {
-			slog.Error("Failed to send verification email", slog.String("email", user.Email), slog.Any("error", err))
+			slog.ErrorContext(ctx, "Failed to send verification email", slog.String("email", user.Email), slog.Any("error", err))
 		}
 	}
 

@@ -92,3 +92,19 @@ func ValidationError(w http.ResponseWriter, err error) {
 	slog.Error("Unexpected internal error masked from client", slog.Any("error", err))
 	ErrorCode(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "an internal server error occurred")
 }
+
+// ValidationErrorContext is the context-aware variant of ValidationError that attaches request tracing attributes.
+func ValidationErrorContext(w http.ResponseWriter, r *http.Request, err error) {
+	var valErr ValidationErrors
+	if errors.As(err, &valErr) {
+		JSON(w, http.StatusBadRequest, ErrorResponse{
+			Code:    "VALIDATION_FAILED",
+			Error:   "validation failed",
+			Message: "validation failed",
+			Errors:  valErr,
+		})
+		return
+	}
+	slog.ErrorContext(r.Context(), "Unexpected internal error masked from client", slog.Any("error", err))
+	ErrorCode(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "an internal server error occurred")
+}

@@ -562,6 +562,9 @@ func (r *sqlUserRepository) ListAdmin(ctx context.Context, filter models.AdminUs
 					}
 				}
 			}
+			if err := roleRows.Err(); err != nil {
+				return nil, 0, err
+			}
 		}
 
 		// If user has no roles in user_roles table, fallback to legacy u.Role

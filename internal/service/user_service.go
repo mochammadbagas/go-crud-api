@@ -197,11 +197,11 @@ func (s *UserService) RequestEmailChange(ctx context.Context, userID string, inp
 	confirmLink := fmt.Sprintf("%s/confirm-email-change?token=%s", s.cfg.FrontendURL, rawToken)
 	if s.mailer != nil {
 		if err := s.mailer.SendEmailChangeEmail(ctx, input.NewEmail, confirmLink); err != nil {
-			slog.Error("Failed to send email change confirmation email", slog.String("email", input.NewEmail), slog.Any("error", err))
+			slog.ErrorContext(ctx, "Failed to send email change confirmation email", slog.String("email", input.NewEmail), slog.Any("error", err))
 		}
 		// Security notification to the current email address
 		if err := s.mailer.SendEmailChangeAlert(ctx, user.Email, input.NewEmail); err != nil {
-			slog.Error("Failed to send email change security alert to old email address", slog.String("old_email", user.Email), slog.Any("error", err))
+			slog.ErrorContext(ctx, "Failed to send email change security alert to old email address", slog.String("old_email", user.Email), slog.Any("error", err))
 		}
 	}
 

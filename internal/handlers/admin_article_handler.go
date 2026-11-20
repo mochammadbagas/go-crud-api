@@ -78,7 +78,7 @@ func (h *AdminArticleHandler) Get(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusNotFound, "NOT_FOUND", "article not found")
 			return
 		}
-		slog.Error("failed to fetch article by ID", slog.String("id", id), slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch article by ID", slog.String("id", id), slog.Any("error", err))
 		utils.ErrorCode(w, http.StatusInternalServerError, "FETCH_ERROR", "failed to fetch article")
 		return
 	}

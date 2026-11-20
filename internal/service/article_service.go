@@ -87,13 +87,14 @@ func (s *ArticleService) Create(ctx context.Context, authorID string, input mode
 	// 4. Determine publication status and timestamp rules
 	now := time.Now().UTC()
 	var publishedAt *time.Time
-	if input.Status == models.StatusPublished {
+	switch input.Status {
+	case models.StatusPublished:
 		if input.PublishedAt != nil {
 			publishedAt = input.PublishedAt
 		} else {
 			publishedAt = &now
 		}
-	} else if input.Status == models.StatusScheduled {
+	case models.StatusScheduled:
 		publishedAt = input.ScheduledAt
 	}
 

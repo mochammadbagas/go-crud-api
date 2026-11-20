@@ -189,7 +189,7 @@ func (r *sqlArticleRepository) Update(
 			Snapshot:  snapshotBytes,
 			CreatedAt: now,
 		}); revErr != nil {
-			slog.Warn("Failed to record article revision snapshot", slog.String("article_id", article.ID), slog.Any("error", revErr))
+			slog.WarnContext(ctx, "Failed to record article revision snapshot", slog.String("article_id", article.ID), slog.Any("error", revErr))
 		}
 	}
 
@@ -608,6 +608,9 @@ func (r *sqlArticleRepository) populateBatchTags(ctx context.Context, articles [
 		if a, ok := articleMap[articleID]; ok {
 			a.Tags = append(a.Tags, t)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		slog.ErrorContext(ctx, "failed iterating article tags rows", slog.Any("error", err))
 	}
 }
 

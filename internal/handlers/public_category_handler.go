@@ -29,7 +29,7 @@ func NewPublicCategoryHandler(categorySvc service.CategoryServiceInterface, arti
 func (h *PublicCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.categorySvc.List(r.Context())
 	if err != nil {
-		slog.Error("failed to fetch public categories", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch public categories", slog.Any("error", err))
 		utils.ErrorCode(w, http.StatusInternalServerError, "FETCH_ERROR", "failed to fetch categories")
 		return
 	}
@@ -68,7 +68,7 @@ func (h *PublicCategoryHandler) ListArticlesByCategory(w http.ResponseWriter, r 
 
 	articles, total, err := h.articleSvc.ListPublic(r.Context(), filter)
 	if err != nil {
-		slog.Error("failed to fetch articles by category", slog.String("slug", slug), slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch articles by category", slog.String("slug", slug), slog.Any("error", err))
 		utils.ErrorCode(w, http.StatusInternalServerError, "FETCH_ERROR", "failed to fetch category articles")
 		return
 	}

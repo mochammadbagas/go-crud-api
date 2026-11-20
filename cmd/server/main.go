@@ -15,6 +15,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 	"github.com/mochammadbagas/go-crud-api/internal/database"
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
+	"github.com/mochammadbagas/go-crud-api/internal/logger"
 	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
@@ -25,16 +26,20 @@ import (
 )
 
 func main() {
-	// 1. Structured Logging Setup (JSON)
-	initLogger()
-	slog.Info("Starting Go Starter Kit REST API bootstrap...")
-
-	// 2. Command Line Flags
+	// 1. Command Line Flags
 	fresh := flag.Bool("fresh", false, "Drop and recreate all database tables before running migrations")
 	flag.Parse()
 
-	// 3. Load Configurations
+	// 2. Load Configurations
 	cfg := config.Load()
+
+	// 3. Structured Logging Setup (Environment-Aware & Context-Aware via log/slog)
+	logger.Init(cfg)
+	slog.Info("Starting Go Starter Kit REST API bootstrap...",
+		slog.String("app_env", cfg.AppEnv),
+		slog.String("log_level", cfg.LogLevel),
+		slog.String("log_format", cfg.LogFormat),
+	)
 
 	// 4. Initialize Database (Connection Pool, Migrations, & Seeder)
 	db, err := database.Init(cfg, *fresh)
@@ -167,13 +172,6 @@ func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRep
 			}
 		}
 	}
-}
-
-func initLogger() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	slog.SetDefault(logger)
 }
 
 func runServer(handler http.Handler, port string, stopWorkers context.CancelFunc, workerWg *sync.WaitGroup) {

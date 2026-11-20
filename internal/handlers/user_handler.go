@@ -150,7 +150,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	avatarURL, err := h.storage.Upload(r.Context(), file, uniqueName, mimeType)
 	if err != nil {
-		slog.Error("failed to save user avatar", slog.String("filename", uniqueName), slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to save user avatar", slog.String("filename", uniqueName), slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to save avatar")
 		return
 	}
@@ -165,7 +165,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	// Auto-cleanup: Delete old avatar from storage to avoid orphaned files
 	if oldAvatarURL != "" && oldAvatarURL != avatarURL {
 		if delErr := h.storage.Delete(r.Context(), oldAvatarURL); delErr != nil {
-			slog.Warn("Failed to delete old avatar from storage during update", slog.String("old_avatar", oldAvatarURL), slog.Any("error", delErr))
+			slog.WarnContext(r.Context(), "Failed to delete old avatar from storage during update", slog.String("old_avatar", oldAvatarURL), slog.Any("error", delErr))
 		}
 	}
 
@@ -197,7 +197,7 @@ func (h *UserHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	// Auto-cleanup: Delete physical avatar file from storage once database record is cleared
 	if currentAvatarURL != "" {
 		if delErr := h.storage.Delete(r.Context(), currentAvatarURL); delErr != nil {
-			slog.Warn("Failed to delete avatar from storage during removal", slog.String("avatar_url", currentAvatarURL), slog.Any("error", delErr))
+			slog.WarnContext(r.Context(), "Failed to delete avatar from storage during removal", slog.String("avatar_url", currentAvatarURL), slog.Any("error", delErr))
 		}
 	}
 

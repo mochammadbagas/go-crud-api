@@ -42,7 +42,7 @@ func (h *AdminUserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, total, err := h.adminUserSvc.ListUsers(r.Context(), filter)
 	if err != nil {
-		slog.Error("failed to fetch admin users", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch admin users", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to fetch users")
 		return
 	}
@@ -68,7 +68,7 @@ func (h *AdminUserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusNotFound, "USER_NOT_FOUND", err.Error())
 			return
 		}
-		slog.Error("failed to get user detail", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to get user detail", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to get user detail")
 		return
 	}
@@ -210,7 +210,7 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusConflict, "USER_HAS_ASSOCIATED_DATA", err.Error())
 			return
 		}
-		slog.Error("failed to delete user", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to delete user", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
@@ -218,7 +218,7 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Auto-cleanup: Delete user avatar from storage
 	if avatarURL != "" {
 		if delErr := h.storage.Delete(r.Context(), avatarURL); delErr != nil {
-			slog.Warn("Failed to delete user avatar from storage during account removal", slog.String("avatar_url", avatarURL), slog.Any("error", delErr))
+			slog.WarnContext(r.Context(), "Failed to delete user avatar from storage during account removal", slog.String("avatar_url", avatarURL), slog.Any("error", delErr))
 		}
 	}
 

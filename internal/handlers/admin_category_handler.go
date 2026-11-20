@@ -25,7 +25,7 @@ func NewAdminCategoryHandler(categorySvc service.CategoryServiceInterface) *Admi
 func (h *AdminCategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.categorySvc.List(r.Context())
 	if err != nil {
-		slog.Error("failed to fetch categories", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch categories", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to fetch categories")
 		return
 	}
@@ -46,7 +46,7 @@ func (h *AdminCategoryHandler) Get(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusNotFound, "NOT_FOUND", "category not found")
 			return
 		}
-		slog.Error("failed to fetch category", slog.String("id", id), slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch category", slog.String("id", id), slog.Any("error", err))
 		utils.ErrorCode(w, http.StatusInternalServerError, "FETCH_ERROR", "failed to fetch category")
 		return
 	}
@@ -123,7 +123,7 @@ func (h *AdminCategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusConflict, "CATEGORY_IN_USE", err.Error())
 			return
 		}
-		slog.Error("failed to delete category", slog.String("id", id), slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to delete category", slog.String("id", id), slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to delete category")
 		return
 	}

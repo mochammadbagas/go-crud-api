@@ -25,7 +25,7 @@ func NewRoleHandler(rbacSvc service.RBACServiceInterface) *RoleHandler {
 func (h *RoleHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	roles, err := h.rbacSvc.ListRoles(r.Context())
 	if err != nil {
-		slog.Error("failed to fetch roles", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch roles", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to fetch roles")
 		return
 	}
@@ -48,7 +48,7 @@ func (h *RoleHandler) GetRole(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusNotFound, "ROLE_NOT_FOUND", err.Error())
 			return
 		}
-		slog.Error("failed to get role detail", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to get role detail", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to get role detail")
 		return
 	}
@@ -121,7 +121,7 @@ func (h *RoleHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusForbidden, "CANNOT_DELETE_SYSTEM_ROLE", err.Error())
 			return
 		}
-		slog.Error("failed to delete role", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to delete role", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to delete role")
 		return
 	}
@@ -171,7 +171,7 @@ func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) 
 func (h *RoleHandler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	perms, err := h.rbacSvc.ListPermissions(r.Context())
 	if err != nil {
-		slog.Error("failed to fetch permissions", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to fetch permissions", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to fetch permissions")
 		return
 	}
@@ -194,7 +194,7 @@ func (h *RoleHandler) GetPermission(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusNotFound, "PERMISSION_NOT_FOUND", err.Error())
 			return
 		}
-		slog.Error("failed to get permission detail", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to get permission detail", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to get permission detail")
 		return
 	}
@@ -263,7 +263,7 @@ func (h *RoleHandler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorCode(w, http.StatusNotFound, "PERMISSION_NOT_FOUND", err.Error())
 			return
 		}
-		slog.Error("failed to delete permission", slog.Any("error", err))
+		slog.ErrorContext(r.Context(), "failed to delete permission", slog.Any("error", err))
 		utils.Error(w, http.StatusInternalServerError, "failed to delete permission")
 		return
 	}
