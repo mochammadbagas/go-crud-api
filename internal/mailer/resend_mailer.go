@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"time"
@@ -76,6 +77,7 @@ func (m *resendMailer) send(ctx context.Context, toEmail, subject, htmlContent s
 
 func (m *resendMailer) SendResetPasswordEmail(ctx context.Context, toEmail, resetLink string) error {
 	subject := "Account Password Reset Instructions"
+	escapedLink := html.EscapeString(resetLink)
 	html := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -93,13 +95,14 @@ func (m *resendMailer) SendResetPasswordEmail(ctx context.Context, toEmail, rese
   </div>
 </body>
 </html>
-`, resetLink, resetLink, resetLink)
+`, escapedLink, escapedLink, escapedLink)
 
 	return m.send(ctx, toEmail, subject, html)
 }
 
 func (m *resendMailer) SendVerificationEmail(ctx context.Context, toEmail, verifyLink string) error {
 	subject := "Verify Your Email Address"
+	escapedLink := html.EscapeString(verifyLink)
 	html := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -117,14 +120,16 @@ func (m *resendMailer) SendVerificationEmail(ctx context.Context, toEmail, verif
   </div>
 </body>
 </html>
-`, verifyLink, verifyLink, verifyLink)
+`, escapedLink, escapedLink, escapedLink)
 
 	return m.send(ctx, toEmail, subject, html)
 }
 
 func (m *resendMailer) SendEmailChangeEmail(ctx context.Context, toNewEmail, confirmLink string) error {
 	subject := "Confirm Your New Email Address"
-	html := fmt.Sprintf(`
+	escapedEmail := html.EscapeString(toNewEmail)
+	escapedLink := html.EscapeString(confirmLink)
+	htmlContent := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -141,7 +146,31 @@ func (m *resendMailer) SendEmailChangeEmail(ctx context.Context, toNewEmail, con
   </div>
 </body>
 </html>
-`, toNewEmail, confirmLink, confirmLink, confirmLink)
+`, escapedEmail, escapedLink, escapedLink, escapedLink)
 
-	return m.send(ctx, toNewEmail, subject, html)
+	return m.send(ctx, toNewEmail, subject, htmlContent)
+}
+
+func (m *resendMailer) SendEmailChangeAlert(ctx context.Context, toOldEmail, newEmail string) error {
+	subject := "Security Alert: Email Address Change Requested"
+	escapedOld := html.EscapeString(toOldEmail)
+	escapedNew := html.EscapeString(newEmail)
+	htmlContent := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f6f9fc; padding: 40px 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 32px; box-shadow: 0 2px 4px rgba(0,0,0,0.06);">
+    <h2 style="color: #dc2626; margin-top: 0;">Security Alert: Email Change Initiated</h2>
+    <p style="color: #4a5568; line-height: 1.6;">A request was recently submitted to change your account email address from <strong>%s</strong> to <strong>%s</strong>.</p>
+    <p style="color: #4a5568; line-height: 1.6;">If you authorized this request, no action is needed on this email; please confirm the change via the verification email sent to the new address.</p>
+    <div style="margin: 24px 0; padding: 16px; background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 4px;">
+      <p style="color: #991b1b; margin: 0; font-size: 14px; line-height: 1.5;"><strong>Did not make this request?</strong> Your account may be compromised. Please log in immediately and change your password to revoke all active sessions.</p>
+    </div>
+  </div>
+</body>
+</html>
+`, escapedOld, escapedNew)
+
+	return m.send(ctx, toOldEmail, subject, htmlContent)
 }

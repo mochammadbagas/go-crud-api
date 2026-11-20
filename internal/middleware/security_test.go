@@ -27,7 +27,7 @@ func TestSecurityHeaders(t *testing.T) {
 		{"X-Frame-Options", "DENY"},
 		{"Referrer-Policy", "strict-origin-when-cross-origin"},
 		{"X-XSS-Protection", "1; mode=block"},
-		{"Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"},
+		{"Content-Security-Policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'"},
 	}
 
 	for _, tt := range tests {
@@ -35,5 +35,16 @@ func TestSecurityHeaders(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("Header %q = %q; want %q", tt.header, got, tt.expected)
 		}
+	}
+
+	// Test HSTS when request is over HTTPS proxy
+	recHTTPS := httptest.NewRecorder()
+	reqHTTPS := httptest.NewRequest(http.MethodGet, "/test", nil)
+	reqHTTPS.Header.Set("X-Forwarded-Proto", "https")
+	handler.ServeHTTP(recHTTPS, reqHTTPS)
+
+	hsts := recHTTPS.Header().Get("Strict-Transport-Security")
+	if hsts != "max-age=31536000; includeSubDomains" {
+		t.Errorf("expected HSTS header on HTTPS, got %q", hsts)
 	}
 }

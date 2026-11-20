@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -251,7 +252,7 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.JSON(w, http.StatusOK, map[string]string{
-		"message": "email address verified successfully. Your account is now active.",
+		"message": "email address verified successfully.",
 	})
 }
 
@@ -324,12 +325,9 @@ func (h *AuthHandler) clearRefreshTokenCookie(w http.ResponseWriter) {
 }
 
 func getClientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		parts := strings.Split(forwarded, ",")
-		return strings.TrimSpace(parts[0])
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
 	}
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		return strings.TrimSpace(realIP)
-	}
-	return r.RemoteAddr
+	return strings.TrimSpace(ip)
 }

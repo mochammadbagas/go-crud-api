@@ -20,12 +20,14 @@ type AnalyticsRepository interface {
 }
 
 type sqlAnalyticsRepository struct {
-	q *sqlc.Queries
+	db *sql.DB
+	q  *sqlc.Queries
 }
 
 func NewAnalyticsRepository(sqlDB *sql.DB) AnalyticsRepository {
 	return &sqlAnalyticsRepository{
-		q: sqlc.New(sqlDB),
+		db: sqlDB,
+		q:  sqlc.New(sqlDB),
 	}
 }
 
@@ -89,11 +91,40 @@ func (r *sqlAnalyticsRepository) GetUniqueVisitorsByRange(
 }
 
 func (r *sqlAnalyticsRepository) AggregateDaily(ctx context.Context, date time.Time) error {
-	return r.q.AggregateDailyAnalyticsForDate(ctx, date)
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+	startOfNextDay := startOfDay.AddDate(0, 0, 1)
+
+	return r.q.AggregateDailyAnalyticsForDate(ctx, sqlc.AggregateDailyAnalyticsForDateParams{
+		AnalyticsDate: startOfDay,
+		CreatedAt:     startOfDay,
+		CreatedAt_2:   startOfNextDay,
+	})
 }
 
 func (r *sqlAnalyticsRepository) PruneRawEvents(ctx context.Context, before time.Time) error {
-	return r.q.PruneAnalyticsEvents(ctx, before)
+	// Chunked batch delete to prevent long-held InnoDB range locks and replication lag (PERF-06)
+	batchSize := 5000
+	query := "DELETE FROM article_analytics_events WHERE created_at < ? LIMIT ?"
+	for {
+		res, err := r.db.ExecContext(ctx, query, before, batchSize)
+		if err != nil {
+			return err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 || affected < int64(batchSize) {
+			break
+		}
+		// Brief pause to yield lock contention to incoming public analytics events
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return nil
 }
 
 func toInt64(val interface{}) int64 {

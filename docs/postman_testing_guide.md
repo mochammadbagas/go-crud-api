@@ -103,7 +103,7 @@ Pada fase ini, kita akan menguji seluruh siklus hidup autentikasi: pendaftaran a
      ```
    - Salin token 64-karakter tersebut.
    - **Tempel ke variabel `sampleToken` di tab Variables koleksi Postman lalu Save (`Ctrl + S`).**
-   - Jalankan **1.8 Verifikasi Email (Token via Query)** (`GET {{baseUrl}}/api/v1/auth/verify-email?token={{sampleToken}}`). Status: `200 OK`.
+   - Jalankan **1.8 Verifikasi Email (Token via Query)** (`POST {{baseUrl}}/api/v1/auth/verify-email?token={{sampleToken}}`). Status: `200 OK` (menggunakan `POST` demi mencegah konsumsi token otomatis oleh web crawler / scanner email).
    - _(Alternatif)_ Anda juga dapat menguji **1.9 Verifikasi Email (Token via Body)** (`POST {{baseUrl}}/api/v1/auth/verify-email`). Status: `200 OK`.
 
 3. **1.10 Kirim Ulang Email Verifikasi** (`POST {{baseUrl}}/api/v1/auth/resend-verification`):
@@ -178,7 +178,7 @@ Pada fase ini, kita akan menguji seluruh siklus hidup autentikasi: pendaftaran a
    - Status: `200 OK`.
    - Buka terminal server, cari box `EMAIL CHANGE CONFIRMATION`. Salin token 64-karakternya.
    - **Tempel token tersebut ke variabel `sampleToken` di Postman dan Save (`Ctrl + S`).**
-8. **2.8 Konfirmasi Ganti Email (Token via Query)** (`GET {{baseUrl}}/api/v1/users/email/confirm-change?token={{sampleToken}}`):
+8. **2.8 Konfirmasi Ganti Email (Token via Query)** (`POST {{baseUrl}}/api/v1/users/email/confirm-change?token={{sampleToken}}`):
    - Status: `200 OK`. Email berhasil diganti.
    - _(Alternatif)_ **2.9 Konfirmasi Ganti Email (Token via Body)** (`POST {{baseUrl}}/api/v1/users/email/confirm-change`).
 

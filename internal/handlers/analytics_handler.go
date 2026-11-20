@@ -87,14 +87,25 @@ func (h *AnalyticsHandler) GetArticleAnalytics(w http.ResponseWriter, r *http.Re
 	endDate := now
 
 	if s := r.URL.Query().Get("start_date"); s != "" {
-		if parsed, err := time.Parse("2006-01-02", s); err == nil {
-			startDate = parsed
+		parsed, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			utils.ErrorCode(w, http.StatusBadRequest, "INVALID_DATE_FORMAT", "start_date must be in YYYY-MM-DD format")
+			return
 		}
+		startDate = parsed
 	}
 	if e := r.URL.Query().Get("end_date"); e != "" {
-		if parsed, err := time.Parse("2006-01-02", e); err == nil {
-			endDate = parsed
+		parsed, err := time.Parse("2006-01-02", e)
+		if err != nil {
+			utils.ErrorCode(w, http.StatusBadRequest, "INVALID_DATE_FORMAT", "end_date must be in YYYY-MM-DD format")
+			return
 		}
+		endDate = parsed
+	}
+
+	if startDate.After(endDate) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_DATE_RANGE", "start_date cannot be after end_date")
+		return
 	}
 
 	report, err := h.analyticsSvc.GetArticleAnalytics(r.Context(), articleID, startDate, endDate)

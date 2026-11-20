@@ -17,12 +17,15 @@ var (
 	// usernameRegex enforces 3-30 characters alphanumeric, underscore, or hyphen
 	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,30}$`)
 
-	// reservedUsernames protects critical system identifiers from being registered
+	// reservedUsernames protects critical system identifiers and core route paths from collision
 	reservedUsernames = map[string]struct{}{
 		"admin": {}, "administrator": {}, "root": {}, "system": {},
 		"superuser": {}, "support": {}, "security": {}, "api": {},
 		"null": {}, "undefined": {}, "guest": {}, "test": {},
 		"me": {}, "auth": {}, "users": {}, "posts": {},
+		"articles": {}, "categories": {}, "tags": {}, "media": {},
+		"dashboard": {}, "settings": {}, "login": {}, "register": {},
+		"logout": {}, "analytics": {}, "roles": {}, "permissions": {},
 	}
 )
 

@@ -38,6 +38,9 @@ func TestJWT_AccessTokenGenerationAndValidation(t *testing.T) {
 	if claims.Role != role {
 		t.Errorf("expected role %q, got %q", role, claims.Role)
 	}
+	if claims.Issuer != JWTIssuer {
+		t.Errorf("expected issuer %q, got %q", JWTIssuer, claims.Issuer)
+	}
 
 	// Test invalid secret
 	_, err = ValidateAccessToken("wrong-secret", tokenStr)

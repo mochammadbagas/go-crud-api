@@ -55,6 +55,16 @@ The API supports both browser clients and native/mobile applications:
 | **Web / SPA (React, Vue, Next.js)** | `HttpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie | Automatic browser cookie transmission | Immune to XSS token theft via client JavaScript |
 | **Mobile / Postman / CLI**          | Returned in JSON body (`refresh_token`)                | `X-Refresh-Token` header or JSON body | Works without cookie jars or webview storage    |
 
+### 1.3. Automated Multi-Device Session Revocation (`RevokeAllForUser`)
+
+To minimize window-of-vulnerability after account state mutations, the system invokes `tokenRepo.RevokeAllForUser` to immediately invalidate all active refresh tokens across all devices upon:
+
+1. **Password Mutation**: Manual password changes or successful password resets.
+2. **Email Change**: Confirmation of a new email address.
+3. **Account Deactivation or Suspension**: Immediate session severance when an administrator alters account status (`inactive`, `suspended`).
+4. **Role Modification / Demotion**: Modifying roles via `AssignUserRoles` invalidates existing token families to enforce immediate re-authentication with new privileges.
+5. **Account Deletion**: Complete deletion of user records cleans up all token lineages.
+
 ---
 
 ## 2. Password Hashing & Account Recovery
@@ -137,6 +147,15 @@ Accounts possessing the `super_admin` role automatically bypass granular permiss
 
 To eliminate redundant database lookups on high-frequency admin endpoints, `middleware.RequirePermission` caches user permissions in an in-memory thread-safe `sync.Map` with a 1-minute TTL. Whenever an administrator modifies role assignments (`AssignUserRoles`) or permission bindings (`AssignPermissionsToRole`), `middleware.ClearUserPermissionCache` is called immediately, ensuring authorization changes take effect instantly across the system.
 
+### 3.5. Dual-Layer Role Synchronization (`users.role` & `user_roles`)
+
+The architecture maintains dual-layer role persistence:
+
+1. **Relational RBAC (`user_roles`)**: Supports many-to-many role mappings per user.
+2. **Denormalized Legacy Column (`users.role`)**: Holds the primary user role (`super_admin` > `admin` > `user`) for high-speed JWT claim generation and backward compatibility.
+
+Whenever roles are updated via `userRepo.SetRoles`, the transaction atomically synchronizes both the pivot table and the primary `users.role` column, preventing role claim desynchronization.
+
 ---
 
 ## 4. Administrative Safeguards: Super Admin Safeguard
@@ -197,3 +216,8 @@ All HTTP responses carry standard OWASP security headers injected via `middlewar
 - `Referrer-Policy: strict-origin-when-cross-origin`: Restricts referrer leaks.
 - `X-XSS-Protection: 1; mode=block`: Activates browser reflected XSS filters.
 - `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`: Rejects framing and unauthorized execution.
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains`: Injected automatically whenever traffic is served over HTTPS/TLS or forwarded via `X-Forwarded-Proto: https` in production, enforcing transport-layer encryption.
+
+### 6.3. Strict Route Parameter & ULID Validation
+
+All handlers serving parameterized routes (`/users/{id}`, `/admin/articles/{id}`, `/admin/roles/{id}`, `/admin/permissions/{id}`, `/admin/media/{id}`) validate the input format using `utils.IsValidULID`. Malformed or non-Crockford Base32 parameters are rejected immediately with HTTP 400 `INVALID_ID`, shielding database queries from executing against malformed identifiers.

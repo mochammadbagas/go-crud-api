@@ -273,6 +273,10 @@ func (r *testUserRepo) CheckUserHasRole(ctx context.Context, userID, roleName st
 	return false, nil
 }
 
+func (r *testUserRepo) HasAssociatedData(ctx context.Context, userID string) (bool, error) {
+	return false, nil
+}
+
 type testRoleRepo struct {
 	roles   map[string]*models.Role
 	byName  map[string]*models.Role
@@ -444,6 +448,19 @@ func (r *testAuthTokenRepo) MarkAsUsed(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *testAuthTokenRepo) MarkAsUsedAtomic(ctx context.Context, id string) (bool, error) {
+	for _, t := range r.tokens {
+		if t.ID == id {
+			if t.IsUsed {
+				return false, nil
+			}
+			t.IsUsed = true
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *testAuthTokenRepo) InvalidateUserTokensByType(ctx context.Context, userID, tokenType string) error {
 	for _, t := range r.tokens {
 		if t.UserID == userID && t.TokenType == tokenType {
@@ -547,6 +564,16 @@ func (r *testRefreshTokenRepo) Revoke(ctx context.Context, id string) error {
 		return nil
 	}
 	return repository.ErrNotFound
+}
+func (r *testRefreshTokenRepo) RevokeAtomic(ctx context.Context, id string) (bool, error) {
+	if t, ok := r.tokensByID[id]; ok {
+		if t.IsRevoked {
+			return false, nil
+		}
+		t.IsRevoked = true
+		return true, nil
+	}
+	return false, repository.ErrNotFound
 }
 func (r *testRefreshTokenRepo) RevokeFamily(ctx context.Context, tokenFamily string) error {
 	for _, t := range r.tokensByID {
@@ -851,6 +878,13 @@ func (r *testArticleRepo) ListRevisions(ctx context.Context, articleID string) (
 	return []models.ArticleRevision{}, nil
 }
 
+func (r *testArticleRepo) CheckArticlePublishedExists(ctx context.Context, id string) (bool, error) {
+	if a, ok := r.articles[id]; ok && a.Status == models.StatusPublished {
+		return true, nil
+	}
+	return false, nil
+}
+
 func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	hashedPassword, err := argon2id.CreateHash("secret123", argon2id.DefaultParams)
 	if err != nil {
@@ -903,7 +937,7 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 
 	mailSvc := mailer.NewLogMailer()
 	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
-	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
+	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, refreshTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(catRepo)
 	tagSvc := service.NewTagService(tagRepo)
 	articleSvc := service.NewArticleService(articleRepo, catRepo, tagRepo)
@@ -915,7 +949,7 @@ func setupTestServer(t *testing.T) (http.Handler, string, string) {
 	analyticsSvc := service.NewAnalyticsService(analyticsRepo, articleRepo, cfg.JWTSecret)
 
 	rbacSvc := service.NewRBACService(roleRepo, permRepo)
-	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
+	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo, refreshTokenRepo)
 
 	now := time.Now().UTC()
 	_ = articleRepo.Create(context.Background(), &models.Article{
@@ -1424,8 +1458,16 @@ func TestForgotPasswordAndResetPasswordEndpoints(t *testing.T) {
 func TestEmailVerificationAndChangeEndpoints(t *testing.T) {
 	router, adminToken, _ := setupTestServer(t)
 
-	// 1. Verify email with empty/invalid token
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/verify-email?token=invalid-token", nil)
+	// 1. Verify email with empty/invalid token (POST required, GET returns 405)
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/auth/verify-email?token=invalid-token", nil)
+	recGet := httptest.NewRecorder()
+	router.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405 for GET verify email, got %d", recGet.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify-email", bytes.NewBufferString(`{"token":"invalid-token"}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -1462,8 +1504,16 @@ func TestEmailVerificationAndChangeEndpoints(t *testing.T) {
 		t.Errorf("expected 200 for request email change with auth, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
-	// 5. Confirm email change with bogus token
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/email/confirm-change?token=bogus", nil)
+	// 5. Confirm email change with bogus token (POST required, GET returns 405)
+	reqGet = httptest.NewRequest(http.MethodGet, "/api/v1/users/email/confirm-change?token=bogus", nil)
+	recGet = httptest.NewRecorder()
+	router.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405 for GET confirm email change, got %d", recGet.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/email/confirm-change", bytes.NewBufferString(`{"token":"bogus"}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -1538,6 +1588,24 @@ func TestRBACEndpoints(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200 for assign permissions, got %d: %s", rec.Code, rec.Body.String())
 	}
+
+	// 7. GET /api/v1/admin/roles/invalid-id -> 400 Bad Request (VAL-05)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/roles/invalid-id", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid role ULID, got %d", rec.Code)
+	}
+
+	// 8. GET /api/v1/admin/permissions/invalid-id -> 400 Bad Request (VAL-05)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/permissions/invalid-id", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid permission ULID, got %d", rec.Code)
+	}
 }
 
 func TestAdminUserEndpoints(t *testing.T) {
@@ -1592,13 +1660,22 @@ func TestAdminUserEndpoints(t *testing.T) {
 		t.Errorf("expected 403 for deactivating last super admin, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// 5. DELETE /api/v1/admin/users/{id} on last active super admin -> 403 Forbidden!
+	// 5. DELETE /api/v1/admin/users/{id} on self -> 400 Bad Request (CANNOT_DELETE_SELF)
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/"+adminUserID, nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403 for deleting last super admin, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for deleting self, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 6. GET /api/v1/admin/users/invalid-id -> 400 Bad Request (VAL-05)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/invalid-id", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid user ULID, got %d", rec.Code)
 	}
 }
 

@@ -41,6 +41,27 @@ func ClearUserPermissionCache(userID string) {
 	userPermCache.Delete(userID)
 }
 
+// StartPermissionCacheSweeper runs a periodic background sweeper that purges expired permission cache entries from memory (PERF-05).
+func StartPermissionCacheSweeper(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			now := time.Now()
+			userPermCache.Range(func(key, val interface{}) bool {
+				if entry, ok := val.(permCacheEntry); ok && now.After(entry.expiresAt) {
+					userPermCache.Delete(key)
+				}
+				return true
+			})
+		}
+	}
+}
+
 // JWTAuthMiddleware verifies the JWT Bearer access token.
 func JWTAuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

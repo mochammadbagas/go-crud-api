@@ -38,3 +38,8 @@ SELECT COUNT(*) FROM categories;
 -- name: CountArticlesByCategoryID :one
 SELECT COUNT(*) FROM articles
 WHERE category_id = ? AND deleted_at IS NULL;
+
+-- name: DetachCategoryFromSoftDeletedArticles :exec
+UPDATE articles
+SET category_id = NULL
+WHERE category_id = ? AND deleted_at IS NOT NULL;

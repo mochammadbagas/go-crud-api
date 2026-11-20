@@ -99,6 +99,16 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, id string) error {
 	return err
 }
 
+const revokeRefreshTokenAtomic = `-- name: RevokeRefreshTokenAtomic :execresult
+UPDATE refresh_tokens
+SET is_revoked = TRUE
+WHERE id = ? AND is_revoked = FALSE
+`
+
+func (q *Queries) RevokeRefreshTokenAtomic(ctx context.Context, id string) (sql.Result, error) {
+	return q.db.ExecContext(ctx, revokeRefreshTokenAtomic, id)
+}
+
 const revokeTokenFamily = `-- name: RevokeTokenFamily :exec
 UPDATE refresh_tokens
 SET is_revoked = TRUE

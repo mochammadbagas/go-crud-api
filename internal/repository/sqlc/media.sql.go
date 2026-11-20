@@ -128,10 +128,16 @@ SELECT
     url, mime_type, size, width, height, created_at, updated_at
 FROM media
 ORDER BY created_at DESC
+LIMIT ? OFFSET ?
 `
 
-func (q *Queries) ListMedia(ctx context.Context) ([]Media, error) {
-	rows, err := q.db.QueryContext(ctx, listMedia)
+type ListMediaParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]Media, error) {
+	rows, err := q.db.QueryContext(ctx, listMedia, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

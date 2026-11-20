@@ -123,7 +123,11 @@ func (s *RBACService) DeleteRole(ctx context.Context, id string) error {
 		return ErrCannotDeleteSystemRole
 	}
 
-	return s.roleRepo.Delete(ctx, id)
+	if err := s.roleRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+	middleware.ClearUserPermissionCache("")
+	return nil
 }
 
 func (s *RBACService) AssignPermissionsToRole(ctx context.Context, roleID string, input models.AssignPermissionsInput) error {
@@ -214,5 +218,9 @@ func (s *RBACService) DeletePermission(ctx context.Context, id string) error {
 		return err
 	}
 
-	return s.permRepo.Delete(ctx, id)
+	if err := s.permRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+	middleware.ClearUserPermissionCache("")
+	return nil
 }

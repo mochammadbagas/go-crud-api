@@ -13,6 +13,11 @@ UPDATE refresh_tokens
 SET is_revoked = TRUE
 WHERE id = ?;
 
+-- name: RevokeRefreshTokenAtomic :execresult
+UPDATE refresh_tokens
+SET is_revoked = TRUE
+WHERE id = ? AND is_revoked = FALSE;
+
 -- name: RevokeTokenFamily :exec
 UPDATE refresh_tokens
 SET is_revoked = TRUE

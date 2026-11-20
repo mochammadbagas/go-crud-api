@@ -14,6 +14,8 @@ var (
 	ErrCannotDeleteLastSuperAdmin     = errors.New("cannot delete the last active Super Admin")
 	ErrCannotDeactivateLastSuperAdmin = errors.New("cannot deactivate the last active Super Admin")
 	ErrCannotDemoteLastSuperAdmin     = errors.New("cannot revoke Super Admin role from the last active Super Admin")
+	ErrCannotDeleteSelf               = errors.New("cannot delete your own account")
+	ErrUserHasAssociatedData          = errors.New("cannot delete user with associated articles, media, or revisions")
 )
 
 type AdminUserServiceInterface interface {
@@ -26,20 +28,23 @@ type AdminUserServiceInterface interface {
 }
 
 type AdminUserService struct {
-	userRepo    repository.UserRepository
-	profileRepo repository.UserProfileRepository
-	roleRepo    repository.RoleRepository
+	userRepo         repository.UserRepository
+	profileRepo      repository.UserProfileRepository
+	roleRepo         repository.RoleRepository
+	refreshTokenRepo repository.RefreshTokenRepository
 }
 
 func NewAdminUserService(
 	userRepo repository.UserRepository,
 	profileRepo repository.UserProfileRepository,
 	roleRepo repository.RoleRepository,
+	refreshTokenRepo repository.RefreshTokenRepository,
 ) *AdminUserService {
 	return &AdminUserService{
-		userRepo:    userRepo,
-		profileRepo: profileRepo,
-		roleRepo:    roleRepo,
+		userRepo:         userRepo,
+		profileRepo:      profileRepo,
+		roleRepo:         roleRepo,
+		refreshTokenRepo: refreshTokenRepo,
 	}
 }
 
@@ -110,6 +115,9 @@ func (s *AdminUserService) UpdateUser(ctx context.Context, id string, input mode
 
 	if err := s.userRepo.UpdateByAdmin(ctx, id, input.Username, input.Email); err != nil {
 		if errors.Is(err, repository.ErrDuplicate) {
+			if existingUser, _ := s.userRepo.GetByUsername(ctx, input.Username); existingUser != nil && existingUser.ID != id {
+				return nil, ErrUsernameExists
+			}
 			return nil, ErrEmailExists
 		}
 		return nil, err
@@ -180,6 +188,12 @@ func (s *AdminUserService) UpdateUserStatus(ctx context.Context, id string, inpu
 		return nil, err
 	}
 
+	// Revoke sessions when account is deactivated or suspended (SEC-08)
+	if input.Status != models.StatusActive && s.refreshTokenRepo != nil {
+		_ = s.refreshTokenRepo.RevokeAllForUser(ctx, id)
+	}
+	middleware.ClearUserPermissionCache(id)
+
 	return s.GetUserDetail(ctx, id)
 }
 
@@ -227,6 +241,11 @@ func (s *AdminUserService) AssignUserRoles(ctx context.Context, id string, input
 	if err := s.userRepo.SetRoles(ctx, id, input.RoleIDs); err != nil {
 		return nil, err
 	}
+
+	// Invalidate user permission cache and revoke all active sessions so stale JWT claims cannot be refreshed (SEC-07)
+	if s.refreshTokenRepo != nil {
+		_ = s.refreshTokenRepo.RevokeAllForUser(ctx, id)
+	}
 	middleware.ClearUserPermissionCache(id)
 
 	return s.GetUserDetail(ctx, id)
@@ -256,6 +275,21 @@ func (s *AdminUserService) DeleteUser(ctx context.Context, id string) error {
 			return ErrCannotDeleteLastSuperAdmin
 		}
 	}
+
+	// Safeguard: Ensure user has no associated articles, media, or revisions (FK RESTRICT)
+	hasData, err := s.userRepo.HasAssociatedData(ctx, id)
+	if err != nil {
+		return err
+	}
+	if hasData {
+		return ErrUserHasAssociatedData
+	}
+
+	// Revoke sessions before account deletion (SEC-08)
+	if s.refreshTokenRepo != nil {
+		_ = s.refreshTokenRepo.RevokeAllForUser(ctx, id)
+	}
+	middleware.ClearUserPermissionCache(id)
 
 	return s.userRepo.Delete(ctx, id)
 }

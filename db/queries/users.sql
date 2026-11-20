@@ -50,6 +50,11 @@ UPDATE users
 SET username = ?, email = ?, updated_at = ?
 WHERE id = ?;
 
+-- name: UpdateUserRole :exec
+UPDATE users
+SET role = ?, updated_at = ?
+WHERE id = ?;
+
 -- name: DeleteUser :exec
 DELETE FROM users
 WHERE id = ?;

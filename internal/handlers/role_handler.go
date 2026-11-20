@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
@@ -35,7 +36,12 @@ func (h *RoleHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 
 // GetRole handles GET /api/v1/admin/roles/{id}
 func (h *RoleHandler) GetRole(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid role ID, must be a 26-character ULID")
+		return
+	}
+
 	role, err := h.rbacSvc.GetRoleByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNotFound) {
@@ -72,7 +78,12 @@ func (h *RoleHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 
 // UpdateRole handles PUT /api/v1/admin/roles/{id}
 func (h *RoleHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid role ID, must be a 26-character ULID")
+		return
+	}
+
 	var input models.UpdateRoleInput
 	if err := utils.DecodeJSON(w, r, &input); err != nil {
 		utils.HandleDecodeError(w, err)
@@ -94,7 +105,12 @@ func (h *RoleHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRole handles DELETE /api/v1/admin/roles/{id}
 func (h *RoleHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid role ID, must be a 26-character ULID")
+		return
+	}
+
 	err := h.rbacSvc.DeleteRole(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrRoleNotFound) {
@@ -117,7 +133,12 @@ func (h *RoleHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 
 // AssignPermissions handles PUT /api/v1/admin/roles/{id}/permissions
 func (h *RoleHandler) AssignPermissions(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid role ID, must be a 26-character ULID")
+		return
+	}
+
 	var input models.AssignPermissionsInput
 	if err := utils.DecodeJSON(w, r, &input); err != nil {
 		utils.HandleDecodeError(w, err)
@@ -161,7 +182,12 @@ func (h *RoleHandler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 
 // GetPermission handles GET /api/v1/admin/permissions/{id}
 func (h *RoleHandler) GetPermission(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid permission ID, must be a 26-character ULID")
+		return
+	}
+
 	perm, err := h.rbacSvc.GetPermissionByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrPermissionNotFound) {
@@ -198,7 +224,12 @@ func (h *RoleHandler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 
 // UpdatePermission handles PUT /api/v1/admin/permissions/{id}
 func (h *RoleHandler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid permission ID, must be a 26-character ULID")
+		return
+	}
+
 	var input models.UpdatePermissionInput
 	if err := utils.DecodeJSON(w, r, &input); err != nil {
 		utils.HandleDecodeError(w, err)
@@ -220,7 +251,12 @@ func (h *RoleHandler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 
 // DeletePermission handles DELETE /api/v1/admin/permissions/{id}
 func (h *RoleHandler) DeletePermission(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid permission ID, must be a 26-character ULID")
+		return
+	}
+
 	err := h.rbacSvc.DeletePermission(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrPermissionNotFound) {

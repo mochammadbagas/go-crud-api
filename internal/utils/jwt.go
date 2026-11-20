@@ -11,6 +11,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const (
+	JWTIssuer = "go-crud-api"
+)
+
 var (
 	ErrInvalidToken = errors.New("invalid or expired token")
 )
@@ -58,6 +62,7 @@ func GenerateAccessToken(secret string, ttl time.Duration, userID, username, ema
 		Role:     role,
 		Roles:    userRoles,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    JWTIssuer,
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),

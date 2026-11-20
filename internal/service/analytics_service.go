@@ -16,6 +16,7 @@ type AnalyticsServiceInterface interface {
 	GetArticleAnalytics(ctx context.Context, articleID string, startDate, endDate time.Time) (*models.ArticleAnalyticsReport, error)
 	GetOverview(ctx context.Context) (*models.AnalyticsOverview, error)
 	Aggregate(ctx context.Context, date time.Time) error
+	PruneRawEvents(ctx context.Context, retentionDays int) error
 }
 
 type AnalyticsService struct {
@@ -57,9 +58,13 @@ func (s *AnalyticsService) RecordEvent(
 		return err
 	}
 
-	// Verify article exists
-	if _, err := s.articleRepo.GetByID(ctx, articleID); err != nil {
+	// Verify article exists, is published, and not deleted (PERF-01 & SEC-05)
+	exists, err := s.articleRepo.CheckArticlePublishedExists(ctx, articleID)
+	if err != nil {
 		return err
+	}
+	if !exists {
+		return repository.ErrArticleNotFound
 	}
 
 	visitorID := s.GeneratePseudonymVisitorID(ip, userAgent, time.Now().UTC())
@@ -121,4 +126,12 @@ func (s *AnalyticsService) GetOverview(ctx context.Context) (*models.AnalyticsOv
 
 func (s *AnalyticsService) Aggregate(ctx context.Context, date time.Time) error {
 	return s.analyticsRepo.AggregateDaily(ctx, date)
+}
+
+func (s *AnalyticsService) PruneRawEvents(ctx context.Context, retentionDays int) error {
+	if retentionDays <= 0 {
+		retentionDays = 30
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+	return s.analyticsRepo.PruneRawEvents(ctx, cutoff)
 }

@@ -55,7 +55,7 @@ The **Go REST API Starter Kit** is structured around the principles of **Clean A
 - Spawns background workers with graceful shutdown contexts (`sync.WaitGroup`):
   - **Token Pruning Worker**: Executes every 24 hours to clean up expired sessions and auth tokens.
   - **Article Publisher Worker**: Executes every 1 minute to transition scheduled articles (`scheduled_at <= NOW()`) into `published`.
-  - **Analytics Aggregator & Pruning Worker**: Executes every 1 hour to aggregate daily engagement metrics and prune raw event rows older than 90 days.
+  - **Analytics Aggregator & Pruning Worker**: Executes every 1 hour to aggregate daily engagement metrics via SARGable range scans and prune raw event rows older than 30 days in bounded batches of 5,000 rows to prevent table lock contention.
 - Registers deep health and readiness probes (`/health`, `/health/live`, `/health/ready`) integrated with database connectivity pinging.
 - Manages graceful shutdown via operating system signal trapping (`SIGINT`, `SIGTERM`).
 
@@ -162,38 +162,39 @@ Global Chi router 404 (Not Found) and 405 (Method Not Allowed) handlers are conf
 
 #### Application-Level Error Codes Dictionary
 
-| Code                                 | HTTP Status               | Description / Trigger Scenario                                            |
-| :----------------------------------- | :------------------------ | :------------------------------------------------------------------------ |
-| `TOKEN_REQUIRED`                     | 401 Unauthorized          | Missing or malformed `Authorization: Bearer <token>` header               |
-| `INVALID_OR_EXPIRED_TOKEN`           | 401 Unauthorized          | JWT access token is invalid, signature mismatch, or expired               |
-| `INVALID_CREDENTIALS`                | 401 Unauthorized          | Incorrect email or password during login                                  |
-| `TOKEN_EXPIRED`                      | 401 Unauthorized          | Refresh token expired during token rotation                               |
-| `TOKEN_REUSED`                       | 401 Unauthorized          | Refresh token reuse detected (session hijacking mitigation)               |
-| `UNAUTHORIZED`                       | 401 Unauthorized          | Generic authentication failure fallback                                   |
-| `INSUFFICIENT_PERMISSIONS`           | 403 Forbidden             | Authenticated user lacks the required RBAC role or permission             |
-| `ACCOUNT_INACTIVE`                   | 403 Forbidden             | Account status is `inactive` or `suspended`                               |
-| `CANNOT_DELETE_LAST_SUPER_ADMIN`     | 403 Forbidden             | Invariant safeguard preventing deletion of the last Super Admin           |
-| `CANNOT_DEACTIVATE_LAST_SUPER_ADMIN` | 403 Forbidden             | Safeguard preventing deactivation of the last Super Admin                 |
-| `CANNOT_DEMOTE_LAST_SUPER_ADMIN`     | 403 Forbidden             | Safeguard preventing revoking Super Admin role from the last holder       |
-| `CANNOT_DELETE_SYSTEM_ROLE`          | 403 Forbidden             | Protected system roles (`super_admin`, `admin`, `user`) cannot be deleted |
-| `NOT_FOUND`                          | 404 Not Found             | Route endpoint not found or generic record missing                        |
-| `USER_NOT_FOUND`                     | 404 Not Found             | Requested user ID does not exist in the database                          |
-| `CATEGORY_NOT_FOUND`                 | 404 Not Found             | Requested category ID or slug does not exist                              |
-| `POST_NOT_FOUND`                     | 404 Not Found             | Requested post ID or slug does not exist / not published                  |
-| `ROLE_NOT_FOUND`                     | 404 Not Found             | Requested role ID does not exist                                          |
-| `PERMISSION_NOT_FOUND`               | 404 Not Found             | Requested permission ID does not exist                                    |
-| `CONFLICT`                           | 409 Conflict              | Generic uniqueness constraint violation                                   |
-| `EMAIL_ALREADY_EXISTS`               | 409 Conflict              | User registration or email update with an existing email                  |
-| `USERNAME_ALREADY_EXISTS`            | 409 Conflict              | User registration or username update with an existing username            |
-| `CATEGORY_SLUG_EXISTS`               | 409 Conflict              | Category creation or update with an existing URL slug                     |
-| `POST_SLUG_EXISTS`                   | 409 Conflict              | Post creation or update with an existing URL slug                         |
-| `ROLE_NAME_EXISTS`                   | 409 Conflict              | Role creation with an existing system name                                |
-| `PERMISSION_NAME_EXISTS`             | 409 Conflict              | Permission creation with an existing resource-action name                 |
-| `EMAIL_ALREADY_VERIFIED`             | 409 Conflict              | Resending verification for an already verified email                      |
-| `BAD_REQUEST`                        | 400 Bad Request           | Malformed JSON body or invalid route parameter                            |
-| `RATE_LIMIT_EXCEEDED`                | 429 Too Many Requests     | IP rate limit exceeded (e.g. max 10 auth requests/min)                    |
-| `METHOD_NOT_ALLOWED`                 | 405 Method Not Allowed    | HTTP method is not allowed for the requested endpoint                     |
-| `INTERNAL_SERVER_ERROR`              | 500 Internal Server Error | Unhandled server error or unexpected infrastructure failure               |
+| Code                                 | HTTP Status               | Description / Trigger Scenario                                                  |
+| :----------------------------------- | :------------------------ | :------------------------------------------------------------------------------ |
+| `TOKEN_REQUIRED`                     | 401 Unauthorized          | Missing or malformed `Authorization: Bearer <token>` header                     |
+| `INVALID_OR_EXPIRED_TOKEN`           | 401 Unauthorized          | JWT access token is invalid, signature mismatch, or expired                     |
+| `INVALID_CREDENTIALS`                | 401 Unauthorized          | Incorrect email or password during login                                        |
+| `TOKEN_EXPIRED`                      | 401 Unauthorized          | Refresh token expired during token rotation                                     |
+| `TOKEN_REUSED`                       | 401 Unauthorized          | Refresh token reuse detected (session hijacking mitigation)                     |
+| `UNAUTHORIZED`                       | 401 Unauthorized          | Generic authentication failure fallback                                         |
+| `INSUFFICIENT_PERMISSIONS`           | 403 Forbidden             | Authenticated user lacks the required RBAC role or permission                   |
+| `ACCOUNT_INACTIVE`                   | 403 Forbidden             | Account status is `inactive` or `suspended`                                     |
+| `CANNOT_DELETE_LAST_SUPER_ADMIN`     | 403 Forbidden             | Invariant safeguard preventing deletion of the last Super Admin                 |
+| `CANNOT_DEACTIVATE_LAST_SUPER_ADMIN` | 403 Forbidden             | Safeguard preventing deactivation of the last Super Admin                       |
+| `CANNOT_DEMOTE_LAST_SUPER_ADMIN`     | 403 Forbidden             | Safeguard preventing revoking Super Admin role from the last holder             |
+| `CANNOT_DELETE_SYSTEM_ROLE`          | 403 Forbidden             | Protected system roles (`super_admin`, `admin`, `user`) cannot be deleted       |
+| `NOT_FOUND`                          | 404 Not Found             | Route endpoint not found or generic record missing                              |
+| `USER_NOT_FOUND`                     | 404 Not Found             | Requested user ID does not exist in the database                                |
+| `CATEGORY_NOT_FOUND`                 | 404 Not Found             | Requested category ID or slug does not exist                                    |
+| `POST_NOT_FOUND`                     | 404 Not Found             | Requested post ID or slug does not exist / not published                        |
+| `ROLE_NOT_FOUND`                     | 404 Not Found             | Requested role ID does not exist                                                |
+| `PERMISSION_NOT_FOUND`               | 404 Not Found             | Requested permission ID does not exist                                          |
+| `CONFLICT`                           | 409 Conflict              | Generic uniqueness constraint violation                                         |
+| `EMAIL_ALREADY_EXISTS`               | 409 Conflict              | User registration or email update with an existing email                        |
+| `USERNAME_ALREADY_EXISTS`            | 409 Conflict              | User registration or username update with an existing username                  |
+| `CATEGORY_SLUG_EXISTS`               | 409 Conflict              | Category creation or update with an existing URL slug                           |
+| `POST_SLUG_EXISTS`                   | 409 Conflict              | Post creation or update with an existing URL slug                               |
+| `ROLE_NAME_EXISTS`                   | 409 Conflict              | Role creation with an existing system name                                      |
+| `PERMISSION_NAME_EXISTS`             | 409 Conflict              | Permission creation with an existing resource-action name                       |
+| `EMAIL_ALREADY_VERIFIED`             | 409 Conflict              | Resending verification for an already verified email                            |
+| `INVALID_ID`                         | 400 Bad Request           | Route parameter or payload ID is not a valid 26-character Crockford Base32 ULID |
+| `BAD_REQUEST`                        | 400 Bad Request           | Malformed JSON body or invalid route parameter                                  |
+| `RATE_LIMIT_EXCEEDED`                | 429 Too Many Requests     | IP rate limit exceeded (e.g. max 10 auth requests/min)                          |
+| `METHOD_NOT_ALLOWED`                 | 405 Method Not Allowed    | HTTP method is not allowed for the requested endpoint                           |
+| `INTERNAL_SERVER_ERROR`              | 500 Internal Server Error | Unhandled server error or unexpected infrastructure failure                     |
 
 ### 3.2. Multi-Input Field Validation
 
@@ -273,3 +274,11 @@ db.SetConnMaxIdleTime(10 * time.Minute) // Closes idle connections before remote
 ```
 
 All migrations are run sequentially on startup using `golang-migrate` embedded into the Go binary (`//go:embed`), guaranteeing zero schema drift across environments.
+
+### 5.1. High-Performance Composite Indexes (Migration `000002`)
+
+To ensure high-throughput execution under high-volume database loads, migration `000002_add_performance_indexes.up.sql` establishes covering and composite B-tree indexes:
+
+- `idx_articles_status_published_deleted`: Indexes `(status, published_at, deleted_at)` to accelerate public article queries avoiding filesort and table scans.
+- `idx_article_analytics_retention`: Indexes `(created_at)` on raw visitor events enabling high-speed batch deletions during the 30-day retention pruning job.
+- `idx_article_analytics_daily_range`: Indexes `(article_id, date)` on aggregated daily analytics metrics to optimize SARGable date range queries.

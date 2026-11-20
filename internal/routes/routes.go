@@ -115,34 +115,43 @@ func Setup(
 		// ---------------------------------------------------------------------
 		v1.Get("/articles", publicArticleHandler.List)
 		v1.Get("/articles/{slug}", publicArticleHandler.Get)
-		v1.Post("/articles/{id}/analytics", analyticsHandler.RecordEvent)
+
+		analyticsLimiter := httprate.LimitBy(
+			60,
+			time.Minute,
+			clientIPKey,
+			httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+				utils.ErrorCode(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "too many analytics requests, please slow down")
+			}),
+		)
+		v1.With(analyticsLimiter).Post("/articles/{id}/analytics", analyticsHandler.RecordEvent)
 
 		v1.Get("/categories", publicCategoryHandler.List)
 		v1.Get("/categories/{slug}/articles", publicCategoryHandler.ListArticlesByCategory)
 
 		v1.Get("/tags", tagHandler.List)
 
+		// Shared rate limiter for sensitive authentication & token verification endpoints
+		authLimiter := httprate.LimitBy(
+			10,
+			time.Minute,
+			clientIPKey,
+			httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+				utils.ErrorCode(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "too many authentication attempts, please try again later")
+			}),
+		)
+
 		// ---------------------------------------------------------------------
 		// 2. AUTHENTICATION ENDPOINTS (/api/v1/auth)
 		// ---------------------------------------------------------------------
 		v1.Route("/auth", func(auth chi.Router) {
-			authLimiter := httprate.LimitBy(
-				10,
-				time.Minute,
-				clientIPKey,
-				httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
-					utils.ErrorCode(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "too many authentication attempts, please try again later")
-				}),
-			)
-
-			// Public auth routes
+			// Public auth routes (all rate-limited)
 			auth.With(authLimiter).Post("/register", authHandler.Register)
 			auth.With(authLimiter).Post("/login", authHandler.Login)
-			auth.Post("/refresh", authHandler.RefreshToken)
+			auth.With(authLimiter).Post("/refresh", authHandler.RefreshToken)
 			auth.With(authLimiter).Post("/forgot-password", authHandler.ForgotPassword)
 			auth.With(authLimiter).Post("/reset-password", authHandler.ResetPassword)
-			auth.Post("/verify-email", authHandler.VerifyEmail)
-			auth.Get("/verify-email", authHandler.VerifyEmail)
+			auth.With(authLimiter).Post("/verify-email", authHandler.VerifyEmail)
 			auth.With(authLimiter).Post("/resend-verification", authHandler.ResendVerification)
 
 			// Protected auth routes (requires valid JWT Access Token)
@@ -158,9 +167,8 @@ func Setup(
 		// 3. USER MANAGEMENT ENDPOINTS (/api/v1/users)
 		// ---------------------------------------------------------------------
 		v1.Route("/users", func(users chi.Router) {
-			// Public email change confirmation (token-gated)
-			users.Post("/email/confirm-change", userHandler.ConfirmEmailChange)
-			users.Get("/email/confirm-change", userHandler.ConfirmEmailChange)
+			// Public email change confirmation (token-gated, POST only to prevent scanner consumption)
+			users.With(authLimiter).Post("/email/confirm-change", userHandler.ConfirmEmailChange)
 
 			// Protected user routes (requires valid JWT Access Token)
 			users.Group(func(protected chi.Router) {
@@ -269,10 +277,12 @@ func (nfs noDirListingFS) Open(path string) (http.File, error) {
 	}
 	if s.IsDir() {
 		index := strings.TrimSuffix(path, "/") + "/index.html"
-		if _, err := nfs.fs.Open(index); err != nil {
+		fIdx, err := nfs.fs.Open(index)
+		if err != nil {
 			f.Close()
 			return nil, os.ErrNotExist
 		}
+		_ = fIdx.Close()
 	}
 	return f, nil
 }

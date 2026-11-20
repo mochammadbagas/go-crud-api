@@ -31,26 +31,29 @@ type UserServiceInterface interface {
 }
 
 type UserService struct {
-	userRepo      repository.UserRepository
-	profileRepo   repository.UserProfileRepository
-	authTokenRepo repository.AuthTokenRepository
-	mailer        mailer.Mailer
-	cfg           *config.Config
+	userRepo         repository.UserRepository
+	profileRepo      repository.UserProfileRepository
+	authTokenRepo    repository.AuthTokenRepository
+	refreshTokenRepo repository.RefreshTokenRepository
+	mailer           mailer.Mailer
+	cfg              *config.Config
 }
 
 func NewUserService(
 	userRepo repository.UserRepository,
 	profileRepo repository.UserProfileRepository,
 	authTokenRepo repository.AuthTokenRepository,
+	refreshTokenRepo repository.RefreshTokenRepository,
 	mail mailer.Mailer,
 	cfg *config.Config,
 ) *UserService {
 	return &UserService{
-		userRepo:      userRepo,
-		profileRepo:   profileRepo,
-		authTokenRepo: authTokenRepo,
-		mailer:        mail,
-		cfg:           cfg,
+		userRepo:         userRepo,
+		profileRepo:      profileRepo,
+		authTokenRepo:    authTokenRepo,
+		refreshTokenRepo: refreshTokenRepo,
+		mailer:           mail,
+		cfg:              cfg,
 	}
 }
 
@@ -196,6 +199,10 @@ func (s *UserService) RequestEmailChange(ctx context.Context, userID string, inp
 		if err := s.mailer.SendEmailChangeEmail(ctx, input.NewEmail, confirmLink); err != nil {
 			slog.Error("Failed to send email change confirmation email", slog.String("email", input.NewEmail), slog.Any("error", err))
 		}
+		// Security notification to the current email address
+		if err := s.mailer.SendEmailChangeAlert(ctx, user.Email, input.NewEmail); err != nil {
+			slog.Error("Failed to send email change security alert to old email address", slog.String("old_email", user.Email), slog.Any("error", err))
+		}
 	}
 
 	return nil
@@ -235,11 +242,24 @@ func (s *UserService) ConfirmEmailChange(ctx context.Context, input models.Confi
 		return ErrEmailExists
 	}
 
-	// Mark token as used to prevent concurrency race
-	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
+	// Atomic mark token as used to prevent concurrency race
+	marked, err := s.authTokenRepo.MarkAsUsedAtomic(ctx, storedToken.ID)
+	if err != nil {
 		return err
+	}
+	if !marked {
+		return ErrAuthTokenUsed
 	}
 
 	// Update email and mark email as verified
-	return s.userRepo.UpdateEmail(ctx, storedToken.UserID, newEmail)
+	if err := s.userRepo.UpdateEmail(ctx, storedToken.UserID, newEmail); err != nil {
+		return err
+	}
+
+	// Revoke all active sessions so any compromised devices cannot maintain persistence (W3-SEC-01)
+	if s.refreshTokenRepo != nil {
+		_ = s.refreshTokenRepo.RevokeAllForUser(ctx, storedToken.UserID)
+	}
+
+	return nil
 }

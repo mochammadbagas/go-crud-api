@@ -18,12 +18,13 @@ func TestUserService_EmailChangeWorkflow(t *testing.T) {
 	userRepo := newMockUserRepo()
 	profileRepo := newMockProfileRepo()
 	authTokenRepo := newMockAuthTokenRepo()
+	refreshTokenRepo := newMockRefreshTokenRepo()
 	mailSvc := mailer.NewLogMailer()
 	cfg := &config.Config{
 		FrontendURL: "http://localhost:3000",
 	}
 
-	svc := NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
+	svc := NewUserService(userRepo, profileRepo, authTokenRepo, refreshTokenRepo, mailSvc, cfg)
 	ctx := context.Background()
 
 	// Seed user with hashed password

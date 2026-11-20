@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -40,5 +41,30 @@ func TestGenerateSlug(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Non-Latin title fallback to post-ULID", func(t *testing.T) {
+		got := GenerateSlug("こんにちは 世界")
+		if len(got) < 10 || !strings.HasPrefix(got, "post-") {
+			t.Errorf("expected non-Latin slug to start with 'post-', got %q", got)
+		}
+	})
+
+	t.Run("Emoji-only title fallback to post-ULID", func(t *testing.T) {
+		got := GenerateSlug("🚀🔥🎉 (???)")
+		if len(got) < 10 || !strings.HasPrefix(got, "post-") {
+			t.Errorf("expected emoji-only slug to start with 'post-', got %q", got)
+		}
+	})
+
+	t.Run("Overly long title capped at 255 chars without trailing hyphen", func(t *testing.T) {
+		veryLongTitle := strings.Repeat("golang-crud-api-testing-", 20)
+		got := GenerateSlug(veryLongTitle)
+		if len(got) > 255 {
+			t.Errorf("expected slug length <= 255, got %d", len(got))
+		}
+		if strings.HasSuffix(got, "-") {
+			t.Errorf("expected slug not to end with hyphen, got %q", got)
+		}
+	})
 }
 

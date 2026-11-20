@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/database"
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
 	"github.com/mochammadbagas/go-crud-api/internal/mailer"
+	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/routes"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
@@ -63,14 +65,14 @@ func main() {
 
 	// 8. Initialize Services (Business Logic Layer)
 	authSvc := service.NewAuthService(userRepo, profileRepo, refreshTokenRepo, authTokenRepo, mailSvc, cfg, roleRepo)
-	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, mailSvc, cfg)
+	userSvc := service.NewUserService(userRepo, profileRepo, authTokenRepo, refreshTokenRepo, mailSvc, cfg)
 	categorySvc := service.NewCategoryService(categoryRepo)
 	tagSvc := service.NewTagService(tagRepo)
 	mediaSvc := service.NewMediaService(mediaRepo, storageSvc, cfg)
 	articleSvc := service.NewArticleService(articleRepo, categoryRepo, tagRepo)
 	analyticsSvc := service.NewAnalyticsService(analyticsRepo, articleRepo, cfg.JWTSecret)
 	rbacSvc := service.NewRBACService(roleRepo, permRepo)
-	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo)
+	adminUserSvc := service.NewAdminUserService(userRepo, profileRepo, roleRepo, refreshTokenRepo)
 
 	// 9. Initialize HTTP Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, cfg)
@@ -106,18 +108,38 @@ func main() {
 	// 11. Start Background Concurrency Workers with Graceful Shutdown
 	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
 	defer stopCleanup()
+	var workerWg sync.WaitGroup
 
 	// Token cleanup (every 24 hours)
-	go startTokenCleanup(cleanupCtx, refreshTokenRepo, authTokenRepo, 24*time.Hour)
+	workerWg.Add(1)
+	go func() {
+		defer workerWg.Done()
+		startTokenCleanup(cleanupCtx, refreshTokenRepo, authTokenRepo, 24*time.Hour)
+	}()
 
 	// Scheduled article publisher (every 1 minute)
-	go worker.StartScheduledPublisher(cleanupCtx, articleRepo, 1*time.Minute)
+	workerWg.Add(1)
+	go func() {
+		defer workerWg.Done()
+		worker.StartScheduledPublisher(cleanupCtx, articleRepo, 1*time.Minute)
+	}()
 
 	// Daily analytics aggregator (every 1 hour)
-	go worker.StartAnalyticsAggregator(cleanupCtx, analyticsSvc, 1*time.Hour)
+	workerWg.Add(1)
+	go func() {
+		defer workerWg.Done()
+		worker.StartAnalyticsAggregator(cleanupCtx, analyticsSvc, 1*time.Hour)
+	}()
+
+	// Permission cache sweeper (every 5 minutes) (PERF-05)
+	workerWg.Add(1)
+	go func() {
+		defer workerWg.Done()
+		middleware.StartPermissionCacheSweeper(cleanupCtx, 5*time.Minute)
+	}()
 
 	// 12. Run HTTP Server with Graceful Shutdown
-	runServer(router, cfg.Port)
+	runServer(router, cfg.Port, stopCleanup, &workerWg)
 }
 
 func startTokenCleanup(ctx context.Context, tokenRepo repository.RefreshTokenRepository, authTokenRepo repository.AuthTokenRepository, interval time.Duration) {
@@ -154,7 +176,7 @@ func initLogger() {
 	slog.SetDefault(logger)
 }
 
-func runServer(handler http.Handler, port string) {
+func runServer(handler http.Handler, port string, stopWorkers context.CancelFunc, workerWg *sync.WaitGroup) {
 	serverAddr := ":" + port
 	srv := &http.Server{
 		Addr:         serverAddr,
@@ -178,12 +200,33 @@ func runServer(handler http.Handler, port string) {
 	<-quit
 	slog.Info("Shutdown signal received. Shutting down server gracefully...")
 
+	// 1. Shut down HTTP server gracefully first to stop accepting new traffic (ARCH-01)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("Graceful server shutdown failed, forcing exit", slog.Any("error", err))
+		slog.Error("Graceful HTTP server shutdown failed, forcing exit", slog.Any("error", err))
 		os.Exit(1)
+	}
+	slog.Info("HTTP server stopped accepting new requests.")
+
+	// 2. Cancel context for background workers and wait with bounded timeout
+	if stopWorkers != nil {
+		stopWorkers()
+	}
+	if workerWg != nil {
+		workerDone := make(chan struct{})
+		go func() {
+			workerWg.Wait()
+			close(workerDone)
+		}()
+
+		select {
+		case <-workerDone:
+			slog.Info("All background concurrency workers stopped safely.")
+		case <-time.After(5 * time.Second):
+			slog.Warn("Background workers timed out (5s), forcing exit.")
+		}
 	}
 
 	slog.Info("Server stopped safely.")

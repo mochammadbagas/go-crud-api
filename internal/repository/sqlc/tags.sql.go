@@ -118,9 +118,10 @@ func (q *Queries) GetTagBySlug(ctx context.Context, slug string) (Tags, error) {
 const listTags = `-- name: ListTags :many
 SELECT 
     t.id, t.name, t.slug, t.created_at, t.updated_at,
-    COUNT(at.article_id) AS usage_count
+    COUNT(a.id) AS usage_count
 FROM tags t
 LEFT JOIN article_tags at ON t.id = at.tag_id
+LEFT JOIN articles a ON at.article_id = a.id AND a.deleted_at IS NULL
 GROUP BY t.id
 ORDER BY t.name ASC
 `

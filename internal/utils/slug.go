@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -36,6 +37,17 @@ func GenerateSlug(title string) string {
 
 	// 6. Trim leading and trailing hyphens
 	s = strings.Trim(s, "-")
+
+	// 7. Enforce maximum length limit of 255 characters (MySQL VARCHAR(255) safe)
+	if len(s) > 255 {
+		s = s[:255]
+		s = strings.TrimRight(s, "-")
+	}
+
+	// 8. Fallback for non-Latin scripts or pure emoji titles
+	if s == "" {
+		return fmt.Sprintf("post-%s", strings.ToLower(NewULID()))
+	}
 
 	return s
 }

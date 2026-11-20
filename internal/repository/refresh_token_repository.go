@@ -15,6 +15,7 @@ type RefreshTokenRepository interface {
 	Create(ctx context.Context, token *models.RefreshToken) error
 	GetByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
 	Revoke(ctx context.Context, id string) error
+	RevokeAtomic(ctx context.Context, id string) (bool, error)
 	RevokeFamily(ctx context.Context, tokenFamily string) error
 	RevokeAllForUser(ctx context.Context, userID string) error
 	DeleteExpired(ctx context.Context) error
@@ -92,6 +93,18 @@ func (r *sqlRefreshTokenRepository) GetByHash(ctx context.Context, tokenHash str
 
 func (r *sqlRefreshTokenRepository) Revoke(ctx context.Context, id string) error {
 	return r.q.RevokeRefreshToken(ctx, id)
+}
+
+func (r *sqlRefreshTokenRepository) RevokeAtomic(ctx context.Context, id string) (bool, error) {
+	res, err := r.q.RevokeRefreshTokenAtomic(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
 }
 
 func (r *sqlRefreshTokenRepository) RevokeFamily(ctx context.Context, tokenFamily string) error {

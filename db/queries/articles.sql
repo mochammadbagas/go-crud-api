@@ -92,7 +92,7 @@ WHERE id = ? AND deleted_at IS NULL;
 
 -- name: SoftDeleteArticle :exec
 UPDATE articles
-SET deleted_at = ?
+SET deleted_at = ?, slug = ?
 WHERE id = ? AND deleted_at IS NULL;
 
 -- name: HardDeleteArticle :exec
@@ -101,7 +101,7 @@ WHERE id = ?;
 
 -- name: PublishScheduledArticles :exec
 UPDATE articles
-SET status = 'published', published_at = NOW(), updated_at = NOW()
+SET status = 'published', published_at = COALESCE(scheduled_at, NOW()), updated_at = NOW()
 WHERE status = 'scheduled' AND scheduled_at <= NOW() AND deleted_at IS NULL;
 
 -- name: CountArticles :one

@@ -58,6 +58,7 @@ type UserRepository interface {
 	CountActiveSuperAdminsExcluding(ctx context.Context, userID string) (int64, error)
 	GetUserPermissions(ctx context.Context, userID string) ([]string, error)
 	CheckUserHasRole(ctx context.Context, userID, roleName string) (bool, error)
+	HasAssociatedData(ctx context.Context, userID string) (bool, error)
 }
 
 type sqlUserRepository struct {
@@ -649,6 +650,29 @@ func (r *sqlUserRepository) SetRoles(ctx context.Context, userID string, roleIDs
 		}
 	}
 
+	// 3. Synchronize legacy users.role column with highest assigned role (SEC-07)
+	primaryRole := sqlc.UsersRoleUser
+	for _, roleID := range roleIDs {
+		roleRow, err := qtx.GetRoleByID(ctx, roleID)
+		if err == nil {
+			if roleRow.Name == models.RoleSuperAdmin {
+				primaryRole = sqlc.UsersRoleSuperAdmin
+				break
+			}
+			if roleRow.Name == models.RoleAdmin && primaryRole != sqlc.UsersRoleSuperAdmin {
+				primaryRole = sqlc.UsersRoleAdmin
+			}
+		}
+	}
+
+	if err := qtx.UpdateUserRole(ctx, sqlc.UpdateUserRoleParams{
+		ID:        userID,
+		Role:      primaryRole,
+		UpdatedAt: now,
+	}); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -673,4 +697,19 @@ func (r *sqlUserRepository) CheckUserHasRole(ctx context.Context, userID, roleNa
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *sqlUserRepository) HasAssociatedData(ctx context.Context, userID string) (bool, error) {
+	query := `
+		SELECT (
+			(SELECT COUNT(*) FROM articles WHERE author_id = ?) +
+			(SELECT COUNT(*) FROM media WHERE uploaded_by = ?) +
+			(SELECT COUNT(*) FROM article_revisions WHERE user_id = ?)
+		)
+	`
+	var total int64
+	if err := r.db.QueryRowContext(ctx, query, userID, userID, userID).Scan(&total); err != nil {
+		return false, err
+	}
+	return total > 0, nil
 }

@@ -15,17 +15,20 @@ type AuthTokenRepository interface {
 	Create(ctx context.Context, token *models.AuthToken) error
 	GetByHashAndType(ctx context.Context, tokenHash, tokenType string) (*models.AuthToken, error)
 	MarkAsUsed(ctx context.Context, id string) error
+	MarkAsUsedAtomic(ctx context.Context, id string) (bool, error)
 	InvalidateUserTokensByType(ctx context.Context, userID, tokenType string) error
 	DeleteExpiredOrUsed(ctx context.Context) error
 }
 
 type sqlAuthTokenRepository struct {
-	q *sqlc.Queries
+	db *sql.DB
+	q  *sqlc.Queries
 }
 
 func NewAuthTokenRepository(sqlDB *sql.DB) AuthTokenRepository {
 	return &sqlAuthTokenRepository{
-		q: sqlc.New(sqlDB),
+		db: sqlDB,
+		q:  sqlc.New(sqlDB),
 	}
 }
 
@@ -86,6 +89,18 @@ func (r *sqlAuthTokenRepository) GetByHashAndType(ctx context.Context, tokenHash
 
 func (r *sqlAuthTokenRepository) MarkAsUsed(ctx context.Context, id string) error {
 	return r.q.MarkAuthTokenAsUsed(ctx, id)
+}
+
+func (r *sqlAuthTokenRepository) MarkAsUsedAtomic(ctx context.Context, id string) (bool, error) {
+	res, err := r.db.ExecContext(ctx, "UPDATE auth_tokens SET is_used = TRUE WHERE id = ? AND is_used = FALSE", id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
 }
 
 func (r *sqlAuthTokenRepository) InvalidateUserTokensByType(ctx context.Context, userID, tokenType string) error {

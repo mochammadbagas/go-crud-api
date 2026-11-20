@@ -261,6 +261,10 @@ func (r *mockUserRepo) CheckUserHasRole(ctx context.Context, userID, roleName st
 	return false, nil
 }
 
+func (r *mockUserRepo) HasAssociatedData(ctx context.Context, userID string) (bool, error) {
+	return false, nil
+}
+
 // mockAuthTokenRepo implements repository.AuthTokenRepository in-memory
 type mockAuthTokenRepo struct {
 	tokens map[string]*models.AuthToken
@@ -293,6 +297,19 @@ func (m *mockAuthTokenRepo) MarkAsUsed(ctx context.Context, id string) error {
 		}
 	}
 	return nil
+}
+
+func (m *mockAuthTokenRepo) MarkAsUsedAtomic(ctx context.Context, id string) (bool, error) {
+	for _, t := range m.tokens {
+		if t.ID == id {
+			if t.IsUsed {
+				return false, nil
+			}
+			t.IsUsed = true
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (m *mockAuthTokenRepo) InvalidateUserTokensByType(ctx context.Context, userID, tokenType string) error {
@@ -390,6 +407,17 @@ func (m *mockRefreshTokenRepo) Revoke(ctx context.Context, id string) error {
 		return nil
 	}
 	return repository.ErrNotFound
+}
+
+func (m *mockRefreshTokenRepo) RevokeAtomic(ctx context.Context, id string) (bool, error) {
+	if t, ok := m.tokensByID[id]; ok {
+		if t.IsRevoked {
+			return false, nil
+		}
+		t.IsRevoked = true
+		return true, nil
+	}
+	return false, repository.ErrNotFound
 }
 
 func (m *mockRefreshTokenRepo) RevokeFamily(ctx context.Context, tokenFamily string) error {

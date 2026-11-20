@@ -156,9 +156,12 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr; # Overwrite to prevent IP spoofing & rate limit bypass (SEC-01)
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Security Note: Ensure the edge proxy strictly sets X-Forwarded-For to $remote_addr
+    # rather than appending unverified client-supplied headers.
 
     listen 443 ssl;
     # SSL certificate directives...

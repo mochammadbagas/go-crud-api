@@ -3,7 +3,8 @@ SELECT
     id, uploaded_by, filename, storage_disk, storage_key,
     url, mime_type, size, width, height, created_at, updated_at
 FROM media
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
 
 -- name: GetMediaByID :one
 SELECT 

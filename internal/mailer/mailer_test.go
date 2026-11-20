@@ -23,6 +23,10 @@ func TestLogMailer(t *testing.T) {
 	if err := m.SendEmailChangeEmail(ctx, "new@example.com", "http://localhost:3000/confirm?token=789"); err != nil {
 		t.Errorf("expected no error from LogMailer email change, got: %v", err)
 	}
+
+	if err := m.SendEmailChangeAlert(ctx, "old@example.com", "new@example.com"); err != nil {
+		t.Errorf("expected no error from LogMailer email change alert, got: %v", err)
+	}
 }
 
 func TestMailerFactory(t *testing.T) {

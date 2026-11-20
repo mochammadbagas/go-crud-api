@@ -15,12 +15,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "health"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["health"],
               "raw": "{{baseUrl}}/health"
             }
           }
@@ -32,13 +28,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "health",
-                "live"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"],
               "raw": "{{baseUrl}}/health/live"
             }
           }
@@ -50,13 +41,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "health",
-                "ready"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "ready"],
               "raw": "{{baseUrl}}/health/ready"
             }
           }
@@ -99,15 +85,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "register"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"],
               "raw": "{{baseUrl}}/api/v1/auth/register"
             }
           }
@@ -149,15 +128,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "login"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"],
               "raw": "{{baseUrl}}/api/v1/auth/login"
             }
           }
@@ -199,15 +171,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "refresh"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "refresh"],
               "raw": "{{baseUrl}}/api/v1/auth/refresh"
             }
           }
@@ -252,15 +217,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "logout"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout"],
               "raw": "{{baseUrl}}/api/v1/auth/logout"
             }
           }
@@ -291,15 +249,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "change-password"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "change-password"],
               "raw": "{{baseUrl}}/api/v1/auth/change-password"
             }
           }
@@ -320,15 +271,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "forgot-password"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "forgot-password"],
               "raw": "{{baseUrl}}/api/v1/auth/forgot-password"
             }
           }
@@ -349,15 +293,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "reset-password"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "reset-password"],
               "raw": "{{baseUrl}}/api/v1/auth/reset-password"
             }
           }
@@ -365,19 +302,12 @@
         {
           "name": "1.8 Verifikasi Email (Token via Query)",
           "request": {
-            "description": "Verifikasi alamat email pengguna via tautan browser / GET request.",
+            "description": "Verifikasi alamat email pengguna via query parameter (POST untuk mencegah auto-trigger web scanner).",
             "header": [],
-            "method": "GET",
+            "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "verify-email"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "verify-email"],
               "query": [
                 {
                   "description": "Token verifikasi yang didapat dari email / terminal LogMailer",
@@ -405,15 +335,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "verify-email"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "verify-email"],
               "raw": "{{baseUrl}}/api/v1/auth/verify-email"
             }
           }
@@ -434,15 +357,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "resend-verification"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "resend-verification"],
               "raw": "{{baseUrl}}/api/v1/auth/resend-verification"
             }
           }
@@ -469,15 +385,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "me"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"],
               "raw": "{{baseUrl}}/api/v1/users/me"
             }
           }
@@ -508,15 +417,8 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "profile"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "profile"],
               "raw": "{{baseUrl}}/api/v1/users/profile"
             }
           }
@@ -548,15 +450,8 @@
             "header": [],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "avatar"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "avatar"],
               "raw": "{{baseUrl}}/api/v1/users/avatar"
             }
           }
@@ -578,15 +473,8 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "avatar"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "avatar"],
               "raw": "{{baseUrl}}/api/v1/users/avatar"
             }
           }
@@ -617,15 +505,8 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "username"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "username"],
               "raw": "{{baseUrl}}/api/v1/users/username"
             }
           }
@@ -647,15 +528,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "status"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "status"],
               "raw": "{{baseUrl}}/api/v1/users/status"
             }
           }
@@ -686,16 +560,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "email",
-                "request-change"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "email", "request-change"],
               "raw": "{{baseUrl}}/api/v1/users/email/request-change"
             }
           }
@@ -703,20 +569,12 @@
         {
           "name": "2.8 Konfirmasi Ganti Email (Token via Query)",
           "request": {
-            "description": "Konfirmasi ganti email via tautan browser / GET request. Mengubah email akun dan menandainya terverifikasi.",
+            "description": "Konfirmasi ganti email via query parameter (POST untuk mencegah auto-trigger web scanner). Mengubah email akun dan menandainya terverifikasi.",
             "header": [],
-            "method": "GET",
+            "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "email",
-                "confirm-change"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "email", "confirm-change"],
               "query": [
                 {
                   "description": "Token verifikasi konfirmasi ganti email (disimpan di variabel {{sampleToken}})",
@@ -744,16 +602,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "email",
-                "confirm-change"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "email", "confirm-change"],
               "raw": "{{baseUrl}}/api/v1/users/email/confirm-change"
             }
           }
@@ -780,15 +630,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "articles"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "articles"],
               "query": [
                 {
                   "key": "page",
@@ -846,15 +689,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "articles"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "articles"],
               "raw": "{{baseUrl}}/api/v1/admin/articles"
             }
           }
@@ -876,16 +712,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "articles",
-                "{{sampleArticleId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "articles", "{{sampleArticleId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}"
             }
           }
@@ -916,16 +744,8 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "articles",
-                "{{sampleArticleId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "articles", "{{sampleArticleId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}"
             }
           }
@@ -947,16 +767,8 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "articles",
-                "{{sampleArticleId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "articles", "{{sampleArticleId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/articles/{{sampleArticleId}}"
             }
           }
@@ -978,9 +790,7 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -1010,15 +820,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "categories"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "categories"],
               "raw": "{{baseUrl}}/api/v1/admin/categories"
             }
           }
@@ -1066,15 +869,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "categories"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "categories"],
               "raw": "{{baseUrl}}/api/v1/admin/categories"
             }
           }
@@ -1095,9 +891,7 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -1135,9 +929,7 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -1166,9 +958,7 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -1197,15 +987,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "tags"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags"],
               "raw": "{{baseUrl}}/api/v1/admin/tags"
             }
           }
@@ -1253,15 +1036,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "tags"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags"],
               "raw": "{{baseUrl}}/api/v1/admin/tags"
             }
           }
@@ -1282,16 +1058,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "tags",
-                "{{sampleTagId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags", "{{sampleTagId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/tags/{{sampleTagId}}"
             }
           }
@@ -1322,16 +1090,8 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "tags",
-                "{{sampleTagId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags", "{{sampleTagId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/tags/{{sampleTagId}}"
             }
           }
@@ -1353,16 +1113,8 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "tags",
-                "{{sampleTagId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags", "{{sampleTagId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/tags/{{sampleTagId}}"
             }
           }
@@ -1411,15 +1163,8 @@
             "header": [],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "media"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "media"],
               "raw": "{{baseUrl}}/api/v1/admin/media"
             }
           }
@@ -1441,15 +1186,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "media"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "media"],
               "query": [
                 {
                   "key": "page",
@@ -1481,16 +1219,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "media",
-                "{{sampleMediaId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "media", "{{sampleMediaId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/media/{{sampleMediaId}}"
             }
           }
@@ -1512,16 +1242,8 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "media",
-                "{{sampleMediaId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "media", "{{sampleMediaId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/media/{{sampleMediaId}}"
             }
           }
@@ -1543,9 +1265,7 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -1585,16 +1305,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "analytics",
-                "overview"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "analytics", "overview"],
               "raw": "{{baseUrl}}/api/v1/admin/analytics/overview"
             }
           }
@@ -1611,14 +1323,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "articles"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles"],
               "query": [
                 {
                   "key": "page",
@@ -1656,15 +1362,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "articles",
-                "published-go-article"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles", "published-go-article"],
               "raw": "{{baseUrl}}/api/v1/articles/published-go-article"
             }
           }
@@ -1693,9 +1392,7 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -1714,14 +1411,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "categories"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "categories"],
               "raw": "{{baseUrl}}/api/v1/categories"
             }
           }
@@ -1733,16 +1424,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "categories",
-                "tutorials-tech",
-                "articles"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "categories", "tutorials-tech", "articles"],
               "query": [
                 {
                   "key": "page",
@@ -1764,14 +1447,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "tags"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tags"],
               "raw": "{{baseUrl}}/api/v1/tags"
             }
           }
@@ -1783,13 +1460,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "articles",
-                "published-go-article"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["articles", "published-go-article"],
               "raw": "{{baseUrl}}/articles/published-go-article"
             }
           }
@@ -1800,13 +1472,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "blog",
-                "published-go-article"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["blog", "published-go-article"],
               "raw": "{{baseUrl}}/blog/published-go-article"
             }
           }
@@ -1817,13 +1484,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "journal",
-                "published-go-article"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["journal", "published-go-article"],
               "raw": "{{baseUrl}}/journal/published-go-article"
             }
           }
@@ -1834,13 +1496,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "categories",
-                "tutorials-tech"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["categories", "tutorials-tech"],
               "raw": "{{baseUrl}}/categories/tutorials-tech"
             }
           }
@@ -1867,15 +1524,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "roles"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles"],
               "raw": "{{baseUrl}}/api/v1/admin/roles"
             }
           }
@@ -1897,16 +1547,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "roles",
-                "{{sampleRoleId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}"
             }
           }
@@ -1954,15 +1596,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "roles"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles"],
               "raw": "{{baseUrl}}/api/v1/admin/roles"
             }
           }
@@ -1993,16 +1628,8 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "roles",
-                "{{sampleRoleId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}"
             }
           }
@@ -2033,9 +1660,7 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -2065,16 +1690,8 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "roles",
-                "{{sampleRoleId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles", "{{sampleRoleId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/roles/{{sampleRoleId}}"
             }
           }
@@ -2096,15 +1713,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "permissions"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "permissions"],
               "raw": "{{baseUrl}}/api/v1/admin/permissions"
             }
           }
@@ -2152,15 +1762,8 @@
             ],
             "method": "POST",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "permissions"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "permissions"],
               "raw": "{{baseUrl}}/api/v1/admin/permissions"
             }
           }
@@ -2181,9 +1784,7 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -2221,9 +1822,7 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -2252,9 +1851,7 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -2288,15 +1885,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "users"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users"],
               "query": [
                 {
                   "key": "page",
@@ -2340,16 +1930,8 @@
             "header": [],
             "method": "GET",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "users",
-                "{{sampleUserId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users", "{{sampleUserId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}"
             }
           }
@@ -2380,16 +1962,8 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "users",
-                "{{sampleUserId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users", "{{sampleUserId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}"
             }
           }
@@ -2420,9 +1994,7 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -2461,9 +2033,7 @@
             ],
             "method": "PUT",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "v1",
@@ -2493,16 +2063,8 @@
             "header": [],
             "method": "DELETE",
             "url": {
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "users",
-                "{{sampleUserId}}"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users", "{{sampleUserId}}"],
               "raw": "{{baseUrl}}/api/v1/admin/users/{{sampleUserId}}"
             }
           }

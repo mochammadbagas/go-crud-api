@@ -18,7 +18,7 @@ INSERT INTO article_daily_analytics (
 )
 SELECT 
     e.article_id,
-    DATE(e.created_at) AS analytics_date,
+    ? AS analytics_date,
     COUNT(CASE WHEN e.event_type = 'view' THEN 1 END) AS total_views,
     COUNT(DISTINCT e.visitor_id) AS unique_visitors,
     COUNT(CASE WHEN e.event_type = 'share' THEN 1 END) AS total_shares,
@@ -27,8 +27,8 @@ SELECT
     NOW(),
     NOW()
 FROM article_analytics_events e
-WHERE DATE(e.created_at) = ?
-GROUP BY e.article_id, DATE(e.created_at)
+WHERE e.created_at >= ? AND e.created_at < ?
+GROUP BY e.article_id
 ON DUPLICATE KEY UPDATE
     total_views = VALUES(total_views),
     unique_visitors = VALUES(unique_visitors),
@@ -38,8 +38,14 @@ ON DUPLICATE KEY UPDATE
     updated_at = NOW()
 `
 
-func (q *Queries) AggregateDailyAnalyticsForDate(ctx context.Context, createdAt time.Time) error {
-	_, err := q.db.ExecContext(ctx, aggregateDailyAnalyticsForDate, createdAt)
+type AggregateDailyAnalyticsForDateParams struct {
+	AnalyticsDate time.Time `json:"analytics_date"`
+	CreatedAt     time.Time `json:"created_at"`
+	CreatedAt_2   time.Time `json:"created_at_2"`
+}
+
+func (q *Queries) AggregateDailyAnalyticsForDate(ctx context.Context, arg AggregateDailyAnalyticsForDateParams) error {
+	_, err := q.db.ExecContext(ctx, aggregateDailyAnalyticsForDate, arg.AnalyticsDate, arg.CreatedAt, arg.CreatedAt_2)
 	return err
 }
 

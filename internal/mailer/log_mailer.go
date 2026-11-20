@@ -28,6 +28,12 @@ func (m *logMailer) SendEmailChangeEmail(ctx context.Context, toNewEmail, confir
 	return nil
 }
 
+func (m *logMailer) SendEmailChangeAlert(ctx context.Context, toOldEmail, newEmail string) error {
+	msg := fmt.Sprintf("Security alert: A request was made to change your email address to '%s'. If you did not make this request, please change your password immediately.", newEmail)
+	printMailBox("SECURITY ALERT: EMAIL CHANGE INITIATED", toOldEmail, "Security Alert: Email Address Change Requested", msg, "Immediate")
+	return nil
+}
+
 func printMailBox(tag, to, subject, link, ttl string) {
 	width := 76
 	divider := "┌" + strings.Repeat("─", width-2) + "┐"

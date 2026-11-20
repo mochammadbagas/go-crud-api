@@ -82,9 +82,9 @@ func Load() *Config {
 		dbMaxOpenConns = 100
 	}
 
-	dbMaxIdleConns, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "10"))
+	dbMaxIdleConns, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "25"))
 	if dbMaxIdleConns <= 0 {
-		dbMaxIdleConns = 10
+		dbMaxIdleConns = 25
 	}
 
 	dbConnMaxLifetimeMin, _ := strconv.Atoi(getEnv("DB_CONN_MAX_LIFETIME_MINUTES", "60"))

@@ -14,7 +14,8 @@ func TestAdminUserService_Safeguards(t *testing.T) {
 	userRepo := newMockUserRepo()
 	profileRepo := newMockProfileRepo()
 	roleRepo := newMockRoleRepo()
-	svc := NewAdminUserService(userRepo, profileRepo, roleRepo)
+	refreshTokenRepo := newMockRefreshTokenRepo()
+	svc := NewAdminUserService(userRepo, profileRepo, roleRepo, refreshTokenRepo)
 	ctx := context.Background()
 
 	// 1. Seed Roles
@@ -113,7 +114,8 @@ func TestAdminUserService_CRUD(t *testing.T) {
 	userRepo := newMockUserRepo()
 	profileRepo := newMockProfileRepo()
 	roleRepo := newMockRoleRepo()
-	svc := NewAdminUserService(userRepo, profileRepo, roleRepo)
+	refreshTokenRepo := newMockRefreshTokenRepo()
+	svc := NewAdminUserService(userRepo, profileRepo, roleRepo, refreshTokenRepo)
 	ctx := context.Background()
 
 	// Seed user
@@ -158,5 +160,97 @@ func TestAdminUserService_CRUD(t *testing.T) {
 	err = svc.DeleteUser(ctx, userID)
 	if err != nil {
 		t.Fatalf("failed to delete user: %v", err)
+	}
+}
+
+func TestAdminUserService_SessionRevocation(t *testing.T) {
+	userRepo := newMockUserRepo()
+	profileRepo := newMockProfileRepo()
+	roleRepo := newMockRoleRepo()
+	refreshTokenRepo := newMockRefreshTokenRepo()
+	svc := NewAdminUserService(userRepo, profileRepo, roleRepo, refreshTokenRepo)
+	ctx := context.Background()
+
+	userID := utils.NewULID()
+	user := &models.User{
+		ID:        userID,
+		Username:  "bob",
+		Email:     "bob@example.com",
+		Role:      models.RoleUser,
+		Status:    models.StatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	_ = userRepo.Create(ctx, user)
+
+	userRole := &models.Role{
+		ID:          utils.NewULID(),
+		Name:        models.RoleUser,
+		DisplayName: "User",
+	}
+	_ = roleRepo.Create(ctx, userRole)
+
+	// 1. Test revocation on UpdateUserStatus (suspended/inactive)
+	token1 := &models.RefreshToken{
+		ID:          utils.NewULID(),
+		UserID:      userID,
+		TokenHash:   "hash1",
+		TokenFamily: "fam1",
+		IsRevoked:   false,
+		ExpiresAt:   time.Now().Add(24 * time.Hour),
+	}
+	_ = refreshTokenRepo.Create(ctx, token1)
+
+	_, err := svc.UpdateUserStatus(ctx, userID, models.UpdateUserStatusInput{
+		Status: models.StatusSuspended,
+	})
+	if err != nil {
+		t.Fatalf("failed to suspend user: %v", err)
+	}
+	storedToken1, _ := refreshTokenRepo.GetByHash(ctx, "hash1")
+	if !storedToken1.IsRevoked {
+		t.Fatalf("expected token1 to be revoked upon suspending user")
+	}
+
+	// 2. Test revocation on AssignUserRoles
+	token2 := &models.RefreshToken{
+		ID:          utils.NewULID(),
+		UserID:      userID,
+		TokenHash:   "hash2",
+		TokenFamily: "fam2",
+		IsRevoked:   false,
+		ExpiresAt:   time.Now().Add(24 * time.Hour),
+	}
+	_ = refreshTokenRepo.Create(ctx, token2)
+
+	_, err = svc.AssignUserRoles(ctx, userID, models.AssignRolesInput{
+		RoleIDs: []string{userRole.ID},
+	})
+	if err != nil {
+		t.Fatalf("failed to assign roles: %v", err)
+	}
+	storedToken2, _ := refreshTokenRepo.GetByHash(ctx, "hash2")
+	if !storedToken2.IsRevoked {
+		t.Fatalf("expected token2 to be revoked upon assigning roles")
+	}
+
+	// 3. Test revocation on DeleteUser
+	token3 := &models.RefreshToken{
+		ID:          utils.NewULID(),
+		UserID:      userID,
+		TokenHash:   "hash3",
+		TokenFamily: "fam3",
+		IsRevoked:   false,
+		ExpiresAt:   time.Now().Add(24 * time.Hour),
+	}
+	_ = refreshTokenRepo.Create(ctx, token3)
+
+	err = svc.DeleteUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("failed to delete user: %v", err)
+	}
+	storedToken3, _ := refreshTokenRepo.GetByHash(ctx, "hash3")
+	if !storedToken3.IsRevoked {
+		t.Fatalf("expected token3 to be revoked upon deleting user")
 	}
 }

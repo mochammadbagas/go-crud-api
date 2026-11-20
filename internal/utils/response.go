@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 )
 
@@ -75,7 +76,8 @@ func ErrorCode(w http.ResponseWriter, status int, code, message string) {
 
 // ValidationError writes a JSON response for validation errors.
 // If err is (or wraps) ValidationErrors, it outputs HTTP 400 with field-level details.
-// Otherwise it outputs a standard HTTP 400 with err.Error().
+// If err is any other unhandled error, it masks the internal details, logs the error,
+// and returns standard HTTP 500 INTERNAL_SERVER_ERROR to prevent CWE-209 information disclosure.
 func ValidationError(w http.ResponseWriter, err error) {
 	var valErr ValidationErrors
 	if errors.As(err, &valErr) {
@@ -87,5 +89,6 @@ func ValidationError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
-	ErrorCode(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+	slog.Error("Unexpected internal error masked from client", slog.Any("error", err))
+	ErrorCode(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "an internal server error occurred")
 }

@@ -114,8 +114,8 @@ Content-Type: application/json
 }
 
 ### 1.8 Verify Email (Token via Query Parameter)
-# Used when clicking verification link from email/browser
-GET {{baseUrl}}/api/v1/auth/verify-email?token={{sampleToken}}
+# Accepts token via query parameter or JSON body (POST to avoid crawler/scanner consumption)
+POST {{baseUrl}}/api/v1/auth/verify-email?token={{sampleToken}}
 
 ### 1.9 Verify Email (Token via JSON Body)
 # Alternative for mobile app or API clients
@@ -195,9 +195,9 @@ Content-Type: application/json
   "password": "adminpassword123"
 }
 
-### 2.8 Confirm Email Change (Browser / Link Click)
-# Publicly accessible via browser
-GET {{baseUrl}}/api/v1/users/email/confirm-change?token={{sampleToken}}
+### 2.8 Confirm Email Change (Token via Query Parameter)
+# Accepts token via query parameter or JSON body (POST to avoid crawler/scanner consumption)
+POST {{baseUrl}}/api/v1/users/email/confirm-change?token={{sampleToken}}
 
 ### 2.9 Confirm Email Change (Token via JSON Body)
 # Alternative for mobile / API clients

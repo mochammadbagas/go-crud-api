@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/mochammadbagas/go-crud-api/internal/config"
@@ -51,7 +50,6 @@ type AuthService struct {
 	roleRepo         repository.RoleRepository
 	mailer           mailer.Mailer
 	cfg              *config.Config
-	rotationMu       sync.Mutex
 }
 
 func NewAuthService(
@@ -77,6 +75,8 @@ func NewAuthService(
 		cfg:              cfg,
 	}
 }
+
+var emailSem = make(chan struct{}, 50)
 
 func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) (*models.User, error) {
 	if err := input.Validate(); err != nil {
@@ -150,17 +150,25 @@ func (s *AuthService) Register(ctx context.Context, input models.RegisterInput) 
 		return nil, fmt.Errorf("failed to register user atomically: %w", err)
 	}
 
-	// 8. Send initial email verification in background with bounded timeout and error logging
-	go func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := s.SendVerification(bgCtx, user.ID); err != nil {
-			slog.Error("Failed to send initial email verification in background",
-				slog.String("user_id", user.ID),
-				slog.Any("error", err),
-			)
-		}
-	}()
+	// 8. Send initial email verification with bounded worker concurrency (ARCH-04)
+	select {
+	case emailSem <- struct{}{}:
+		go func() {
+			defer func() { <-emailSem }()
+			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := s.SendVerification(bgCtx, user.ID); err != nil {
+				slog.Error("Failed to send initial email verification in background",
+					slog.String("user_id", user.ID),
+					slog.Any("error", err),
+				)
+			}
+		}()
+	default:
+		slog.Warn("Email concurrency queue full, skipped async verification; user can request via /resend-verification",
+			slog.String("user_id", user.ID),
+		)
+	}
 
 	return user, nil
 }
@@ -250,9 +258,6 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 		return nil, ErrUnauthorized
 	}
 
-	s.rotationMu.Lock()
-	defer s.rotationMu.Unlock()
-
 	tokenHash := utils.HashToken(rawRefreshToken)
 	storedToken, err := s.refreshTokenRepo.GetByHash(ctx, tokenHash)
 	if err != nil {
@@ -287,9 +292,18 @@ func (s *AuthService) RefreshToken(ctx context.Context, rawRefreshToken, userAge
 		return nil, ErrUserNotActive
 	}
 
-	// 1. Revoke the old refresh token
-	if err := s.refreshTokenRepo.Revoke(ctx, storedToken.ID); err != nil {
+	// 1. Revoke the old refresh token atomically
+	revoked, err := s.refreshTokenRepo.RevokeAtomic(ctx, storedToken.ID)
+	if err != nil {
 		return nil, err
+	}
+	if !revoked {
+		slog.Warn("Concurrent refresh token rotation detected! Revoking full token family",
+			slog.String("family", storedToken.TokenFamily),
+			slog.String("user_id", storedToken.UserID),
+		)
+		_ = s.refreshTokenRepo.RevokeFamily(ctx, storedToken.TokenFamily)
+		return nil, ErrTokenReused
 	}
 
 	// 2. Generate a new rotated refresh token in the same token family
@@ -470,16 +484,20 @@ func (s *AuthService) ResetPassword(ctx context.Context, input models.ResetPassw
 		return ErrAuthTokenInvalid
 	}
 
-	// Invalidate token before password hashing to prevent concurrency race condition
-	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
-		slog.Error("Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
-		return err
-	}
-
-	// Hash new password
+	// Hash new password before burning the token (W3-BUG-03)
 	newHash, err := argon2id.CreateHash(input.NewPassword, argon2id.DefaultParams)
 	if err != nil {
 		return err
+	}
+
+	// Atomic mark token as used to prevent TOCTOU race conditions
+	marked, err := s.authTokenRepo.MarkAsUsedAtomic(ctx, storedToken.ID)
+	if err != nil {
+		slog.Error("Failed to mark auth token as used", slog.String("id", storedToken.ID), slog.Any("error", err))
+		return err
+	}
+	if !marked {
+		return ErrAuthTokenUsed
 	}
 
 	// Update user's password
@@ -557,9 +575,13 @@ func (s *AuthService) VerifyEmail(ctx context.Context, input models.VerifyEmailI
 		return ErrAuthTokenInvalid
 	}
 
-	// Mark token as used to prevent concurrency race
-	if err := s.authTokenRepo.MarkAsUsed(ctx, storedToken.ID); err != nil {
+	// Atomic mark token as used to prevent concurrency race
+	marked, err := s.authTokenRepo.MarkAsUsedAtomic(ctx, storedToken.ID)
+	if err != nil {
 		return err
+	}
+	if !marked {
+		return ErrAuthTokenUsed
 	}
 
 	// Update user email_verified_at and activate status

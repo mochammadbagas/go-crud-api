@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/service"
 	"github.com/mochammadbagas/go-crud-api/internal/storage"
@@ -55,7 +56,12 @@ func (h *AdminUserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 // GetUser handles GET /api/v1/admin/users/{id}
 func (h *AdminUserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid user ID, must be a 26-character ULID")
+		return
+	}
+
 	user, err := h.adminUserSvc.GetUserDetail(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
@@ -71,7 +77,12 @@ func (h *AdminUserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser handles PUT /api/v1/admin/users/{id}
 func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid user ID, must be a 26-character ULID")
+		return
+	}
+
 	var input models.AdminUpdateUserInput
 	if err := utils.DecodeJSON(w, r, &input); err != nil {
 		utils.HandleDecodeError(w, err)
@@ -101,7 +112,12 @@ func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateStatus handles PUT /api/v1/admin/users/{id}/status
 func (h *AdminUserHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid user ID, must be a 26-character ULID")
+		return
+	}
+
 	var input models.UpdateUserStatusInput
 	if err := utils.DecodeJSON(w, r, &input); err != nil {
 		utils.HandleDecodeError(w, err)
@@ -127,7 +143,12 @@ func (h *AdminUserHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) 
 
 // AssignRoles handles PUT /api/v1/admin/users/{id}/roles
 func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid user ID, must be a 26-character ULID")
+		return
+	}
+
 	var input models.AssignRolesInput
 	if err := utils.DecodeJSON(w, r, &input); err != nil {
 		utils.HandleDecodeError(w, err)
@@ -157,7 +178,17 @@ func (h *AdminUserHandler) AssignRoles(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser handles DELETE /api/v1/admin/users/{id}
 func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if !utils.IsValidULID(id) {
+		utils.ErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid user ID, must be a 26-character ULID")
+		return
+	}
+
+	currentUserID := middleware.GetUserIDFromContext(r.Context())
+	if currentUserID != "" && currentUserID == id {
+		utils.ErrorCode(w, http.StatusBadRequest, "CANNOT_DELETE_SELF", "cannot delete your own account")
+		return
+	}
 
 	// Fetch user details to detect avatar before account is deleted from database
 	var avatarURL string
@@ -173,6 +204,10 @@ func (h *AdminUserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, service.ErrCannotDeleteLastSuperAdmin) {
 			utils.ErrorCode(w, http.StatusForbidden, "CANNOT_DELETE_LAST_SUPER_ADMIN", err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrUserHasAssociatedData) {
+			utils.ErrorCode(w, http.StatusConflict, "USER_HAS_ASSOCIATED_DATA", err.Error())
 			return
 		}
 		slog.Error("failed to delete user", slog.Any("error", err))

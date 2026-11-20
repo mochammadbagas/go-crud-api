@@ -96,24 +96,16 @@ func (r *sqlMediaRepository) List(ctx context.Context, limit, offset int32) ([]m
 		return nil, 0, err
 	}
 
-	rows, err := r.queries.ListMedia(ctx)
+	rows, err := r.queries.ListMedia(ctx, sqlc.ListMediaParams{
+		Limit:  limit,
+		Offset: offset,
+	})
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Apply pagination window
-	start := int(offset)
-	end := start + int(limit)
-	if start > len(rows) {
-		return []models.Media{}, total, nil
-	}
-	if end > len(rows) {
-		end = len(rows)
-	}
-	paged := rows[start:end]
-
-	medias := make([]models.Media, len(paged))
-	for i, row := range paged {
+	medias := make([]models.Media, len(rows))
+	for i, row := range rows {
 		m := models.Media{
 			ID:          row.ID,
 			UploadedBy:  row.UploadedBy,

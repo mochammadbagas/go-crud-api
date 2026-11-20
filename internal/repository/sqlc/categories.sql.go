@@ -70,6 +70,17 @@ func (q *Queries) DeleteCategory(ctx context.Context, id string) error {
 	return err
 }
 
+const detachCategoryFromSoftDeletedArticles = `-- name: DetachCategoryFromSoftDeletedArticles :exec
+UPDATE articles
+SET category_id = NULL
+WHERE category_id = ? AND deleted_at IS NOT NULL
+`
+
+func (q *Queries) DetachCategoryFromSoftDeletedArticles(ctx context.Context, categoryID sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, detachCategoryFromSoftDeletedArticles, categoryID)
+	return err
+}
+
 const getCategoryByID = `-- name: GetCategoryByID :one
 SELECT id, name, slug, description, created_at, updated_at
 FROM categories

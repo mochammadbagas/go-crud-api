@@ -17,38 +17,40 @@ import (
 func RunMigrations(sqlDB *sql.DB, dbName string, fresh bool) error {
 	if fresh {
 		slog.Warn("Flag -fresh is active. Dropping all existing database tables...")
-		dropScript := `
-			SET FOREIGN_KEY_CHECKS = 0;
-			DROP TABLE IF EXISTS user_roles;
-			DROP TABLE IF EXISTS role_permissions;
-			DROP TABLE IF EXISTS permissions;
-			DROP TABLE IF EXISTS roles;
-			DROP TABLE IF EXISTS auth_tokens;
-			DROP TABLE IF EXISTS refresh_tokens;
-			DROP TABLE IF EXISTS user_profiles;
-			DROP TABLE IF EXISTS sessions;
-			DROP TABLE IF EXISTS article_daily_analytics;
-			DROP TABLE IF EXISTS article_analytics_events;
-			DROP TABLE IF EXISTS article_related;
-			DROP TABLE IF EXISTS article_revisions;
-			DROP TABLE IF EXISTS article_media;
-			DROP TABLE IF EXISTS article_tags;
-			DROP TABLE IF EXISTS articles;
-			DROP TABLE IF EXISTS media;
-			DROP TABLE IF EXISTS tags;
-			DROP TABLE IF EXISTS settings;
-			DROP TABLE IF EXISTS post_views;
-			DROP TABLE IF EXISTS posts;
-			DROP TABLE IF EXISTS categories;
-			DROP TABLE IF EXISTS users;
-			DROP TABLE IF EXISTS schema_migrations;
-			SET FOREIGN_KEY_CHECKS = 1;
-		`
-		if _, err := sqlDB.Exec(dropScript); err != nil {
-			slog.Error("Failed to drop database tables", slog.Any("error", err))
-		} else {
-			slog.Info("Existing tables dropped successfully.")
+		tables := []string{
+			"user_roles",
+			"role_permissions",
+			"permissions",
+			"roles",
+			"auth_tokens",
+			"refresh_tokens",
+			"user_profiles",
+			"sessions",
+			"article_daily_analytics",
+			"article_analytics_events",
+			"article_related",
+			"article_revisions",
+			"article_media",
+			"article_tags",
+			"articles",
+			"media",
+			"tags",
+			"settings",
+			"post_views",
+			"posts",
+			"categories",
+			"users",
+			"schema_migrations",
 		}
+
+		_, _ = sqlDB.Exec("SET FOREIGN_KEY_CHECKS = 0")
+		for _, table := range tables {
+			if _, err := sqlDB.Exec("DROP TABLE IF EXISTS " + table); err != nil {
+				slog.Error("Failed to drop table", slog.String("table", table), slog.Any("error", err))
+			}
+		}
+		_, _ = sqlDB.Exec("SET FOREIGN_KEY_CHECKS = 1")
+		slog.Info("Existing tables dropped successfully.")
 	}
 
 	sourceDriver, err := iofs.New(db.MigrationsFS, "migrations")

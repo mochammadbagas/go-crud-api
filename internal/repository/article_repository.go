@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ type ArticleRepository interface {
 	PublishScheduled(ctx context.Context) error
 	Count(ctx context.Context) (int64, error)
 	ListRevisions(ctx context.Context, articleID string) ([]models.ArticleRevision, error)
+	CheckArticlePublishedExists(ctx context.Context, id string) (bool, error)
 }
 
 type sqlArticleRepository struct {
@@ -180,13 +182,15 @@ func (r *sqlArticleRepository) Update(
 	// If existing article was published, record revision snapshot before applying update
 	if existing.Status == sqlc.ArticlesStatusPublished {
 		snapshotBytes, _ := json.Marshal(existing)
-		_ = qtx.CreateArticleRevision(ctx, sqlc.CreateArticleRevisionParams{
+		if revErr := qtx.CreateArticleRevision(ctx, sqlc.CreateArticleRevisionParams{
 			ID:        utils.NewULID(),
 			ArticleID: article.ID,
 			UserID:    userID,
 			Snapshot:  snapshotBytes,
 			CreatedAt: now,
-		})
+		}); revErr != nil {
+			slog.Warn("Failed to record article revision snapshot", slog.String("article_id", article.ID), slog.Any("error", revErr))
+		}
 	}
 
 	article.UpdatedAt = now
@@ -287,10 +291,20 @@ func (r *sqlArticleRepository) Update(
 }
 
 func (r *sqlArticleRepository) Delete(ctx context.Context, id string) error {
+	existing, err := r.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC()
+	baseSlug := existing.Slug
+	if len(baseSlug) > 220 {
+		baseSlug = baseSlug[:220]
+	}
+	deletedSlug := fmt.Sprintf("%s-deleted-%s", baseSlug, strings.ToLower(utils.NewULID()))
 	return r.q.SoftDeleteArticle(ctx, sqlc.SoftDeleteArticleParams{
 		ID:        id,
 		DeletedAt: sql.NullTime{Time: now, Valid: true},
+		Slug:      deletedSlug,
 	})
 }
 
@@ -364,6 +378,13 @@ func (r *sqlArticleRepository) ListRevisions(ctx context.Context, articleID stri
 	return revisions, nil
 }
 
+func (r *sqlArticleRepository) CheckArticlePublishedExists(ctx context.Context, id string) (bool, error) {
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM articles WHERE id = ? AND status = 'published' AND deleted_at IS NULL)"
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&exists)
+	return exists, err
+}
+
 func (r *sqlArticleRepository) ListPublic(ctx context.Context, filter models.ArticleFilter) ([]models.Article, int64, error) {
 	whereClauses := []string{"a.status = 'published'", "a.deleted_at IS NULL"}
 	var args []interface{}
@@ -418,7 +439,7 @@ func (r *sqlArticleRepository) ListPublic(ctx context.Context, filter models.Art
 	query := fmt.Sprintf(`
 		SELECT 
 			a.id, a.author_id, a.category_id, a.featured_image_id, a.og_image_id,
-			a.title, a.slug, a.excerpt, a.content, a.status, a.is_featured,
+			a.title, a.slug, a.excerpt, '' AS content, a.status, a.is_featured,
 			a.scheduled_at, a.published_at, a.meta_title, a.meta_description,
 			a.canonical_url, a.robots_index, a.robots_follow, a.meta,
 			a.created_at, a.updated_at, a.deleted_at,
@@ -514,7 +535,7 @@ func (r *sqlArticleRepository) ListAdmin(ctx context.Context, filter models.Arti
 	query := fmt.Sprintf(`
 		SELECT 
 			a.id, a.author_id, a.category_id, a.featured_image_id, a.og_image_id,
-			a.title, a.slug, a.excerpt, a.content, a.status, a.is_featured,
+			a.title, a.slug, a.excerpt, '' AS content, a.status, a.is_featured,
 			a.scheduled_at, a.published_at, a.meta_title, a.meta_description,
 			a.canonical_url, a.robots_index, a.robots_follow, a.meta,
 			a.created_at, a.updated_at, a.deleted_at,

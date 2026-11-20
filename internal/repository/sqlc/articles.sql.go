@@ -360,7 +360,7 @@ func (q *Queries) HardDeleteArticle(ctx context.Context, id string) error {
 
 const publishScheduledArticles = `-- name: PublishScheduledArticles :exec
 UPDATE articles
-SET status = 'published', published_at = NOW(), updated_at = NOW()
+SET status = 'published', published_at = COALESCE(scheduled_at, NOW()), updated_at = NOW()
 WHERE status = 'scheduled' AND scheduled_at <= NOW() AND deleted_at IS NULL
 `
 
@@ -371,17 +371,18 @@ func (q *Queries) PublishScheduledArticles(ctx context.Context) error {
 
 const softDeleteArticle = `-- name: SoftDeleteArticle :exec
 UPDATE articles
-SET deleted_at = ?
+SET deleted_at = ?, slug = ?
 WHERE id = ? AND deleted_at IS NULL
 `
 
 type SoftDeleteArticleParams struct {
 	DeletedAt sql.NullTime `json:"deleted_at"`
+	Slug      string       `json:"slug"`
 	ID        string       `json:"id"`
 }
 
 func (q *Queries) SoftDeleteArticle(ctx context.Context, arg SoftDeleteArticleParams) error {
-	_, err := q.db.ExecContext(ctx, softDeleteArticle, arg.DeletedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, softDeleteArticle, arg.DeletedAt, arg.Slug, arg.ID)
 	return err
 }
 

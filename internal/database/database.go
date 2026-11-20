@@ -12,8 +12,8 @@ import (
 
 // Init initializes the MySQL database connection, pool, migrations, and seed data.
 func Init(cfg *config.Config, fresh bool) (*sql.DB, error) {
-	// DSN format with UTC timezone, parseTime=true, and utf8mb4 charset
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&loc=UTC&multiStatements=true",
+	// DSN format with UTC timezone, parseTime=true, and utf8mb4 charset (multiStatements disabled for security)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&loc=UTC",
 		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName,
 	)
 

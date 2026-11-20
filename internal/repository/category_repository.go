@@ -27,12 +27,14 @@ type CategoryRepository interface {
 }
 
 type sqlCategoryRepository struct {
-	q *sqlc.Queries
+	db *sql.DB
+	q  *sqlc.Queries
 }
 
 func NewCategoryRepository(sqlDB *sql.DB) CategoryRepository {
 	return &sqlCategoryRepository{
-		q: sqlc.New(sqlDB),
+		db: sqlDB,
+		q:  sqlc.New(sqlDB),
 	}
 }
 
@@ -146,6 +148,25 @@ func (r *sqlCategoryRepository) Update(ctx context.Context, cat *models.Category
 }
 
 func (r *sqlCategoryRepository) Delete(ctx context.Context, id string) error {
+	if r.db != nil {
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		qtx := r.q.WithTx(tx)
+		// Detach category from any soft-deleted articles so foreign key constraints are not violated
+		if err := qtx.DetachCategoryFromSoftDeletedArticles(ctx, sql.NullString{String: id, Valid: true}); err != nil {
+			return err
+		}
+		if err := qtx.DeleteCategory(ctx, id); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	_ = r.q.DetachCategoryFromSoftDeletedArticles(ctx, sql.NullString{String: id, Valid: true})
 	return r.q.DeleteCategory(ctx, id)
 }
 
