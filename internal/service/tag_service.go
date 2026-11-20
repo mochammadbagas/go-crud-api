@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/mochammadbagas/go-crud-api/internal/models"
@@ -61,6 +62,9 @@ func (s *TagService) Create(ctx context.Context, input models.TagInput) (*models
 	}
 
 	if err := s.tagRepo.Create(ctx, tag); err != nil {
+		if errors.Is(err, repository.ErrTagSlugExists) || errors.Is(err, repository.ErrDuplicate) {
+			return nil, repository.ErrTagSlugExists
+		}
 		return nil, err
 	}
 	return tag, nil
@@ -94,6 +98,9 @@ func (s *TagService) Update(ctx context.Context, id string, input models.TagInpu
 	existing.Slug = slug
 
 	if err := s.tagRepo.Update(ctx, existing); err != nil {
+		if errors.Is(err, repository.ErrTagSlugExists) || errors.Is(err, repository.ErrDuplicate) {
+			return nil, repository.ErrTagSlugExists
+		}
 		return nil, err
 	}
 	return existing, nil

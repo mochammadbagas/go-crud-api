@@ -251,4 +251,34 @@ func TestRBACService_Permissions(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Errorf("expected 1 permission, got %d", len(list))
 	}
+
+	// 5. Create Role with permission names and IDs (BUG-01)
+	perm2, err := svc.CreatePermission(ctx, models.CreatePermissionInput{
+		Name: "articles.archive",
+	})
+	if err != nil {
+		t.Fatalf("failed to create second permission: %v", err)
+	}
+
+	roleWithPerms, err := svc.CreateRole(ctx, models.CreateRoleInput{
+		Name:        "moderator",
+		DisplayName: "Moderator",
+		Permissions: []string{"articles.publish", perm2.ID},
+	})
+	if err != nil {
+		t.Fatalf("failed to create role with permissions: %v", err)
+	}
+	if roleWithPerms == nil {
+		t.Fatal("expected roleWithPerms to be non-nil")
+	}
+
+	// 6. Nonexistent permission returns ErrPermissionNotFound
+	_, err = svc.CreateRole(ctx, models.CreateRoleInput{
+		Name:        "reviewer",
+		DisplayName: "Reviewer",
+		Permissions: []string{"nonexistent.permission"},
+	})
+	if !errors.Is(err, ErrPermissionNotFound) {
+		t.Errorf("expected ErrPermissionNotFound, got: %v", err)
+	}
 }

@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/mochammadbagas/go-crud-api/internal/middleware"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
+	"github.com/mochammadbagas/go-crud-api/internal/utils"
 )
 
 var (
@@ -57,11 +59,42 @@ func (s *RBACService) CreateRole(ctx context.Context, input models.CreateRoleInp
 		return nil, err
 	}
 
+	var permIDs []string
+	if len(input.Permissions) > 0 {
+		resolved := make([]string, 0, len(input.Permissions))
+		for _, p := range input.Permissions {
+			trimmed := strings.TrimSpace(p)
+			if trimmed == "" {
+				continue
+			}
+			if utils.IsValidULID(trimmed) {
+				perm, err := s.permRepo.GetByID(ctx, trimmed)
+				if err != nil {
+					if errors.Is(err, repository.ErrNotFound) {
+						return nil, ErrPermissionNotFound
+					}
+					return nil, err
+				}
+				resolved = append(resolved, perm.ID)
+			} else {
+				perm, err := s.permRepo.GetByName(ctx, trimmed)
+				if err != nil {
+					if errors.Is(err, repository.ErrNotFound) {
+						return nil, ErrPermissionNotFound
+					}
+					return nil, err
+				}
+				resolved = append(resolved, perm.ID)
+			}
+		}
+		permIDs = utils.DeduplicateStrings(resolved)
+	}
+
 	role := &models.Role{
 		Name:        input.Name,
 		DisplayName: input.DisplayName,
 		Description: input.Description,
-		Permissions: input.Permissions,
+		Permissions: permIDs,
 	}
 
 	if err := s.roleRepo.Create(ctx, role); err != nil {

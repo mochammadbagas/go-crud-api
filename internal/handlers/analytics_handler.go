@@ -100,7 +100,7 @@ func (h *AnalyticsHandler) GetArticleAnalytics(w http.ResponseWriter, r *http.Re
 			utils.ErrorCode(w, http.StatusBadRequest, "INVALID_DATE_FORMAT", "end_date must be in YYYY-MM-DD format")
 			return
 		}
-		endDate = parsed
+		endDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, time.UTC)
 	}
 
 	if startDate.After(endDate) {

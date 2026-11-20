@@ -155,11 +155,17 @@ func (r *sqlUserProfileRepository) GetUserWithProfile(ctx context.Context, userI
 		fullName = row.FullName.String
 	}
 
+	assignedRoles := []string{string(row.Role)}
+	if roles, err := r.q.GetUserRoleNames(ctx, userID); err == nil && len(roles) > 0 {
+		assignedRoles = roles
+	}
+
 	return &models.UserWithProfile{
 		ID:              row.ID,
 		Username:        row.Username,
 		Email:           row.Email,
 		Role:            string(row.Role),
+		Roles:           assignedRoles,
 		Status:          string(row.Status),
 		EmailVerifiedAt: verifiedAt,
 		CreatedAt:       row.CreatedAt,

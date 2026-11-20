@@ -128,7 +128,13 @@ func (r *sqlCategoryRepository) Create(ctx context.Context, cat *models.Category
 		params.Description = sql.NullString{String: *cat.Description, Valid: true}
 	}
 
-	return r.q.CreateCategory(ctx, params)
+	if err := r.q.CreateCategory(ctx, params); err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrDuplicate
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *sqlCategoryRepository) Update(ctx context.Context, cat *models.Category) error {
@@ -144,7 +150,13 @@ func (r *sqlCategoryRepository) Update(ctx context.Context, cat *models.Category
 		params.Description = sql.NullString{String: *cat.Description, Valid: true}
 	}
 
-	return r.q.UpdateCategory(ctx, params)
+	if err := r.q.UpdateCategory(ctx, params); err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrDuplicate
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *sqlCategoryRepository) Delete(ctx context.Context, id string) error {

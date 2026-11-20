@@ -9,6 +9,7 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 	"github.com/mochammadbagas/go-crud-api/internal/mailer"
 	"github.com/mochammadbagas/go-crud-api/internal/models"
+	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
 	"github.com/alexedwards/argon2id"
@@ -109,5 +110,68 @@ func TestUserService_EmailChangeWorkflow(t *testing.T) {
 	}
 	if updatedUser.EmailVerifiedAt == nil {
 		t.Error("expected EmailVerifiedAt to be set after email change confirmation")
+	}
+}
+
+type errMockProfileRepo struct {
+	*mockProfileRepo
+	createErr error
+}
+
+func (m *errMockProfileRepo) Create(ctx context.Context, p *models.UserProfile) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	return m.mockProfileRepo.Create(ctx, p)
+}
+
+func TestUserService_UpdateAvatar_ErrorPropagation(t *testing.T) {
+	userRepo := newMockUserRepo()
+	expectedErr := errors.New("db insert failure")
+	profileRepo := &errMockProfileRepo{
+		mockProfileRepo: newMockProfileRepo(),
+		createErr:       expectedErr,
+	}
+	svc := NewUserService(userRepo, profileRepo, nil, nil, nil, nil)
+
+	err := svc.UpdateAvatar(context.Background(), "user-123", "http://example.com/avatar.png")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+}
+
+type errMockUserRepo struct {
+	*mockUserRepo
+	updateUsernameErr error
+	updateEmailErr    error
+}
+
+func (m *errMockUserRepo) UpdateUsername(ctx context.Context, id, username string) error {
+	if m.updateUsernameErr != nil {
+		return m.updateUsernameErr
+	}
+	return m.mockUserRepo.UpdateUsername(ctx, id, username)
+}
+
+func (m *errMockUserRepo) UpdateEmail(ctx context.Context, id, newEmail string) error {
+	if m.updateEmailErr != nil {
+		return m.updateEmailErr
+	}
+	return m.mockUserRepo.UpdateEmail(ctx, id, newEmail)
+}
+
+func TestUserService_UpdateUsername_DuplicateHandling(t *testing.T) {
+	baseUserRepo := newMockUserRepo()
+	userRepo := &errMockUserRepo{
+		mockUserRepo:      baseUserRepo,
+		updateUsernameErr: repository.ErrDuplicate,
+	}
+	svc := NewUserService(userRepo, newMockProfileRepo(), nil, nil, nil, nil)
+
+	err := svc.UpdateUsername(context.Background(), "user-1", models.UpdateUsernameInput{
+		Username: "newname",
+	})
+	if !errors.Is(err, ErrUsernameExists) {
+		t.Fatalf("expected ErrUsernameExists, got %v", err)
 	}
 }

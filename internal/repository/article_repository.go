@@ -110,6 +110,9 @@ func (r *sqlArticleRepository) Create(ctx context.Context, article *models.Artic
 	}
 
 	if err := qtx.CreateArticle(ctx, params); err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrArticleSlugExists
+		}
 		return err
 	}
 
@@ -136,6 +139,7 @@ func (r *sqlArticleRepository) Create(ctx context.Context, article *models.Artic
 	}
 
 	// Link Related Articles
+	relatedIDs = utils.DeduplicateStrings(relatedIDs)
 	for _, relatedID := range relatedIDs {
 		if relatedID == article.ID {
 			continue
@@ -239,6 +243,9 @@ func (r *sqlArticleRepository) Update(
 	}
 
 	if err := qtx.UpdateArticle(ctx, params); err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrArticleSlugExists
+		}
 		return err
 	}
 
@@ -274,6 +281,7 @@ func (r *sqlArticleRepository) Update(
 	if err := qtx.DeleteRelatedArticles(ctx, article.ID); err != nil {
 		return err
 	}
+	relatedIDs = utils.DeduplicateStrings(relatedIDs)
 	for _, relatedID := range relatedIDs {
 		if relatedID == article.ID {
 			continue
@@ -301,6 +309,29 @@ func (r *sqlArticleRepository) Delete(ctx context.Context, id string) error {
 		baseSlug = baseSlug[:220]
 	}
 	deletedSlug := fmt.Sprintf("%s-deleted-%s", baseSlug, strings.ToLower(utils.NewULID()))
+
+	if r.db != nil {
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		qtx := r.q.WithTx(tx)
+		// Detach article_media when article is soft-deleted so media can be safely managed/deleted
+		if err := qtx.DeleteArticleMedia(ctx, id); err != nil {
+			return err
+		}
+		if err := qtx.SoftDeleteArticle(ctx, sqlc.SoftDeleteArticleParams{
+			ID:        id,
+			DeletedAt: sql.NullTime{Time: now, Valid: true},
+			Slug:      deletedSlug,
+		}); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
 	return r.q.SoftDeleteArticle(ctx, sqlc.SoftDeleteArticleParams{
 		ID:        id,
 		DeletedAt: sql.NullTime{Time: now, Valid: true},

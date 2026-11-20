@@ -13,7 +13,6 @@ import (
 	"github.com/mochammadbagas/go-crud-api/internal/config"
 	"github.com/mochammadbagas/go-crud-api/internal/handlers"
 	"github.com/mochammadbagas/go-crud-api/internal/middleware"
-	"github.com/mochammadbagas/go-crud-api/internal/models"
 	"github.com/mochammadbagas/go-crud-api/internal/repository"
 	"github.com/mochammadbagas/go-crud-api/internal/utils"
 
@@ -149,6 +148,7 @@ func Setup(
 			auth.With(authLimiter).Post("/register", authHandler.Register)
 			auth.With(authLimiter).Post("/login", authHandler.Login)
 			auth.With(authLimiter).Post("/refresh", authHandler.RefreshToken)
+			auth.With(authLimiter).Post("/logout", authHandler.Logout)
 			auth.With(authLimiter).Post("/forgot-password", authHandler.ForgotPassword)
 			auth.With(authLimiter).Post("/reset-password", authHandler.ResetPassword)
 			auth.With(authLimiter).Post("/verify-email", authHandler.VerifyEmail)
@@ -158,7 +158,6 @@ func Setup(
 			auth.Group(func(protected chi.Router) {
 				protected.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
 
-				protected.Post("/logout", authHandler.Logout)
 				protected.Post("/change-password", authHandler.ChangePassword)
 			})
 		})
@@ -189,7 +188,6 @@ func Setup(
 		// ---------------------------------------------------------------------
 		v1.Route("/admin", func(admin chi.Router) {
 			admin.Use(middleware.JWTAuthMiddleware(cfg.JWTSecret))
-			admin.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleSuperAdmin))
 
 			// Articles CRUD
 			admin.With(middleware.RequirePermission("articles.read", userRepo)).Get("/articles", adminArticleHandler.List)

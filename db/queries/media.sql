@@ -31,5 +31,5 @@ SELECT COUNT(*) FROM media;
 SELECT (
     EXISTS (SELECT 1 FROM articles a WHERE a.featured_image_id = ? AND a.deleted_at IS NULL) OR
     EXISTS (SELECT 1 FROM articles b WHERE b.og_image_id = ? AND b.deleted_at IS NULL) OR
-    EXISTS (SELECT 1 FROM article_media m WHERE m.media_id = ?)
+    EXISTS (SELECT 1 FROM article_media m INNER JOIN articles a ON m.article_id = a.id WHERE m.media_id = ? AND a.deleted_at IS NULL)
 ) AS in_use;

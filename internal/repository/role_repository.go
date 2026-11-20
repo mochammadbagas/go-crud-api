@@ -183,6 +183,7 @@ func (r *sqlRoleRepository) AssignPermissions(ctx context.Context, roleID string
 		return err
 	}
 
+	permissionIDs = utils.DeduplicateStrings(permissionIDs)
 	now := time.Now().UTC()
 	for _, permID := range permissionIDs {
 		if permID == "" {

@@ -26,7 +26,7 @@ SELECT
     COUNT(DISTINCT e.visitor_id) AS unique_visitors,
     COUNT(CASE WHEN e.event_type = 'share' THEN 1 END) AS total_shares,
     COALESCE(SUM(e.reading_time_seconds), 0) AS total_reading_time,
-    COALESCE(AVG(e.scroll_depth), 0.00) AS average_scroll_depth,
+    COALESCE(AVG(CASE WHEN e.event_type = 'scroll' AND e.scroll_depth > 0 THEN e.scroll_depth END), 0.00) AS average_scroll_depth,
     NOW(),
     NOW()
 FROM article_analytics_events e

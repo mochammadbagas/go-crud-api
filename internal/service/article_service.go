@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -129,6 +130,9 @@ func (s *ArticleService) Create(ctx context.Context, authorID string, input mode
 	}
 
 	if err := s.articleRepo.Create(ctx, article, tagIDs, mediaIDs, input.RelatedArticleIDs); err != nil {
+		if errors.Is(err, repository.ErrArticleSlugExists) || errors.Is(err, repository.ErrDuplicate) {
+			return nil, ErrArticleSlugExists
+		}
 		return nil, err
 	}
 
@@ -219,6 +223,9 @@ func (s *ArticleService) Update(ctx context.Context, id string, userID string, i
 	}
 
 	if err := s.articleRepo.Update(ctx, existing, tagIDs, mediaIDs, input.RelatedArticleIDs, userID); err != nil {
+		if errors.Is(err, repository.ErrArticleSlugExists) || errors.Is(err, repository.ErrDuplicate) {
+			return nil, ErrArticleSlugExists
+		}
 		return nil, err
 	}
 

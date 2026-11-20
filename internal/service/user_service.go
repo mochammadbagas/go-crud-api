@@ -105,11 +105,13 @@ func (s *UserService) UpdateAvatar(ctx context.Context, userID string, avatarURL
 	_, err := s.profileRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			_ = s.profileRepo.Create(ctx, &models.UserProfile{
+			if err := s.profileRepo.Create(ctx, &models.UserProfile{
 				UserID:    userID,
 				FullName:  "",
 				AvatarURL: &avatarURL,
-			})
+			}); err != nil {
+				return err
+			}
 			return nil
 		}
 		return err
@@ -135,7 +137,13 @@ func (s *UserService) UpdateUsername(ctx context.Context, userID string, input m
 		return err
 	}
 
-	return s.userRepo.UpdateUsername(ctx, userID, input.Username)
+	if err := s.userRepo.UpdateUsername(ctx, userID, input.Username); err != nil {
+		if errors.Is(err, repository.ErrDuplicate) {
+			return ErrUsernameExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *UserService) RequestEmailChange(ctx context.Context, userID string, input models.RequestEmailChangeInput) error {
@@ -253,6 +261,9 @@ func (s *UserService) ConfirmEmailChange(ctx context.Context, input models.Confi
 
 	// Update email and mark email as verified
 	if err := s.userRepo.UpdateEmail(ctx, storedToken.UserID, newEmail); err != nil {
+		if errors.Is(err, repository.ErrDuplicate) {
+			return ErrEmailExists
+		}
 		return err
 	}
 

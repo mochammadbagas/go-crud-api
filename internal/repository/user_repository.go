@@ -642,6 +642,7 @@ func (r *sqlUserRepository) SetRoles(ctx context.Context, userID string, roleIDs
 	}
 
 	// 2. Assign new roles
+	roleIDs = utils.DeduplicateStrings(roleIDs)
 	now := time.Now().UTC()
 	for _, roleID := range roleIDs {
 		if err := qtx.AssignRoleToUser(ctx, sqlc.AssignRoleToUserParams{

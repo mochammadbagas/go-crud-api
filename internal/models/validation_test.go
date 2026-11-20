@@ -192,6 +192,27 @@ func TestCreateRoleInputValidation(t *testing.T) {
 	if _, ok := valErr["display_name"]; !ok {
 		t.Error("expected display_name error")
 	}
+
+	// Invalid permission format
+	invalidPermInput := CreateRoleInput{
+		Name:        "editor",
+		DisplayName: "Editor",
+		Permissions: []string{"invalid permission name with spaces"},
+	}
+	err = invalidPermInput.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for invalid permission name, got nil")
+	}
+
+	// Valid permission formats (both ULID and resource.action)
+	validPermInput := CreateRoleInput{
+		Name:        "editor",
+		DisplayName: "Editor",
+		Permissions: []string{"articles.read", "01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+	}
+	if err := validPermInput.Validate(); err != nil {
+		t.Fatalf("expected valid role input, got error: %v", err)
+	}
 }
 
 func TestCategoryInputValidation(t *testing.T) {

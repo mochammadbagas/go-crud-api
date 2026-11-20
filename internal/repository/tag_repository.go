@@ -121,24 +121,36 @@ func (r *sqlTagRepository) Create(ctx context.Context, tag *models.Tag) error {
 	tag.CreatedAt = now
 	tag.UpdatedAt = now
 
-	return r.q.CreateTag(ctx, sqlc.CreateTagParams{
+	if err := r.q.CreateTag(ctx, sqlc.CreateTagParams{
 		ID:        tag.ID,
 		Name:      tag.Name,
 		Slug:      tag.Slug,
 		CreatedAt: tag.CreatedAt,
 		UpdatedAt: tag.UpdatedAt,
-	})
+	}); err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrTagSlugExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *sqlTagRepository) Update(ctx context.Context, tag *models.Tag) error {
 	tag.UpdatedAt = time.Now().UTC()
 
-	return r.q.UpdateTag(ctx, sqlc.UpdateTagParams{
+	if err := r.q.UpdateTag(ctx, sqlc.UpdateTagParams{
 		ID:        tag.ID,
 		Name:      tag.Name,
 		Slug:      tag.Slug,
 		UpdatedAt: tag.UpdatedAt,
-	})
+	}); err != nil {
+		if IsDuplicateKeyError(err) {
+			return ErrTagSlugExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *sqlTagRepository) Delete(ctx context.Context, id string) error {

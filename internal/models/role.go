@@ -69,6 +69,20 @@ func (i *CreateRoleInput) Validate() error {
 		i.Description = &desc
 	}
 
+	if len(i.Permissions) > 0 {
+		for _, p := range i.Permissions {
+			trimmed := strings.TrimSpace(p)
+			if trimmed == "" {
+				v.Add("permissions", utils.ErrCodeInvalidFormat, "permission cannot be empty")
+				break
+			}
+			if !utils.IsValidULID(trimmed) && !permissionNameRegex.MatchString(trimmed) {
+				v.Add("permissions", utils.ErrCodeInvalidFormat, "permission must be a valid ULID or follow 'resource.action' format")
+				break
+			}
+		}
+	}
+
 	if v.HasErrors() {
 		return v
 	}
