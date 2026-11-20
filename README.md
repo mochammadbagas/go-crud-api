@@ -505,6 +505,7 @@ For complete production deployment instructions, Docker Compose setup, reverse p
 
 ## Documentation & Extended Guides
 
+- **Resend Mailer Integration Guide**: Detailed walkthrough for setting up Resend account, API keys, DNS verification, and email testing in [docs/resend_mailer_guide.md](docs/resend_mailer_guide.md).
 - **Adding New Modules**: Read the practical walkthrough on building new features in [docs/how_to_add_new_module.md](docs/how_to_add_new_module.md).
 - **Postman Testing Guide**: Complete step-by-step testing walkthrough with sequential workflows and automated scripts in [docs/postman_testing_guide.md](docs/postman_testing_guide.md).
 - **System Architecture**: Read the architectural design principles and layer breakdown in [docs/architecture.md](docs/architecture.md).
