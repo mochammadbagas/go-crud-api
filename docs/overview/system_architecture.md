@@ -229,21 +229,8 @@ When errors exist, `utils.ValidationError(w, err)` formats the response into a s
 }
 ```
 
-#### Field-Level Validation Error Codes Dictionary
-
-Exported constants in `internal/utils/validation.go`:
-
-| Code Constant          | Machine Code (`code`) | Meaning / Purpose                                                                                                            | Example Triggers                                                                           |
-| :--------------------- | :-------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------- |
-| `ErrCodeRequired`      | `REQUIRED`            | Mandatory field is absent, empty, or whitespace-only                                                                         | `full_name is required`, `email is required`                                               |
-| `ErrCodeTooShort`      | `TOO_SHORT`           | Input string length is below the minimum allowed bound                                                                       | `password must be at least 8 characters long`                                              |
-| `ErrCodeTooLong`       | `TOO_LONG`            | Input string length exceeds the maximum allowed bound (e.g., 128 chars for passwords to prevent Argon2id CPU exhaustion DoS) | `password must not exceed 128 characters`, `bio must not exceed 500 characters`            |
-| `ErrCodeInvalidFormat` | `INVALID_FORMAT`      | String fails regular expression or character set requirements                                                                | `username can only contain alphanumeric, underscore, hyphen`, `slug must be url-safe`      |
-| `ErrCodeInvalidEmail`  | `INVALID_EMAIL`       | Email fails RFC 5321 length rules (max 254 chars, local-part max 64 chars) or lacks a valid TLD (min 2 alphabetic chars)     | `user@domain`, `user@localhost`, `user..test@example.com`                                  |
-| `ErrCodeReserved`      | `RESERVED`            | Input uses protected system identifiers                                                                                      | `admin`, `root`, `system`, `api`, `support`, `superuser`                                   |
-| `ErrCodeInvalidID`     | `INVALID_ID`          | Foreign key or relational ID is not a syntactically valid 26-character Crockford Base32 ULID                                 | `category_id must be a valid 26-character ULID`, `permission_ids must contain valid ULIDs` |
-| `ErrCodeInvalidStatus` | `INVALID_STATUS`      | Value does not belong to the allowed enumeration set for status                                                              | `status must be one of: draft, published`                                                  |
-| `ErrCodeInvalidValue`  | `INVALID_VALUE`       | Relational value contradiction or disallowed payload combination                                                             | `new password cannot be the same as old password`, non-negative numeric constraints        |
+> [!NOTE]
+> For the complete master dictionary of field-level validation rules and machine error codes, see [Response Envelope & Standard Error Codes](../frontend/response_and_error_codes.md).
 
 ---
 
@@ -282,3 +269,32 @@ To ensure high-throughput execution under high-volume database loads, migration 
 - `idx_articles_status_published_deleted`: Indexes `(status, published_at, deleted_at)` to accelerate public article queries avoiding filesort and table scans.
 - `idx_article_analytics_retention`: Indexes `(created_at)` on raw visitor events enabling high-speed batch deletions during the 30-day retention pruning job.
 - `idx_article_analytics_daily_range`: Indexes `(article_id, date)` on aggregated daily analytics metrics to optimize SARGable date range queries.
+
+---
+
+## 6. Background Concurrency & Worker Lifecycle
+
+The platform implements an in-process, Zero-Redis background task execution model using native Go concurrency primitives (`goroutines`, `time.Ticker`, `sync.WaitGroup`, and context cancellation):
+
+```text
+[ Composition Root (cmd/server/main.go) ]
+               │
+               ├──► Token Cleanup Worker (Every 24 Hours)
+               ├──► Article Publisher Worker (Every 1 Minute)
+               └──► Daily Analytics Aggregator & 30-Day Retention Pruner (Every 1 Hour)
+```
+
+Each worker runs in an independent goroutine listening to `ctx.Done()`. During operating system termination (`SIGINT`, `SIGTERM`), `main.go` triggers context cancellation and awaits `workersWg.Wait()`, ensuring in-flight database transactions finish cleanly before the process exits.
+
+For full architectural details, see [docs/backend/background_workers.md](../backend/background_workers.md).
+
+---
+
+## 7. In-Memory Permission Caching & Instant Eviction
+
+To eliminate redundant database joins on high-throughput administrative endpoints:
+
+- Granular user permissions are cached in-memory in a thread-safe `sync.Map` with a 1-minute TTL.
+- Whenever an administrator modifies role assignments (`AssignUserRoles`) or permission bindings (`AssignPermissionsToRole`), the cache for affected users is evicted immediately via `middleware.ClearUserPermissionCache`.
+
+For comprehensive details on authentication and authorization safeguards, see [docs/overview/security_and_rbac.md](security_and_rbac.md).

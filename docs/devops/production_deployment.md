@@ -23,9 +23,9 @@ Before exposing the API to public traffic, ensure the following items are verifi
 ## 2. Environment Variables Reference
 
 | Variable                        | Description                               | Development Default              | Production Recommended                          |
-| :------------------------------ | :---------------------------------------- | :------------------------------- | :---------------------------------------------- |
+| :------------------------------ | :---------------------------------------- | :------------------------------- | :---------------------------------------------- | ---- | ----------- | ----------------------- | ------- | ------ | ---- | ------------ | --------------------- | ------ | ------ |
 | `PORT`                          | HTTP port the server listens on           | `8080`                           | `8080` (behind reverse proxy)                   |
-| `APP_ENV`                       | Application runtime environment           | `development`                    | `production`                                    |
+| `APP_ENV`                       | Application runtime environment           | `development`                    | `production`                                    | `r`n | `LOG_LEVEL` | Logging severity filter | `debug` | `info` | `r`n | `LOG_FORMAT` | Structured log format | `text` | `json` |
 | `FRONTEND_URL`                  | Base URL used for email action links      | `http://localhost:3000`          | `https://app.yourdomain.com`                    |
 | `DB_HOST`                       | MySQL hostname or IP address              | `127.0.0.1`                      | Cloud MySQL host / Docker network               |
 | `DB_PORT`                       | MySQL connection port                     | `3306`                           | `3306`                                          |
@@ -33,7 +33,7 @@ Before exposing the API to public traffic, ensure the following items are verifi
 | `DB_PASSWORD`                   | MySQL user password                       | `""`                             | Strong entropy password                         |
 | `DB_NAME`                       | MySQL database schema name                | `go_crud_api`                    | `production_db_name`                            |
 | `DB_MAX_OPEN_CONNS`             | Maximum open database connections         | `100`                            | `50` - `200` (based on DB instance RAM)         |
-| `DB_MAX_IDLE_CONNS`             | Maximum idle database connections         | `10`                             | `10` - `50`                                     |
+| `DB_MAX_IDLE_CONNS`             | Maximum idle database connections         | `25`                             | `25` - `50`                                     |
 | `DB_CONN_MAX_LIFETIME_MINUTES`  | Connection maximum lifetime duration      | `60`                             | `60`                                            |
 | `DB_CONN_MAX_IDLE_TIME_MINUTES` | Connection idle timeout duration          | `10`                             | `10`                                            |
 | `COOKIE_SECURE`                 | Enable Secure flag on HTTP cookies        | `false`                          | `true` (enforces HTTPS)                         |
@@ -79,6 +79,17 @@ The application includes an enterprise transactional email engine powered by **R
    FRONTEND_URL=https://app.yourdomain.com
    ```
 5. Restart the server. Verification emails, password reset requests, and email change handshakes will now be delivered with responsive HTML templates.
+
+### Triggered Email Workflows
+
+The application dispatches transactional emails on the following domain actions:
+
+| Trigger Action           | API Endpoint                            | Email Content & Link                                                                               |
+| :----------------------- | :-------------------------------------- | :------------------------------------------------------------------------------------------------- |
+| **Account Registration** | POST /api/v1/auth/register              | Activation email with verification token (${FRONTEND_URL}/verify-email?token=..., 24h validity).   |
+| **Forgot Password**      | POST /api/v1/auth/forgot-password       | Password reset email with ephemeral token (${FRONTEND_URL}/reset-password?token=..., 1h validity). |
+| **Resend Verification**  | POST /api/v1/auth/resend-verification   | Refreshed verification email.                                                                      |
+| **Email Address Change** | POST /api/v1/users/email/request-change | Confirmation link sent to the _new_ email address before updating database.                        |
 
 ---
 

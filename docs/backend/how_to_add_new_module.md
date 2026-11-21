@@ -225,7 +225,7 @@ func (i UpdateProductInput) Validate() error {
 ```
 
 > [!NOTE]
-> Always use standard validation error code constants (`utils.ErrCodeRequired`, `utils.ErrCodeTooShort`, `utils.ErrCodeTooLong`, `utils.ErrCodeInvalidFormat`, `utils.ErrCodeInvalidValue`, etc.) when calling `errs.Add(...)`. For the full list of standardized codes and their meanings, see [docs/architecture.md](architecture.md#field-level-validation-error-codes-dictionary).
+> Always use standard validation error code constants (`utils.ErrCodeRequired`, `utils.ErrCodeTooShort`, `utils.ErrCodeTooLong`, `utils.ErrCodeInvalidFormat`, `utils.ErrCodeInvalidValue`, etc.) when calling `errs.Add(...)`. For the full list of standardized codes and their meanings, see [System Architecture](../overview/system_architecture.md#field-level-validation-error-codes-dictionary).
 
 ---
 
