@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -12,6 +13,10 @@ import (
 
 // Init initializes the MySQL database connection, pool, migrations, and seed data.
 func Init(cfg *config.Config, fresh bool) (*sql.DB, error) {
+	// Safeguard: Prevent accidental database reset in production
+	if fresh && cfg != nil && cfg.AppEnv == "production" {
+		return nil, errors.New("cannot run migrations with -fresh flag in production environment to prevent data loss")
+	}
 	// DSN format with UTC timezone, parseTime=true, utf8mb4 charset, and multiStatements=true (required by golang-migrate to run multi-query migration files)
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&loc=UTC&multiStatements=true",
 		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName,

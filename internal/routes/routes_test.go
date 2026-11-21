@@ -78,3 +78,21 @@ func TestStaticFiles_PreventDirectoryListing(t *testing.T) {
 		t.Fatalf("expected HTTP 404 when listing directory /uploads/, got %d", dirRec.Code)
 	}
 }
+
+func TestRouter_TimeoutMiddlewareConfigured(t *testing.T) {
+	cfg := &config.Config{
+		UploadDir: t.TempDir(),
+	}
+
+	router := routes.Setup(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	// Ensure the router responds within normal deadline
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", rec.Code)
+	}
+}

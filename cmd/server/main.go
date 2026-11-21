@@ -33,6 +33,12 @@ func main() {
 	// 2. Load Configurations
 	cfg := config.Load()
 
+	// 2.1 Enforce strict safeguard against database reset in production
+	if *fresh && cfg.AppEnv == "production" {
+		slog.Error("FATAL: Flag -fresh is strictly prohibited in production environment to prevent irreversible data loss!")
+		os.Exit(1)
+	}
+
 	// 3. Structured Logging Setup (Environment-Aware & Context-Aware via log/slog)
 	logger.Init(cfg)
 	slog.Info("Starting Go Starter Kit REST API bootstrap...",

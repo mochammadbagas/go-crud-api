@@ -45,6 +45,7 @@ func Setup(
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.Logger(cfg))
 	r.Use(middleware.Recoverer())
+	r.Use(chimiddleware.Timeout(30 * time.Second))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 
